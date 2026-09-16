@@ -72,6 +72,8 @@ interface GuildsState {
     roleIds?: string[],
     /** h-moderacao: ausente = o evento não falava de castigo. */
     timeoutUntil?: string | null,
+    /** ── menus de contexto ── ausente = o apelido não mudou; null = removido. */
+    nickname?: string | null,
   ) => void;
   /** Nome, ícone ou descrição do servidor mudaram (`guild.updated`). */
   handleGuildUpdated: (guild: Guild) => void;
@@ -337,7 +339,7 @@ export const useGuilds = create<GuildsState>((set, get) => {
       patchGuild(guildId, (g) => ({ ...g, unread, mentionCount }));
     },
 
-    handleMemberUpdated: (guildId, userId, role, roleIds, timeoutUntil) => {
+    handleMemberUpdated: (guildId, userId, role, roleIds, timeoutUntil, nickname) => {
       if (get().activeGuildId !== guildId) return;
       set((s) => ({
         members: s.members.map((m) =>
@@ -347,6 +349,7 @@ export const useGuilds = create<GuildsState>((set, get) => {
                 role,
                 roleIds: roleIds ?? m.roleIds,
                 ...(timeoutUntil !== undefined ? { timeoutUntil } : {}),
+                ...(nickname !== undefined ? { nickname } : {}),
               }
             : m,
         ),
