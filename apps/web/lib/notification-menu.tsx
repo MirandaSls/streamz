@@ -112,8 +112,11 @@ export function submenuSilenciar(
   const silenciado = isMuted(setting);
 
   if (silenciado) {
+    // o item volta com o mesmo objeto do rótulo: "Silenciar servidor" vira
+    // "Dessilenciar servidor" (p5), "Silenciar @ana" vira "Dessilenciar @ana"
+    const complemento = rotulo.startsWith("Silenciar") ? rotulo.slice("Silenciar".length) : "";
     return {
-      label: t("notif.dessilenciar"),
+      label: `${t("notif.dessilenciar")}${complemento}`,
       icon: semIcones ? undefined : <Bell size={18} />,
       onSelect: dessilenciar,
     };
