@@ -333,10 +333,15 @@ services:
       DESKTOP_UPDATE_SIGNATURE: ${DESKTOP_UPDATE_SIGNATURE:-}
       DESKTOP_UPDATE_NOTES: ${DESKTOP_UPDATE_NOTES:-}
     volumes:
-      # Instaladores do app de desktop servidos por /api/downloads. `:ro` porque
-      # a API só lê — publicar versão é copiar o arquivo nesta pasta no host.
-      - ./downloads:/app/downloads:ro
-      - ./updates:/app/updates:ro
+      # Instaladores do app de desktop: `downloads` é servida (com senha) por
+      # /api/downloads e `updates` (aberta) pelo atualizador. GRAVÁVEIS desde
+      # `POST /api/updates/macos` (só admin da instância): o Mac envia o .dmg
+      # e o .app.tar.gz+.sig por ela (`scripts/enviar-macos.sh`), a API confere
+      # a assinatura, grava sem nunca sobrescrever e escreve `updates/macos.json`.
+      # O contêiner roda como `node` (uid 1000): no host as duas pastas precisam
+      # ser graváveis por esse uid. Publicar copiando no host continua valendo.
+      - ./downloads:/app/downloads
+      - ./updates:/app/updates
     depends_on:
       postgres:
         condition: service_healthy

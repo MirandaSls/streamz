@@ -450,7 +450,9 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8 (Windows):
 6. **macOS e Linux seguem a mesma forma**, com o build de cada um (§5.5, §5.6)
    no lugar do passo 2 e as variáveis `MACOS_UPDATE_*`/`LINUX_UPDATE_*` no
    lugar de `DESKTOP_UPDATE_*` no passo 3 — nenhuma plataforma foi publicada
-   ainda (§10).
+   ainda (§10). **O macOS tem atalho**: `scripts/enviar-macos.sh` publica do
+   próprio Mac pela API, sem SFTP, `.env` nem recriar a API (ver §5.5,
+   "Publicar pela API").
 
 **A atualização acontece numa janelinha própria** (§5.2), não dentro do app.
 `plugins.updater.windows.installMode` é `"quiet"` (o NSIS roda com `/S /R`, sem
@@ -692,6 +694,32 @@ scripts/build-desktop-macos.sh --sem-finder                 # ligado sozinho por
 
 Sai em `.claude/saida-desktop/<versão>-<commit>-macos/`: o `.dmg` sempre, e com
 `--assinar-atualizador` também `Streamz.app.tar.gz` + `.sig`.
+
+**Publicar pela API** (no Mac, logo depois do build):
+
+```bash
+scripts/enviar-macos.sh .claude/saida-desktop/<versão>-<commit>-macos --notas "…"
+```
+
+Faz login como **administrador da instância** (`PLATFORM_ADMIN_EMAILS` + e-mail
+verificado; pede e-mail, senha e 2FA, ou usa `STREAMZ_TOKEN`) e envia para
+`POST /api/updates/macos` (multipart: `version`, `notes`, `dmg`, `bundle`,
+`sig`; até 400 MB por arquivo), em duas requisições (o `.dmg`; depois
+`.app.tar.gz` + `.sig`). A API confere extensão, assinatura mágica (trailer
+`koly` do dmg, gzip) e a **assinatura minisign contra a chave pública do app**
+(a do `tauri.conf.json`, embutida em `updates/minisign.ts`), grava
+`downloads/Streamz_<v>_universal.dmg` e
+`updates/Streamz_<v>_universal.app.tar.gz` sem nunca sobrescrever conteúdo
+diferente (409; o mesmo conteúdo de novo é aceito) e escreve
+`updates/macos.json`. **Esse arquivo tem precedência sobre `MACOS_UPDATE_*` do
+`.env`** e é relido quando muda — o auto-update do Mac liga na hora. Apagar o
+`macos.json` devolve o controle ao `.env`; a rota recusa voltar o manifesto
+para uma versão mais velha. Requisitos no servidor: os volumes `./downloads` e
+`./updates` da API sem `:ro` (já no `docker-compose.yml`) e as duas pastas
+graváveis pelo uid 1000 do contêiner (`chown 1000:1000 downloads updates`).
+Cada requisição precisa caber no tempo máximo do proxy (Traefik v3: 60 s de
+leitura por padrão); se estourar, o caminho antigo (SFTP +
+`publicar-desktop.sh`) continua valendo.
 
 **Como funciona.** `--target universal-apple-darwin` não é um alvo real do
 `rustc`: é o tauri-cli que compila `aarch64-apple-darwin` e
