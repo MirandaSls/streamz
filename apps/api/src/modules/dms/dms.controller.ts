@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Res,
   UploadedFile,
   UseGuards,
@@ -124,6 +125,23 @@ export class DMsController {
   @Post(":id/show")
   show(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.dms.mostrar(user.sub, id, user.username);
+  }
+
+  /**
+   * ── menus de contexto ── Fixa a conversa no topo da minha lista.
+   * Idempotente: fixar de novo devolve o `pinnedAt` já gravado.
+   */
+  @UseGuards(JwtGuard)
+  @Put(":id/pin")
+  pin(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.dms.pin(user.sub, id);
+  }
+
+  /** ── menus de contexto ── Desafixa a conversa. Idempotente. */
+  @UseGuards(JwtGuard)
+  @Delete(":id/pin")
+  unpin(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.dms.unpin(user.sub, id);
   }
 
   /** Qualquer participante adiciona ao grupo (como no Discord). */
