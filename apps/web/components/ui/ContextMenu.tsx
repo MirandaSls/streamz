@@ -427,7 +427,10 @@ function Painel({
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
           const controle = !filho ? item.control : undefined;
-          const descricao = !filho ? item.description : undefined;
+          // item-pai de submenu também tem `description` (segunda linha, ex.:
+          // "Config. de notificação" > "Nada" no print p5) — só `control`
+          // (rádio/checkbox) e `checked` são exclusivos do item-folha.
+          const descricao = item.description;
           const forte = !filho && item.forte === true;
           /*
             `.colorDefault_c1e9c4`/`.colorDanger_c1e9c4` (css-bruto/858942…): o

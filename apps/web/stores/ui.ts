@@ -129,7 +129,18 @@ export type Modal =
   // ── multiconta ── ver `lib/contas.ts`
   | { kind: "gerenciarContas" }
   /** `voltar` = reabrir "Gerenciar contas" ao sair daqui, como no Discord. */
-  | { kind: "adicionarConta"; voltar?: boolean };
+  | { kind: "adicionarConta"; voltar?: boolean }
+  // ── menus de clique direito (stubs; conteúdo vem numa leva seguinte) ──
+  /** "Encaminhar" de uma mensagem (p1/p3, sem seta de submenu). */
+  | { kind: "encaminhar"; messageId: string; channelId: string }
+  /** "Adicionar nota" do cartão de uma DM (p2 — "Visível apenas para você"). */
+  | { kind: "notaDeUsuario"; userId: string }
+  /** "Adicionar apelido de amigo" do cartão de uma DM (p2). */
+  | { kind: "apelidoDeAmigo"; userId: string }
+  /** "Config. de privacidade" do menu do ícone do servidor (p5). */
+  | { kind: "privacidadeDoServidor"; guildId: string }
+  /** "Editar perfil por servidor" do menu do ícone do servidor (p5). */
+  | { kind: "perfilPorServidor"; guildId: string };
 
 /**
  * Um item de menu de contexto; `separator` desenha a linha entre grupos.
@@ -204,6 +215,13 @@ export type MenuItem =
       danger?: boolean;
       disabled?: boolean;
       icon?: unknown;
+      /**
+       * Segunda linha do item-pai, igual à do item comum acima — o "Config. de
+       * notificação" do menu do servidor mostra o nível atual embaixo do rótulo
+       * (print p5: "Nada"). Mesmo estilo (12/16, `--text-muted`); a seta de
+       * submenu continua centralizada à direita, sem disputar espaço com ela.
+       */
+      description?: string;
     }
   /**
    * Controle contínuo dentro do menu — é assim que o Discord ajusta o volume de

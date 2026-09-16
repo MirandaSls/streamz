@@ -34,6 +34,12 @@ import WelcomeModal from "@/components/modals/WelcomeModal";
 // ── multiconta ──
 import AdicionarContaModal from "@/components/modals/AdicionarContaModal";
 import GerenciarContasModal from "@/components/modals/GerenciarContasModal";
+// ── menus de clique direito (stubs) ──
+import EncaminharModal from "@/components/modals/EncaminharModal";
+import NotaDeUsuarioModal from "@/components/modals/NotaDeUsuarioModal";
+import ApelidoDeAmigoModal from "@/components/modals/ApelidoDeAmigoModal";
+import PrivacidadeDoServidorModal from "@/components/modals/PrivacidadeDoServidorModal";
+import PerfilPorServidorModal from "@/components/modals/PerfilPorServidorModal";
 import { useUI, type Modal } from "@/stores/ui";
 
 /**
@@ -137,5 +143,16 @@ function renderModal(modal: Modal) {
       return <ServerSettingsModal guildId={modal.guildId} tab={modal.tab} />;
     case "welcome":
       return <WelcomeModal guildId={modal.guildId} />;
+    // ── menus de clique direito (stubs) ──
+    case "encaminhar":
+      return <EncaminharModal messageId={modal.messageId} channelId={modal.channelId} />;
+    case "notaDeUsuario":
+      return <NotaDeUsuarioModal userId={modal.userId} />;
+    case "apelidoDeAmigo":
+      return <ApelidoDeAmigoModal userId={modal.userId} />;
+    case "privacidadeDoServidor":
+      return <PrivacidadeDoServidorModal guildId={modal.guildId} />;
+    case "perfilPorServidor":
+      return <PerfilPorServidorModal guildId={modal.guildId} />;
   }
 }
