@@ -35,7 +35,8 @@ export interface Toast {
 export type Modal =
   | { kind: "createChannel"; categoryId?: string | null; tipo?: GuildChannelType }
   | { kind: "channelAccess"; channelId: string }
-  | { kind: "invite"; guildId: string; code?: string }
+  /** `channelId` pré-seleciona o destino (menu de contexto de um canal, F/G). */
+  | { kind: "invite"; guildId: string; code?: string; channelId?: string }
   /**
    * "Criar servidor" / "Entrar em um servidor" — o mesmo modal do "+" da rail
    * (cartão 7a-criar-servidor), com as duas portas do Discord.
@@ -140,7 +141,14 @@ export type Modal =
   /** "Config. de privacidade" do menu do ícone do servidor (p5). */
   | { kind: "privacidadeDoServidor"; guildId: string }
   /** "Editar perfil por servidor" do menu do ícone do servidor (p5). */
-  | { kind: "perfilPorServidor"; guildId: string };
+  | { kind: "perfilPorServidor"; guildId: string }
+  /**
+   * "Abrir na visualização de moderador" do menu de membro (ESPEC2 §J1/§J2):
+   * cabeçalho + selos de data + cargos + permissões-chave + últimas entradas
+   * do registro de auditoria que têm `userId` como alvo, com os botões de
+   * castigo/expulsão/banimento do rodapé conforme a permissão de quem olha.
+   */
+  | { kind: "visaoDeModerador"; guildId: string; userId: string };
 
 /**
  * Um item de menu de contexto; `separator` desenha a linha entre grupos.
