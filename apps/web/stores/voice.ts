@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { MARCA_DA_MIGRACAO, migrarRuido, RUIDO_PADRAO } from "@/lib/ruido-padrao";
 import {
   type CallEndedEvent,
   type CallRingEvent,
@@ -427,8 +428,8 @@ export interface AudioPrefs {
  * - `padrao`: a do navegador (`noiseSuppression` do getUserMedia). Subtração
  *   espectral: come chiado e ventilador, não come teclado nem cachorro.
  * - `avancada`: RNNoise em WebAssembly antes de publicar (ver
- *   `lib/supressor-ruido.ts`). Bem melhor, ao custo de CPU no cliente — por
- *   isso é escolha, e não o padrão.
+ *   `lib/supressor-ruido.ts`). Bem melhor, ao custo de CPU no cliente. É o
+ *   padrão desde 2026-09-16 (ver `lib/ruido-padrao.ts`).
  */
 export type NivelDeRuido = "off" | "padrao" | "avancada";
 
@@ -437,7 +438,7 @@ const AUDIO_PADRAO: AudioPrefs = {
   saida: 1,
   sensibilidade: 0.35,
   pttAtrasoMs: PTT_RELEASE_MS,
-  processamento: { eco: true, ruido: "padrao", ganho: true },
+  processamento: { eco: true, ruido: RUIDO_PADRAO, ganho: true },
 };
 
 const AUDIO_KEY = "voiceAudioPrefs";
@@ -469,6 +470,13 @@ function carregarAudio(): AudioPrefs {
     // preferência salva não pode cair no padrão por causa da mudança de tipo
     const bruto = (lido.processamento as { ruido?: unknown } | undefined)?.ruido;
     if (typeof bruto === "boolean") processamento.ruido = bruto ? "padrao" : "off";
+    // supressão avançada por padrão: migra uma vez quem estava no padrão antigo
+    const migracao = migrarRuido(processamento.ruido, lerDoStorage(MARCA_DA_MIGRACAO) === "1");
+    if (migracao.mudou) {
+      processamento.ruido = migracao.nivel;
+      gravarNoStorage(AUDIO_KEY, JSON.stringify({ ...AUDIO_PADRAO, ...lido, processamento }));
+    }
+    gravarNoStorage(MARCA_DA_MIGRACAO, "1");
     return { ...AUDIO_PADRAO, ...lido, processamento };
   } catch {
     return AUDIO_PADRAO;
