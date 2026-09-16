@@ -7,6 +7,7 @@ import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
+import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -64,6 +65,8 @@ export default function VoiceChannelMembers({
   const estouAqui = useVoice((s) => s.channelId === channelId);
   const meId = useAuth((s) => s.user?.id);
   const assistir = useVoice((s) => s.assistir);
+  const assistindo = useVoice((s) => s.assistindo);
+  const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
   const canal = useChannels((s) => s.channels.find((c) => c.id === channelId) ?? null);
   const select = useChannels((s) => s.select);
   const nomesOcultos = useNomesOcultos((s) => s.ocultos(channelId));
@@ -121,9 +124,16 @@ export default function VoiceChannelMembers({
                 onClick={(ev) => ui.openProfile(e.user, anchorOf(ev.currentTarget))}
                 onContextMenu={(ev) => {
                   ev.preventDefault();
+                  const sou = e.user.id === meId;
+                  const podeParar = podePararDeAssistir({
+                    tela: e.screen,
+                    assistindo: assistindo.has(e.user.id),
+                    sou,
+                  });
                   abrirMenuDeParticipante(ev.clientX, ev.clientY, e.user, {
-                    sou: e.user.id === meId,
+                    sou,
                     channelId,
+                    tela: podeParar ? { onPararDeAssistir: () => pararDeAssistir(e.user.id) } : undefined,
                   });
                 }}
                 /*

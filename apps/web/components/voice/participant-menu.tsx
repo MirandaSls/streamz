@@ -71,7 +71,17 @@ export function abrirMenuDeParticipante(
   x: number,
   y: number,
   user: PublicUser,
-  opcoes: { sou: boolean; channelId: string },
+  opcoes: {
+    sou: boolean;
+    channelId: string;
+    /**
+     * Presente só quando o menu abriu a partir do tile de uma tela que eu
+     * assisto agora (nunca a minha própria). É o mesmo botão do hover do tile
+     * (`TileDeVoz`) — no celular, sem hover, este menu (toque longo) é o único
+     * caminho até ele.
+     */
+    tela?: { onPararDeAssistir: () => void };
+  },
 ) {
   const voz = useVoice.getState();
   const volume = user.id in voz.volumes ? voz.volumes[user.id] : 1;
@@ -94,6 +104,14 @@ export function abrirMenuDeParticipante(
       onSelect: () => mencionar(opcoes.channelId, user),
     },
   ];
+
+  // "Parar de assistir": único jeito de sair de uma tela pelo menu no celular
+  // (o botão do hover não existe lá — ver `TileDeVoz`). Vem antes dos itens
+  // sociais porque é a ação que o próprio tile anunciou ao abrir este menu.
+  if (opcoes.tela) {
+    itens.push({ separator: true });
+    itens.push({ label: "Parar de assistir", onSelect: opcoes.tela.onPararDeAssistir });
+  }
 
   if (opcoes.sou) {
     if (guildId) {
