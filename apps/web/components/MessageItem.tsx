@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
+  Apps,
   Copy,
   CornerUpLeft,
   CornerUpRight,
@@ -20,7 +21,7 @@ import {
   Trash2,
   Vote,
 } from "@/components/ui/icones";
-import type { Message, PublicUser } from "@streamz/shared";
+import type { ComandoDeApp, Message, PublicUser } from "@streamz/shared";
 import {
   Permission,
   WS_EVENTS,
@@ -64,7 +65,7 @@ import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
 // ── h-moderacao ──
 import PollCard from "@/components/polls/PollCard";
-import { emit } from "@/stores/socket-adapter";
+import { emit, errorMessage } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import TagDeBot from "@/components/ui/TagDeBot";
@@ -73,8 +74,12 @@ import { confirmacaoLembrada } from "@/lib/confirmacao-lembrada";
 import { falarMensagem, podeFalarMensagem } from "@/lib/falar-mensagem";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
+import { useNomeParaMim } from "@/lib/nome-para-mim";
+import { aplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
+import { useComandosDeContexto, useComandosDeMensagem } from "@/stores/comandos-de-contexto";
 import { useGuilds } from "@/stores/guilds";
+import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useAuthorColor, usePermissions, usePodeTalvez } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";
@@ -169,6 +174,9 @@ export default function MessageItem({
   const [picker, setPicker] = useState<{ alvo: "reacao" | "edicao"; ancora: Anchor } | null>(null);
 
   const author = useLiveUser(message.author);
+  // ── menus de contexto ── apelido de amigo > apelido no servidor > nome de
+  // exibição > usuário (`docs/CONTRATO-MENUS.md` §3) — o nome do cabeçalho.
+  const nomeDoAutor = useNomeParaMim(author, message.guildId ?? undefined);
   // nome do autor na cor do seu cargo mais alto, como no Discord — só em canal
   // de servidor: conversa e grupo não têm cargo, e o nome fica na cor padrão
   const corDoAutor = useAuthorColor(message.author.id, message.guildId);
@@ -206,6 +214,16 @@ export default function MessageItem({
   const podeEscreverNoCanal = usePodeTalvez(Permission.SEND_MESSAGES, escopo);
   const podeReagir = !emServidor || podeReagirNoCanal !== false;
   const podeResponder = !emServidor || podeEscreverNoCanal !== false;
+
+  // ── apps (leva 3) ── comandos de contexto tipo 3 (MESSAGE) do servidor, para
+  // o submenu "Apps >". O menu é síncrono: o clique nunca espera rede, então o
+  // submenu nasce com o que já estiver no cache (`useComandosDeMensagem`) e
+  // `garantir` dispara a carga por baixo — o próximo hover/clique já vê a
+  // lista pronta (`stores/comandos-de-contexto.ts`).
+  const comandosDeMensagem = useComandosDeMensagem(message.guildId);
+  function garantirComandosDeContexto() {
+    if (message.guildId) useComandosDeContexto.getState().garantir(message.guildId);
+  }
 
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
@@ -347,6 +365,37 @@ export default function MessageItem({
     ];
   }
 
+  /** Dispara o comando de contexto tipo 3, com o alvo = esta mensagem. */
+  async function usarComandoDeContextoNoMenu(comando: ComandoDeApp) {
+    try {
+      await useInteracoesDeBot.getState().usarComandoDeContexto(message.channelId, comando.id, message.id);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível usar o comando"), "error");
+    }
+  }
+
+  /**
+   * Submenu "Apps >" (ESPEC item 8): os comandos tipo 3 (MESSAGE) do servidor.
+   * Em DM, ou sem nenhum, um único item desabilitado ("Nenhum app disponível",
+   * como no Discord). "Adicionar app" só existe em servidor — é lá que o
+   * diretório instala.
+   */
+  function submenuDeApps(): MenuItem[] {
+    const semNenhum: MenuItem = { label: "Nenhum app disponível", disabled: true, onSelect: () => {} };
+    if (!emServidor) return [semNenhum];
+    const itens: MenuItem[] =
+      comandosDeMensagem.length > 0
+        ? comandosDeMensagem.map((c) => ({
+            label: c.name,
+            icon: <Avatar user={c.botUser} size="xs" />,
+            onSelect: () => void usarComandoDeContextoNoMenu(c),
+          }))
+        : [semNenhum];
+    itens.push({ separator: true });
+    itens.push({ label: "Adicionar app", icon: <Apps size={18} />, onSelect: () => aplicativos.abrir() });
+    return itens;
+  }
+
   function openMenu(e: MouseEvent) {
     if (unconfirmed) return;
     e.preventDefault();
@@ -358,6 +407,9 @@ export default function MessageItem({
     // servidor], copiar texto, fixar, [apps — leva 3], marcar não lido, copiar
     // link, falar mensagem, e por fim o grupo vermelho (excluir/denunciar).
     if (!sistema) {
+      // dispara a carga do cache se o hover não tiver rodado antes (celular,
+      // que não tem hover) — o menu em si já monta com o que houver agora
+      garantirComandosDeContexto();
       if (podeReagir) {
         // A fileira horizontal é a primeira coisa do menu no Discord: quatro
         // alvos do mesmo peso, escolhidos pela cara do emoji. Como itens comuns
@@ -438,7 +490,7 @@ export default function MessageItem({
           onSelect: alternarFixada,
         });
       }
-      // ── apps (leva 3) ──
+      items.push({ label: "Apps", icon: <Apps size={18} />, submenu: submenuDeApps() });
       items.push({ label: "Marcar como não lido", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
       items.push({ label: "Copiar link da mensagem", icon: <Link2 size={18} />, onSelect: copiarLink });
       // só faz sentido quando há link, e só o autor/moderação pode mexer
@@ -611,6 +663,9 @@ export default function MessageItem({
          link, encaminhar e apagar apontariam todos para uma mensagem que não
          existe no canal. O gesto que ela tem é o "Dispensar" do rodapé. */
       onContextMenu={efemera ? undefined : openMenu}
+      // pré-carrega os comandos de contexto no hover: no clique direito o menu
+      // já pode desenhar com o cache pronto (ESPEC item 8 / §7 do contrato)
+      onMouseEnter={efemera ? undefined : garantirComandosDeContexto}
       // o respiro entre grupos é preferência do usuário (aba Aparência)
       style={inicioDeGrupo ? { marginTop: "var(--espaco-entre-grupos, 17px)" } : undefined}
       // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
@@ -653,7 +708,7 @@ export default function MessageItem({
         <button
           type="button"
           onClick={openProfile}
-          aria-label={`Perfil de ${displayNameOf(author)}`}
+          aria-label={`Perfil de ${nomeDoAutor}`}
           /* 40px (`--custom-message-avatar-size`). Topo: no print 111402 a
              caixa-alta do nome fica 3px abaixo do topo do avatar ("Md": avatar
              em y=398, "M" em 401); na nossa captura, 2px — diferença dentro do
@@ -701,7 +756,7 @@ export default function MessageItem({
               style={corDoAutor ? { color: corDoAutor } : undefined}
               className="mr-1 indent-0 font-medium leading-[22px] text-text-strong hover:underline"
             >
-              {displayNameOf(author)}
+              {nomeDoAutor}
             </button>
             {/* Selo de enquete no compacto: depois do nome, antes do texto.
                 Posição e margem **não medidas** (sem print do compacto com
@@ -723,7 +778,7 @@ export default function MessageItem({
                 // 16px); o medium daria ~1,75. Print vence CSS.
                 className="font-semibold text-text-strong hover:underline"
               >
-                {displayNameOf(author)}
+                {nomeDoAutor}
               </button>
               {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
                   `items-baseline`, e uma pílula alinhada pela linha de base

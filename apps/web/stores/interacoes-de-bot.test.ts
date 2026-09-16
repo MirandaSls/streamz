@@ -37,6 +37,14 @@ const api = vi.hoisted(() => ({
     name: "relatar",
     expiresAt: "2026-09-14T12:15:00.000Z",
   })),
+  usarComandoDeContexto: vi.fn(
+    async (_c: string, _corpo: { commandId: string; targetId: string; nonce?: string }) => ({
+      id: "i_5",
+      snowflake: "5000",
+      name: "traduzir mensagem",
+      expiresAt: "2026-09-14T12:15:00.000Z",
+    }),
+  ),
 }));
 vi.mock("@/lib/api", () => ({ api }));
 
@@ -331,6 +339,34 @@ describe("comando de barra", () => {
 
   it("sem modal, o pendente sai pelo relógio de segurança sem marcar falha", async () => {
     await useInteracoesDeBot.getState().usarComando("c_1", "cmd_relatar", []);
+    vi.advanceTimersByTime(6_001);
+    expect(useInteracoesDeBot.getState().pendentes).toEqual({});
+    expect(useInteracoesDeBot.getState().falhas).toEqual({});
+  });
+});
+
+describe("comando de contexto (submenu Apps do menu de mensagem)", () => {
+  it("manda commandId, targetId e o nonce no corpo, reaproveitando o pendente do comando de barra", async () => {
+    await useInteracoesDeBot.getState().usarComandoDeContexto("c_1", "cmd_traduzir", "m_alvo");
+    expect(api.usarComandoDeContexto).toHaveBeenCalledWith("c_1", {
+      commandId: "cmd_traduzir",
+      targetId: "m_alvo",
+      nonce: expect.any(String),
+    });
+    const nonce = ultimoNonce(api.usarComandoDeContexto);
+    expect(useInteracoesDeBot.getState().pendentes[nonce]).toMatchObject({ tipo: "comando", channelId: "c_1" });
+  });
+
+  it("a rota recusou: rejeita e não deixa pendente", async () => {
+    api.usarComandoDeContexto.mockRejectedValueOnce(new Error("Mensagem não encontrada"));
+    await expect(
+      useInteracoesDeBot.getState().usarComandoDeContexto("c_1", "cmd_traduzir", "m_alvo"),
+    ).rejects.toThrow("Mensagem não encontrada");
+    expect(useInteracoesDeBot.getState().pendentes).toEqual({});
+  });
+
+  it("sem resposta, o pendente sai pelo relógio de segurança sem marcar falha", async () => {
+    await useInteracoesDeBot.getState().usarComandoDeContexto("c_1", "cmd_traduzir", "m_alvo");
     vi.advanceTimersByTime(6_001);
     expect(useInteracoesDeBot.getState().pendentes).toEqual({});
     expect(useInteracoesDeBot.getState().falhas).toEqual({});

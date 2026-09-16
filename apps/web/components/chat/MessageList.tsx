@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { ArrowDown } from "@/components/ui/icones";
 import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
 import BlockedMessages from "@/components/chat/BlockedMessages";
+import IgnoredMessages from "@/components/chat/IgnoredMessages";
 import { useFronteiraNaoLida, useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
 import { Button } from "@/components/ui/primitivos";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { continuaAnterior, mesmoDia, rotuloDoDia } from "@/lib/format";
-import { agruparBloqueadas, primeiraDoBloco } from "@/lib/timeline";
+import { agruparBloqueadas, agruparIgnoradas, primeiraDoBloco } from "@/lib/timeline";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
-import { useBlockedIds } from "@/stores/friends";
+import { useBlockedIds, useFriends } from "@/stores/friends";
 import type { ChatMessage } from "@/stores/messages-core";
 
 /** Id do divisor de não lidas — a barra de aviso o localiza na rolagem. */
@@ -203,6 +204,13 @@ export default function MessageList({
   });
   // ── d-social ── mensagens de quem eu bloqueei viram um bloco recolhido
   const bloqueados = useBlockedIds();
+  // ── menus de contexto §4 ── idem para quem eu ignorei — texto diferente
+  // ("Mostrar mensagem"), e só a web decide isso (a API não filtra nada)
+  const ignoradosList = useFriends((s) => s.ignored);
+  const ignorados = useMemo(
+    () => new Set((ignoradosList ?? []).map((u) => u.id)),
+    [ignoradosList],
+  );
   const fronteira = useFronteiraNaoLida(channelId);
   const sair = useMarcadorNaoLido((s) => s.sair);
 
@@ -258,7 +266,7 @@ export default function MessageList({
   }, [scrollToId, items]);
 
   const atStart = !hasMore && !loading;
-  const blocos = agruparBloqueadas(items, bloqueados);
+  const blocos = agruparIgnoradas(agruparBloqueadas(items, bloqueados), ignorados);
   /** Primeira mensagem depois da fronteira: é acima dela que a linha vermelha vai. */
   const idPrimeiraNaoLida =
     fronteira === undefined
@@ -397,6 +405,18 @@ export default function MessageList({
 
               {bloco.kind === "bloqueadas" ? (
                 <BlockedMessages
+                  items={bloco.items}
+                  currentUserId={currentUserId}
+                  canModerate={canModerate}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onToggleReaction={onToggleReaction}
+                  onOpenThread={onOpenThread}
+                  onRetry={onRetry}
+                  onDiscard={onDiscard}
+                />
+              ) : bloco.kind === "ignoradas" ? (
+                <IgnoredMessages
                   items={bloco.items}
                   currentUserId={currentUserId}
                   canModerate={canModerate}

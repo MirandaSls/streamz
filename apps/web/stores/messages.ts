@@ -484,16 +484,22 @@ export const useMessages = create<MessagesState>((set, get) => {
 
     remove: async (messageId, semConfirmar = false) => {
       // Shift no clique pula a caixa — é o atalho do Discord para quem está
-      // limpando várias mensagens seguidas
+      // limpando várias mensagens seguidas. Textos do Discord (ESPEC): título,
+      // corpo e botão exatamente como na caixa deles.
       if (!semConfirmar) {
         const ok = await ui.confirm({
-          title: "Apagar esta mensagem?",
-          message: "A mensagem some para todo mundo no canal.",
+          title: "Excluir mensagem",
+          message: "Tem certeza que deseja excluir esta mensagem?",
           // a caixa desenha a própria mensagem: confirmar sem ver o que se
           // apaga é como o erro acontece
           preview: messageId,
-          confirmLabel: "Apagar",
+          confirmLabel: "Excluir",
           danger: true,
+          // "não perguntar de novo": é esta chave que `MessageItem.tsx`
+          // confere com `confirmacaoLembrada("apagar-mensagem")` antes de
+          // pular a caixa — sem ela aqui, o checkbox nunca aparecia e a
+          // marcação nunca acontecia.
+          chaveDeLembrar: "apagar-mensagem",
         });
         if (!ok) return;
       }
