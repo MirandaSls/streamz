@@ -66,6 +66,7 @@ const LINHA_DE_MEMBRO = {
   cargoSnowflakes: [CARGO.snowflake],
   joinedAt: new Date("2026-01-01T00:00:00.000Z"),
   timeoutUntil: null as Date | null,
+  nickname: null as string | null,
 };
 
 const assign = vi.fn(async (..._a: unknown[]) => ({ userId: MEMBRO.cuid, roleIds: [CARGO.id] }));
@@ -304,9 +305,9 @@ describe("/api/v10/guilds/:gid/members e /bans", () => {
     expect(timeout).not.toHaveBeenCalled();
   });
 
-  // A divergência declarada: não há apelido por servidor no Streamz, e o §6 já
-  // lista `MANAGE_NICKNAMES` entre as permissões sempre apagadas. 200 mudo
-  // seria mentira.
+  // A divergência declarada: editar apelido por esta casca não existe (o §6 já
+  // lista `MANAGE_NICKNAMES` entre as permissões sempre apagadas, e esta
+  // entrega não criou o bit `CHANGE_NICKNAME`). 200 mudo seria mentira.
   it("`nick` com texto leva 50013 — e o resto do PATCH não é aplicado", async () => {
     const resposta = await chamar(`/${SERVIDOR.snowflake}/members/${MEMBRO.snowflake}`, {
       method: "PATCH",

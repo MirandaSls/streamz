@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Permission, WS_EVENTS, displayNameOf } from "@streamz/shared";
+import { Permission, WS_EVENTS, displayNameOf, normalizarApelido } from "@streamz/shared";
 import type {
   GuildMembership,
   GuildOnboarding,
   GuildOnboardingUpdate,
+  MinhaAssociacaoEditarInput,
 } from "@streamz/shared";
 import { MAX_WELCOME_CHANNELS } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -63,7 +64,58 @@ export class OnboardingService {
       timeoutUntil: member.timeoutUntil ? member.timeoutUntil.toISOString() : null,
       mustAcceptRules: Boolean(onboarding.rulesChannelId) && !member.acceptedRulesAt,
       showWelcome: temBoasVindas && !member.welcomeSeenAt,
+      // ── menus de contexto ──
+      nickname: member.nickname,
+      permitirDmsDoServidor: member.permitirDmsDoServidor,
     };
+  }
+
+  /**
+   * `PATCH /guilds/:guildId/membership` — apelido e privacidade de DM do
+   * próprio membro (menus de contexto, itens 5 e 6). Só o que vier no corpo é
+   * escrito; o schema já recusa objeto vazio (400 "Nada para editar").
+   */
+  async editMembership(
+    userId: string,
+    guildId: string,
+    patch: MinhaAssociacaoEditarInput,
+  ): Promise<GuildMembership> {
+    const member = await this.guilds.assertMember(userId, guildId);
+
+    const novoNickname =
+      patch.nickname !== undefined ? normalizarApelido(patch.nickname) : undefined;
+    const nicknameMudou = novoNickname !== undefined && novoNickname !== member.nickname;
+    const privacidadeMudou =
+      patch.permitirDmsDoServidor !== undefined &&
+      patch.permitirDmsDoServidor !== member.permitirDmsDoServidor;
+
+    await this.prisma.guildMember.update({
+      where: { userId_guildId: { userId, guildId } },
+      data: {
+        ...(novoNickname !== undefined ? { nickname: novoNickname } : {}),
+        ...(patch.permitirDmsDoServidor !== undefined
+          ? { permitirDmsDoServidor: patch.permitirDmsDoServidor }
+          : {}),
+      },
+    });
+
+    // a lista de membros e o autor das mensagens no servidor precisam do
+    // apelido novo na hora — evento existente, só ganhou o campo
+    if (nicknameMudou) {
+      this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
+        guildId,
+        userId,
+        role: member.role,
+        nickname: novoNickname,
+      });
+    }
+    // a privacidade é só minha: aviso "releia sua associação" (mesmo payload
+    // de `avisarMinhasConexoes`), não a sala do servidor inteira
+    if (privacidadeMudou) {
+      this.avisarMinhasConexoes(userId, guildId);
+    }
+
+    return this.membership(userId, guildId);
   }
 
   /** Salva a configuração (só moderação) e avisa o servidor inteiro. */

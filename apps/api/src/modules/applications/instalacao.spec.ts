@@ -458,6 +458,8 @@ describe("InstalacaoService.instalar — os oito passos, em ordem", () => {
         // relido do banco, e não `new Date()`: a lista de membros ordena por
         // ele, e o relógio do processo não é o da transação
         joinedAt: "2026-09-08T15:00:00.123Z",
+        // bot recém-instalado nunca tem apelido ainda
+        nickname: null,
       },
     });
   });

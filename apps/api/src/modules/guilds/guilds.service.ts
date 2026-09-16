@@ -234,6 +234,8 @@ export class GuildsService {
       // a tabela de membros ordena e mostra "Membro desde" por este campo
       joinedAt: m.joinedAt.toISOString(),
       timeoutUntil: m.timeoutUntil?.toISOString() ?? null,
+      // ── menus de contexto ── apelido neste servidor
+      nickname: m.nickname,
     }));
   }
 

@@ -134,6 +134,7 @@ function servidor(campos: Partial<LinhaDeServidor> = {}): LinhaDeServidor {
         cargoSnowflakes: [100000000000000002n],
         joinedAt: new Date("2026-01-01T00:00:00.000Z"),
         timeoutUntil: null,
+        nickname: null,
       },
     ],
     memberCount: 1,
