@@ -2,15 +2,12 @@
 
 import type { MouseEvent } from "react";
 import {
-  AtSign,
   Crown,
   Gavel,
   MessageSquare,
-  Shield,
   ShieldCheck,
   Timer,
   TimerOff,
-  User,
   UserX,
   Volume2,
 } from "@/components/ui/icones";
@@ -29,14 +26,29 @@ import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
+import { api } from "@/lib/api";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
+import {
+  garantirComandosDeContexto,
+  iniciarChamadaComUsuario,
+  itemAdicionarNota,
+  itemApelidoDeAmigo,
+  itemBloquear,
+  itemDesfazerAmizade,
+  itemIgnorar,
+  submenuAppsDeUsuario,
+  submenuConvidarParaOServidor,
+} from "@/lib/menu-de-usuario";
 import { useAuth } from "@/stores/auth";
+import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
+import { useNotas } from "@/stores/notas";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
+import { errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -104,11 +116,30 @@ export default function MemberList() {
   );
   // ── h-moderacao ── castigo é MODERATE_MEMBERS na permissão efetiva
   const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
+  // ── j-membro ── "Alterar apelido" só para quem tem a permissão nova
+  // (`MANAGE_NICKNAMES`, criada por outro cartão desta leva em
+  // `packages/shared/src/permissoes.ts`); no meu próprio menu o item some e
+  // vira "Editar perfil por servidor" (mesmo `PerfilPorServidorModal` do menu
+  // do servidor).
+  const podeAlterarApelido = useCan(Permission.MANAGE_NICKNAMES);
   const timeout = useGuilds((s) => s.timeout);
   const applyTimeout = useGuilds((s) => s.applyTimeout);
   const removeTimeout = useGuilds((s) => s.removeTimeout);
   const openWith = useDMs((s) => s.openWith);
   const developerMode = useSettings((s) => s.developerMode);
+  const activeChannelId = useChannels((s) => s.activeChannelId);
+  const meusServidores = useGuilds((s) => s.guilds);
+  // ── menus de contexto ── itens sociais compartilhados com `DMList`
+  // (`docs/CONTRATO-MENUS.md` §2, §3, §4), via `lib/menu-de-usuario.tsx`
+  const minhasNotas = useNotas((s) => s.minhasNotas);
+  const friendsList = useFriends((s) => s.friends);
+  const blockedList = useFriends((s) => s.blocked);
+  const ignoredList = useFriends((s) => s.ignored);
+  const removeFriend = useFriends((s) => s.remove);
+  const blockFriend = useFriends((s) => s.block);
+  const unblockFriend = useFriends((s) => s.unblock);
+  const ignorarUsuario = useFriends((s) => s.ignorar);
+  const deixarDeIgnorarUsuario = useFriends((s) => s.deixarDeIgnorar);
   // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
@@ -152,21 +183,50 @@ export default function MemberList() {
   }
 
   /**
-   * Botão direito num membro.
+   * "Alterar apelido" (outro membro, com `MANAGE_NICKNAMES`): mesmo prompt de
+   * texto do resto do app, iniciado com o apelido atual; string vazia apaga
+   * (`api.alterarApelidoDeMembro`, `docs/CONTRATO-MENUS.md` §5 — a rota já é
+   * a mesma de "Editar perfil por servidor", só que para outro `userId`).
+   */
+  async function alterarApelido(guildId: string, m: GuildMemberView, nome: string) {
+    const valor = await ui.prompt({
+      title: `Alterar apelido de ${nome}`,
+      label: "APELIDO NO SERVIDOR",
+      initial: m.nickname ?? "",
+      placeholder: m.user.username,
+      confirmLabel: "Salvar",
+    });
+    if (valor === null) return;
+    try {
+      await api.alterarApelidoDeMembro(guildId, m.user.id, valor.trim() ? valor.trim() : null);
+      ui.toast("Apelido alterado.");
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível alterar o apelido"), "error");
+    }
+  }
+
+  /**
+   * Botão direito num membro (`docs/CONTRATO-MENUS.md` item J).
    *
-   * Cargos e castigo viram **submenu**, como no Discord — antes cada cargo era
-   * um item solto no menu raiz, o que num servidor com dez cargos empurrava
-   * expulsar/banir para fora da tela. "Tornar administrador" e "Transferir
-   * posse" saíram: no Discord admin é cargo, e transferir posse mora em
-   * Configurações do Servidor › Membros.
+   * SEM ícones — ao contrário do menu de mensagem/DM, a ESPEC desta leva pede
+   * o menu de usuário liso. Cargos e castigo continuam em **submenu**, como
+   * no Discord — antes cada cargo era um item solto no menu raiz, o que num
+   * servidor com dez cargos empurrava expulsar/banir para fora da tela.
+   * "Tornar administrador" e "Transferir posse" saíram: no Discord admin é
+   * cargo, e transferir posse mora em Configurações do Servidor › Membros.
    */
   function openMenu(e: MouseEvent, m: GuildMemberView, linha?: HTMLElement | null) {
     e.preventDefault();
     const isMe = m.user.id === user?.id;
+    const nome = nomeParaMim(m.user, {
+      apelidoDeAmigo: apelidosDeAmigo?.[m.user.id],
+      apelidoNoServidor: m.nickname,
+    });
+    garantirComandosDeContexto(activeGuildId);
+
     const items: MenuItem[] = [
       {
         label: "Perfil",
-        icon: <User size={18} />,
         // ancora na LINHA do membro, não no ponto do clique
         onSelect: () =>
           ui.openProfile(
@@ -174,18 +234,40 @@ export default function MemberList() {
             linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
           ),
       },
+      { label: "Mencionar", onSelect: () => inserirMencao(m.user) },
     ];
-    if (!isMe) {
+
+    if (isMe) {
+      items.push({ separator: true });
       items.push({
-        label: "Mencionar",
-        icon: <AtSign size={18} />,
-        onSelect: () => inserirMencao(m.user),
+        label: "Editar perfil por servidor",
+        onSelect: () => (activeGuildId ? ui.openModal({ kind: "perfilPorServidor", guildId: activeGuildId }) : undefined),
       });
-      items.push({
-        label: "Mensagem",
-        icon: <MessageSquare size={18} />,
-        onSelect: () => void openWith(m.user.id),
-      });
+      items.push(submenuAppsDeUsuario(activeGuildId, activeChannelId, m.user.id));
+    } else {
+      const notaExistente = minhasNotas[m.user.id];
+      const souAmigo = friendsList.some((f) => f.id === m.user.id);
+      const bloqueado = blockedList.some((b) => b.id === m.user.id);
+      const ignorado = ignoredList?.some((u) => u.id === m.user.id) ?? false;
+
+      items.push({ label: "Mensagem", onSelect: () => void openWith(m.user.id) });
+      items.push({ label: "Iniciar chamada", onSelect: () => void iniciarChamadaComUsuario(m.user.id) });
+      items.push(itemAdicionarNota(m.user.id, notaExistente));
+      if (souAmigo) {
+        items.push(itemApelidoDeAmigo(m.user.id, apelidosDeAmigo?.[m.user.id]));
+      }
+
+      items.push({ separator: true });
+      if (podeAlterarApelido && activeGuildId) {
+        items.push({ label: "Alterar apelido", onSelect: () => void alterarApelido(activeGuildId, m, nome) });
+      }
+      items.push(submenuAppsDeUsuario(activeGuildId, activeChannelId, m.user.id));
+      items.push(submenuConvidarParaOServidor(m.user.id, meusServidores));
+      if (souAmigo) {
+        items.push(itemDesfazerAmizade(m.user, removeFriend));
+      }
+      items.push(itemIgnorar(m.user.id, ignorado, ignorarUsuario, deixarDeIgnorarUsuario));
+      items.push(itemBloquear(m.user, bloqueado, blockFriend, unblockFriend));
     }
 
     const atribuiveis = roles
@@ -197,7 +279,6 @@ export default function MemberList() {
       items.push({ separator: true });
       items.push({
         label: "Cargos",
-        icon: <Shield size={18} />,
         submenu: atribuiveis.map((r) => ({
           label: r.name,
           control: "checkbox" as const,
@@ -208,20 +289,28 @@ export default function MemberList() {
       });
     }
 
-    if (podeAgirSobre(m) && (podeExpulsar || podeBanir || podeCastigar)) {
+    // ── h-moderacao ── "Abrir na visualização de moderador" vale até para
+    // mim mesmo (não depende de `podeAgirSobre`); castigo/expulsão/banimento
+    // continuam exigindo alvo diferente de mim e de quem é dono.
+    const podeAgirAqui = podeAgirSobre(m) && (podeExpulsar || podeBanir || podeCastigar);
+    if (podeCastigar || podeAgirAqui) {
       items.push({ separator: true });
-      // ── h-moderacao ──
       if (podeCastigar) {
+        items.push({
+          label: "Abrir na visualização de moderador",
+          onSelect: () =>
+            activeGuildId
+              ? ui.openModal({ kind: "visaoDeModerador", guildId: activeGuildId, userId: m.user.id })
+              : undefined,
+        });
+      }
+      if (podeAgirAqui && podeCastigar) {
         if (isTimedOut(m.timeoutUntil)) {
-          items.push({
-            label: "Remover modo de espera",
-            icon: <TimerOff size={18} />,
-            onSelect: () => void removeTimeout(m.user.id),
-          });
+          items.push({ label: "Remover castigo", onSelect: () => void removeTimeout(m.user.id) });
         } else {
           items.push({
-            label: "Modo de espera",
-            icon: <Timer size={18} />,
+            label: `Castigar ${nome}`,
+            danger: true,
             submenu: [
               ...TIMEOUT_PRESETS.map((p) => ({
                 label: p.label,
@@ -233,11 +322,11 @@ export default function MemberList() {
           });
         }
       }
-      if (podeExpulsar) {
-        items.push({ label: "Expulsar", icon: <UserX size={18} />, danger: true, onSelect: () => kick(m.user.id) });
+      if (podeAgirAqui && podeExpulsar) {
+        items.push({ label: `Expulsar ${nome}`, danger: true, onSelect: () => kick(m.user.id) });
       }
-      if (podeBanir) {
-        items.push({ label: "Banir", icon: <Gavel size={18} />, danger: true, onSelect: () => ban(m.user.id) });
+      if (podeAgirAqui && podeBanir) {
+        items.push({ label: `Banir ${nome}`, danger: true, onSelect: () => ban(m.user.id) });
       }
     }
 
