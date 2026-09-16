@@ -249,6 +249,14 @@ export type MenuItem =
         step?: number;
         onChange: (valor: number) => void;
         format?: (valor: number) => string;
+        /**
+         * Some com o valor ao lado do rótulo — "Volume do usuário" do menu de
+         * participante de voz (ESPEC2 item N) é só rótulo em cima e barra
+         * embaixo, sem o "100%" que o volume "meu" (`Volume` deste arquivo)
+         * mostra. Sem esta opção o item ganharia um `format: () => ""`
+         * espalhado pelos chamadores só para esconder um span.
+         */
+        semValor?: boolean;
       };
       icon?: unknown;
     };

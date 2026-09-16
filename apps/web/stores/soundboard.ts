@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import type { GuildSoundboard, SoundboardSound } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { tocarEfeitoSonoro } from "@/lib/soundboard-audio";
+import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 
 /**
  * O painel de efeitos sonoros: os sons dos meus servidores, e o que **este**
@@ -55,8 +56,12 @@ interface SoundboardState {
   alternarFavorito: (id: string) => void;
   registrarUso: (id: string) => void;
   definirVolume: (v: number) => void;
-  /** toca o som localmente, no volume de efeitos deste cliente. */
-  tocarLocalmente: (sound: SoundboardSound) => void;
+  /**
+   * toca o som localmente, no volume de efeitos deste cliente — a menos que
+   * `autorId` seja alguém cujos efeitos eu silenciei (ESPEC2 item N,
+   * `stores/preferencias-por-participante.ts`).
+   */
+  tocarLocalmente: (sound: SoundboardSound, autorId?: string) => void;
 }
 
 /** Quantos sons a seção "Utilizados com frequência" mostra (duas fileiras de 3). */
@@ -125,7 +130,10 @@ export const useSoundboard = create<SoundboardState>()(
 
       definirVolume: (v) => set({ volume: Math.min(1, Math.max(0, v)) }),
 
-      tocarLocalmente: (sound) => tocarEfeitoSonoro(sound, get().volume),
+      tocarLocalmente: (sound, autorId) => {
+        if (autorId && usePreferenciasPorParticipante.getState().efeitosSilenciados(autorId)) return;
+        tocarEfeitoSonoro(sound, get().volume);
+      },
     }),
     {
       name: "soundboard",

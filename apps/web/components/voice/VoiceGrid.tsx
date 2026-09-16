@@ -25,6 +25,7 @@ import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
+import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui } from "@/stores/ui";
 import {
   aplicarAssinaturasDeTela,
@@ -111,6 +112,11 @@ export default function VoiceGrid({
   const assistir = useVoice((s) => s.assistir);
   const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
   const previaDaMinhaTela = usePreviaDaMinhaTela((s) => s.chave);
+  // ESPEC2 item N: quem eu desativei o vídeo não tem tile de câmera — o
+  // objeto inteiro (e não um seletor por id) porque o conjunto de quem está
+  // desativado é pequeno e a grade já teria de re-renderizar de qualquer
+  // jeito quando alguém entra/sai (mesmo padrão de `s.silenciados` no tile).
+  const videosDesativados = usePreferenciasPorParticipante((s) => s.videosDesativados);
   const ehMobile = useEhMobile();
   // elemento em estado (e não em ref): o palco é desmontado quando alguém sobe
   // ao destaque, e um `ref` não avisaria o observador de que voltou
@@ -123,7 +129,10 @@ export default function VoiceGrid({
   const tiles: Tile[] = states.flatMap((state): Tile[] => {
     const meus = participantesDe(state.user.id);
     const sou = state.user.id === me?.id;
-    const camera = meus.flatMap(camerasDe)[0] ?? null;
+    // vídeo desativado por mim: o tile trata como se não houvesse câmera
+    // nenhuma (cai no avatar, o mesmo ramo de "sem vídeo" de sempre) — não se
+    // aplica a mim mesmo, que não aparece no próprio menu com este item
+    const camera = videosDesativados[state.user.id] ? null : (meus.flatMap(camerasDe)[0] ?? null);
     const pessoa: Tile = {
       key: state.user.id,
       state,

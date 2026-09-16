@@ -21,7 +21,7 @@ import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/u
  * movimento tornaria impossível ouvir o resultado enquanto se regula.
  */
 function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> }) {
-  const { min, max, step, onChange, format } = item.slider;
+  const { min, max, step, onChange, format, semValor } = item.slider;
   // estado local: os itens do menu são montados uma vez, então o `value` da
   // definição está congelado no momento em que o menu abriu — sem isso a barra
   // não andaria enquanto o mouse arrasta
@@ -37,9 +37,11 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
           {item.icon ? <span className="shrink-0 opacity-80">{item.icon as ReactNode}</span> : null}
           {item.label}
         </span>
-        <span className="tabular-nums text-text-muted">
-          {format ? format(value) : String(value)}
-        </span>
+        {!semValor && (
+          <span className="tabular-nums text-text-muted">
+            {format ? format(value) : String(value)}
+          </span>
+        )}
       </div>
       <input
         type="range"
