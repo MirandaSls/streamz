@@ -1,9 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { IsString, Length } from "class-validator";
+import {
+  apelidoDeAmigoSchema,
+  ignorarUsuarioSchema,
+  type ApelidoDeAmigoInput,
+  type IgnorarUsuarioInput,
+} from "@streamz/shared";
 import { FriendsService } from "./friends.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { FRIEND_REQUEST_THROTTLE } from "../../common/throttle";
+import { zodBody } from "../../common/zod.pipe";
 
 class FriendRequestDto {
   @IsString()
@@ -63,5 +70,41 @@ export class FriendsController {
   @Delete("blocks/:userId")
   unblock(@CurrentUser() user: JwtPayload, @Param("userId") userId: string) {
     return this.friends.unblock(user.sub, userId);
+  }
+
+  // ── menus de contexto: apelido de amigo ──
+
+  /** Apelido que só eu vejo no lugar do nome do amigo. Só entre amigos. */
+  @Put(":userId/nickname")
+  definirApelido(
+    @CurrentUser() user: JwtPayload,
+    @Param("userId") userId: string,
+    @Body(zodBody(apelidoDeAmigoSchema)) dto: ApelidoDeAmigoInput,
+  ) {
+    return this.friends.definirApelidoDeAmigo(user.sub, userId, dto.apelido);
+  }
+
+  @Delete(":userId/nickname")
+  removerApelido(@CurrentUser() user: JwtPayload, @Param("userId") userId: string) {
+    return this.friends.removerApelidoDeAmigo(user.sub, userId);
+  }
+
+  // ── menus de contexto: ignorar ──
+
+  /**
+   * Ignorar é diferente de bloquear: a outra pessoa não sabe, e a amizade não
+   * é desfeita. O efeito é todo do lado de quem ignora, e é a web que aplica.
+   */
+  @Post("ignores")
+  ignorar(
+    @CurrentUser() user: JwtPayload,
+    @Body(zodBody(ignorarUsuarioSchema)) dto: IgnorarUsuarioInput,
+  ) {
+    return this.friends.ignorarUsuario(user.sub, dto.userId);
+  }
+
+  @Delete("ignores/:userId")
+  deixarDeIgnorar(@CurrentUser() user: JwtPayload, @Param("userId") userId: string) {
+    return this.friends.deixarDeIgnorar(user.sub, userId);
   }
 }

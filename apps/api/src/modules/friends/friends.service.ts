@@ -6,12 +6,14 @@ import {
 } from "@nestjs/common";
 import { WS_EVENTS } from "@streamz/shared";
 import type {
+  ApelidoDeAmigoEvent,
   FriendLists,
   FriendRequest,
   FriendRequestEvent,
   PublicUser,
   RelationshipKind,
   UserBlockedEvent,
+  UsuarioIgnoradoEvent,
 } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
@@ -47,7 +49,7 @@ export class FriendsService {
 
   /** As quatro listas da página Amigos, numa consulta por assunto. */
   async lists(meId: string): Promise<FriendLists> {
-    const [rows, blocks] = await Promise.all([
+    const [rows, blocks, apelidoRows, ignoreRows] = await Promise.all([
       this.prisma.friendship.findMany({
         where: { OR: [{ requesterId: meId }, { addresseeId: meId }] },
         include: { requester: true, addressee: true },
@@ -56,6 +58,17 @@ export class FriendsService {
       this.prisma.block.findMany({
         where: { blockerId: meId },
         include: { blocked: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      // ── menus de contexto ── apelido só sobrevive enquanto a amizade dura
+      // (ver `apagarApelidosDeAmigo`), então tudo aqui já é de amigo atual
+      this.prisma.friendNickname.findMany({
+        where: { ownerId: meId },
+        select: { targetId: true, nickname: true },
+      }),
+      this.prisma.userIgnore.findMany({
+        where: { ignorerId: meId },
+        include: { ignored: true },
         orderBy: { createdAt: "desc" },
       }),
     ]);
@@ -75,7 +88,17 @@ export class FriendsService {
     }
     friends.sort((a, b) => a.username.localeCompare(b.username));
 
-    return { friends, incoming, outgoing, blocked: blocks.map((b) => toPublicUser(b.blocked)) };
+    const apelidos: Record<string, string> = {};
+    for (const a of apelidoRows) apelidos[a.targetId] = a.nickname;
+
+    return {
+      friends,
+      incoming,
+      outgoing,
+      blocked: blocks.map((b) => toPublicUser(b.blocked)),
+      apelidos,
+      ignored: ignoreRows.map((i) => toPublicUser(i.ignored)),
+    };
   }
 
   /** Ids dos meus amigos — usado pelos "amigos em comum" do perfil. */
@@ -225,9 +248,17 @@ export class FriendsService {
       where: { pairKey: this.pairKey(meId, otherId) },
     });
     if (!row || row.status !== "ACCEPTED") throw new NotFoundException("Vocês não são amigos");
-    await this.prisma.friendship.delete({ where: { id: row.id } });
+
+    const apelidos = await this.apelidosEntre(meId, otherId);
+    await this.prisma.$transaction([
+      this.prisma.friendship.delete({ where: { id: row.id } }),
+      this.prisma.friendNickname.deleteMany({
+        where: { OR: [{ ownerId: meId, targetId: otherId }, { ownerId: otherId, targetId: meId }] },
+      }),
+    ]);
     this.realtime.emitToUser(otherId, WS_EVENTS.FRIEND_REMOVED, { userId: meId });
     this.realtime.emitToUser(meId, WS_EVENTS.FRIEND_REMOVED, { userId: otherId });
+    this.avisarApelidosApagados(apelidos);
     return { removed: otherId };
   }
 
@@ -250,9 +281,14 @@ export class FriendsService {
       where: { pairKey: this.pairKey(meId, otherId) },
       select: { id: true },
     });
+    // apelido de amigo não sobrevive ao bloqueio, nos dois sentidos
+    const apelidos = await this.apelidosEntre(meId, otherId);
 
     await this.prisma.$transaction([
       this.prisma.friendship.deleteMany({ where: { pairKey: this.pairKey(meId, otherId) } }),
+      this.prisma.friendNickname.deleteMany({
+        where: { OR: [{ ownerId: meId, targetId: otherId }, { ownerId: otherId, targetId: meId }] },
+      }),
       this.prisma.block.upsert({
         where: { blockerId_blockedId: { blockerId: meId, blockedId: otherId } },
         create: { blockerId: meId, blockedId: otherId },
@@ -286,6 +322,7 @@ export class FriendsService {
       blocked: true,
       user: dto,
     } satisfies UserBlockedEvent);
+    this.avisarApelidosApagados(apelidos);
     return dto;
   }
 
@@ -302,6 +339,102 @@ export class FriendsService {
       } satisfies UserBlockedEvent);
     }
     return { unblocked: otherId };
+  }
+
+  // ── menus de contexto: apelido de amigo ──────────────────────
+
+  /**
+   * Apelido que só eu vejo no lugar do nome do amigo. Exige amizade
+   * `ACCEPTED` — o texto já chega aparado e dentro do teto (schema zod).
+   */
+  async definirApelidoDeAmigo(
+    meId: string,
+    targetId: string,
+    apelido: string,
+  ): Promise<ApelidoDeAmigoEvent> {
+    await this.assertAmigos(meId, targetId);
+    await this.prisma.friendNickname.upsert({
+      where: { ownerId_targetId: { ownerId: meId, targetId } },
+      create: { ownerId: meId, targetId, nickname: apelido },
+      update: { nickname: apelido },
+    });
+    const dto: ApelidoDeAmigoEvent = { userId: targetId, apelido };
+    this.realtime.emitToUser(meId, WS_EVENTS.FRIEND_NICKNAME_UPDATED, dto);
+    return dto;
+  }
+
+  /** Idempotente: remover apelido que não existe também responde `null`. */
+  async removerApelidoDeAmigo(meId: string, targetId: string): Promise<ApelidoDeAmigoEvent> {
+    await this.prisma.friendNickname.deleteMany({ where: { ownerId: meId, targetId } });
+    const dto: ApelidoDeAmigoEvent = { userId: targetId, apelido: null };
+    this.realtime.emitToUser(meId, WS_EVENTS.FRIEND_NICKNAME_UPDATED, dto);
+    return dto;
+  }
+
+  private async assertAmigos(meId: string, targetId: string): Promise<void> {
+    const row = await this.prisma.friendship.findUnique({
+      where: { pairKey: this.pairKey(meId, targetId) },
+    });
+    if (!row || row.status !== "ACCEPTED") {
+      throw new BadRequestException("Só é possível dar apelido a amigos");
+    }
+  }
+
+  /** Apelidos de amigo entre os dois, nos dois sentidos — para avisar quem os perde. */
+  private async apelidosEntre(
+    a: string,
+    b: string,
+  ): Promise<{ ownerId: string; targetId: string }[]> {
+    return this.prisma.friendNickname.findMany({
+      where: { OR: [{ ownerId: a, targetId: b }, { ownerId: b, targetId: a }] },
+      select: { ownerId: true, targetId: true },
+    });
+  }
+
+  /** Avisa cada dono que perdeu o apelido (a linha já foi apagada por quem chamou). */
+  private avisarApelidosApagados(apelidos: { ownerId: string; targetId: string }[]): void {
+    for (const a of apelidos) {
+      this.realtime.emitToUser(a.ownerId, WS_EVENTS.FRIEND_NICKNAME_UPDATED, {
+        userId: a.targetId,
+        apelido: null,
+      } satisfies ApelidoDeAmigoEvent);
+    }
+  }
+
+  // ── menus de contexto: ignorar ───────────────────────────────
+
+  /**
+   * Ignorar é diferente de bloquear: o ignorado não fica sabendo, a amizade
+   * não é desfeita e nada muda para ele. O efeito é todo do lado de quem
+   * ignora, e é a web que aplica (mensagens recolhidas, sem notificação).
+   */
+  async ignorarUsuario(meId: string, targetId: string): Promise<UsuarioIgnoradoEvent> {
+    if (meId === targetId) throw new BadRequestException("Você não pode ignorar a si mesmo");
+    const alvo = await this.prisma.user.findUnique({ where: { id: targetId } });
+    if (!alvo) throw new NotFoundException("Usuário não encontrado");
+
+    await this.prisma.userIgnore.upsert({
+      where: { ignorerId_ignoredId: { ignorerId: meId, ignoredId: targetId } },
+      create: { ignorerId: meId, ignoredId: targetId },
+      update: {},
+    });
+    const dto: UsuarioIgnoradoEvent = { userId: targetId, ignorado: true, user: toPublicUser(alvo) };
+    this.realtime.emitToUser(meId, WS_EVENTS.USER_IGNORED, dto);
+    return dto;
+  }
+
+  /** Idempotente: deixar de ignorar quem já não estava ignorado também responde `false`. */
+  async deixarDeIgnorar(meId: string, targetId: string): Promise<UsuarioIgnoradoEvent> {
+    if (meId === targetId) throw new BadRequestException("Você não pode ignorar a si mesmo");
+    const alvo = await this.prisma.user.findUnique({ where: { id: targetId } });
+    if (!alvo) throw new NotFoundException("Usuário não encontrado");
+
+    await this.prisma.userIgnore
+      .delete({ where: { ignorerId_ignoredId: { ignorerId: meId, ignoredId: targetId } } })
+      .catch(() => undefined); // idempotente: já não estava ignorado
+    const dto: UsuarioIgnoradoEvent = { userId: targetId, ignorado: false, user: toPublicUser(alvo) };
+    this.realtime.emitToUser(meId, WS_EVENTS.USER_IGNORED, dto);
+    return dto;
   }
 
   private toRequest(
