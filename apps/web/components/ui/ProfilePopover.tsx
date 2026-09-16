@@ -232,6 +232,8 @@ export default function ProfilePopoverHost() {
   /** O miolo do cartão: a borda direita dele é onde o submenu de status encosta. */
   const ref = useRef<HTMLDivElement>(null);
   const timerDoSubmenu = useRef<number | undefined>(undefined);
+  /** qual submenu do painel da conta abriu por último (ver `agendarSubmenuDoCartao`). */
+  const submenuDoCartao = useRef<"status" | "contas" | null>(null);
   /**
    * No celular o cartão vira **folha inferior** — a do `Popout`. Os alvos de
    * toque sobem para 44 (`celular:h-[44px]` nas peças), em px literal porque o
@@ -400,6 +402,7 @@ export default function ProfilePopoverHost() {
    * é o que impede o cartão de sumir quando ele abre — no desktop.
    */
   function abrirSubmenuDeStatus(linha: HTMLElement) {
+    submenuDoCartao.current = "status";
     const r = linha.getBoundingClientRect();
     const direitaDoCartao = ref.current?.getBoundingClientRect().right ?? r.right;
     abrirMenuDoCartao(
@@ -431,18 +434,19 @@ export default function ProfilePopoverHost() {
    * comum ao de status e ao de contas, os dois únicos que nascem do painel do
    * rodapé (`PainelDaMinhaConta`).
    */
-  function agendarSubmenuDoCartao(abrir: () => void) {
+  function agendarSubmenuDoCartao(qual: "status" | "contas", abrir: () => void) {
     window.clearTimeout(timerDoSubmenu.current);
     timerDoSubmenu.current = window.setTimeout(() => {
-      // com um menu já aberto o hover não faz nada: reabrir o mesmo submenu
-      // remontaria o painel e ele reapareceria piscando a cada ida e volta
-      if (useUI.getState().contextMenu) return;
+      // com o MESMO submenu já aberto o hover não faz nada: reabri-lo
+      // remontaria o painel e ele reapareceria piscando a cada ida e volta.
+      // Passar de "Disponível" para "Mudar de conta" troca o submenu.
+      if (useUI.getState().contextMenu && submenuDoCartao.current === qual) return;
       abrir();
     }, ATRASO_DO_SUBMENU);
   }
 
   function passarNoStatus(linha: HTMLElement) {
-    agendarSubmenuDoCartao(() => abrirSubmenuDeStatus(linha));
+    agendarSubmenuDoCartao("status", () => abrirSubmenuDeStatus(linha));
   }
 
   /**
@@ -453,6 +457,7 @@ export default function ProfilePopoverHost() {
    * selo de conta ativa, e "Gerenciar contas" abrindo o modal que já existia.
    */
   function abrirSubmenuDeContas(linha: HTMLElement) {
+    submenuDoCartao.current = "contas";
     const r = linha.getBoundingClientRect();
     const direitaDoCartao = ref.current?.getBoundingClientRect().right ?? r.right;
     const cofre = lerCofreDoDisco();
@@ -484,7 +489,7 @@ export default function ProfilePopoverHost() {
   }
 
   function passarNaConta(linha: HTMLElement) {
-    agendarSubmenuDoCartao(() => abrirSubmenuDeContas(linha));
+    agendarSubmenuDoCartao("contas", () => abrirSubmenuDeContas(linha));
   }
 
   /**

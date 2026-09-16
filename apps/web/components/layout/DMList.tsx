@@ -618,8 +618,8 @@ function LinhaDeConversa({
       items.push(submenuConvidarParaOServidor());
       if (souAmigo) {
         items.push({
+          // branco no Discord (p2): só "Bloquear" é vermelho
           label: "Desfazer amizade",
-          danger: true,
           onSelect: () => void removeFriend(other),
         });
       }

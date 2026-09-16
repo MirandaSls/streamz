@@ -126,7 +126,7 @@ export default function EncaminharModal({
       onClose={closeModal}
       footer={
         <>
-          <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
+          {/* principal primeiro: o rodapé do `Dialog` o desenha à direita */}
           <PrimaryButton
             disabled={selecionados.size === 0 || !mensagem}
             carregando={enviando}
@@ -134,6 +134,7 @@ export default function EncaminharModal({
           >
             Enviar
           </PrimaryButton>
+          <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
         </>
       }
     >
