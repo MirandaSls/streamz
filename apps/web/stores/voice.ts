@@ -46,6 +46,8 @@ import {
   pararServicoDeChamada,
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
+  restaurarAtenuacaoDoWindows,
+  suspenderAtenuacaoDoWindows,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { cronometroDeVoz, type CronometroDeVoz } from "@/lib/tempos-de-voz";
@@ -546,6 +548,10 @@ function desmontarSala() {
     void ponteDescartarTela();
   }
   cameraSobCpu = false;
+  // fim da call: o Windows volta a abaixar os outros apps como a pessoa
+  // escolheu (ver `suspenderAtenuacaoDoWindows`). Antes do `return`: a sala
+  // que caiu sozinha já zerou `sala`, e a preferência continua trocada até aqui
+  void restaurarAtenuacaoDoWindows();
   if (!sala) return;
   pararMedicaoDePing();
   // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
@@ -1878,6 +1884,9 @@ async function aplicarSaidaEscolhida(room: Room) {
  *    veria o botão mudo e a sala a ouviria.
  */
 async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroDeVoz) {
+  // antes do `getUserMedia`: o microfone do WebView2 é um stream de
+  // comunicações, e sem isto o Windows abaixa o volume do Discord e da música
+  await suspenderAtenuacaoDoWindows();
   try {
     await abrirMicrofone(
       salaDoMicrofone(room),

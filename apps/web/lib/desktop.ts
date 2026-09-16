@@ -617,6 +617,41 @@ export async function iniciarServicoDeChamada(titulo: string, texto: string): Pr
   }
 }
 
+/**
+ * Enquanto houver call, o Windows **não** abaixa o volume dos outros apps.
+ *
+ * O microfone do WebView2 abre como stream de comunicações
+ * (`AudioCategory_Communications`, decisão do Chromium e sem flag para
+ * desligar), e o padrão do Windows é "reduzir o volume de outros sons em 80%"
+ * quando isso acontece — o Discord e a música ficavam baixos ao entrar numa
+ * call. O Rust troca a preferência para "não fazer nada" e a devolve em
+ * `restaurarAtenuacaoDoWindows` (ver `src-tauri/src/atenuacao.rs`).
+ *
+ * Tem de vir **antes** do `getUserMedia`. Fora do Tauri é no-op; nos outros
+ * sistemas o comando existe e não faz nada. Best-effort: falhar só mantém o
+ * comportamento antigo.
+ */
+export async function suspenderAtenuacaoDoWindows(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("suspender_atenuacao_do_windows");
+  } catch {
+    // app antigo sem o comando, ou registro recusado: segue como antes
+  }
+}
+
+/** Fim da call: a preferência de comunicações do Windows volta ao que era. */
+export async function restaurarAtenuacaoDoWindows(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("restaurar_atenuacao_do_windows");
+  } catch {
+    // idem
+  }
+}
+
 /** Desliga o serviço e tira a notificação. Parar o que já parou não é erro. */
 export async function pararServicoDeChamada(): Promise<void> {
   if (!ehAndroidNoTauri()) return;

@@ -166,6 +166,8 @@ vi.mock("@/lib/desktop", () => ({
   iniciarTelaNativa: vi.fn(async () => {}),
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
+  suspenderAtenuacaoDoWindows: vi.fn(async () => {}),
+  restaurarAtenuacaoDoWindows: vi.fn(async () => {}),
 }));
 // o Node não tem `RTCPeerConnection`: quem decide aqui é o teste
 vi.mock("@/lib/suporte-a-chamadas", async (original) => ({
