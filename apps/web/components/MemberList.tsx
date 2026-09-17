@@ -3,12 +3,8 @@
 import type { MouseEvent } from "react";
 import {
   Crown,
-  Gavel,
-  MessageSquare,
   ShieldCheck,
   Timer,
-  TimerOff,
-  UserX,
   Volume2,
 } from "@/components/ui/icones";
 import {
@@ -24,7 +20,7 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
-import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
+import { Tooltip } from "@/components/ui/primitivos";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { api } from "@/lib/api";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
@@ -341,7 +337,6 @@ export default function MemberList() {
   }
 
   function renderMember({ m, status }: Linha) {
-    const isMe = m.user.id === user?.id;
     const offline = status === "OFFLINE";
     const nome = nomeParaMim(m.user, {
       apelidoDeAmigo: apelidosDeAmigo?.[m.user.id],
@@ -423,71 +418,6 @@ export default function MemberList() {
             )}
           </span>
         </button>
-
-        {/*
-          Era "sempre visível" no celular (com só "Mensagem" — as três de
-          moderação levariam 132px de uma linha de 335 e o nome truncava em
-          "betoxip…", medido em 390×844): a revisão mediu o m-membros.png
-          contra a referência do Discord (blog "New Version" e ref desktop) e
-          achou o oposto — nenhum botão fica fixo na linha, nem "Mensagem".
-          Sem `celular:flex`, a fileira só aparece no hover/foco (mouse ou
-          teclado), que no toque não acontece: no celular a ação vira perfil
-          (toque no nome) ou o menu de contexto, que abre por toque longo
-          (`AreaDeToqueLongo` envolve o shell inteiro). No desktop nada muda.
-        */}
-        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex">
-          {!isMe && (
-            <BotaoDeIcone
-              rotulo="Mensagem"
-              icone={<MessageSquare size={16} />}
-              tamanho="sm"
-              aria-label={`Abrir conversa com ${nome}`}
-              onClick={() => void openWith(m.user.id)}
-              /* mesma trava das três de baixo: sem isto, um `:hover` que
-                 gruda depois do toque (nota do cartão — "o último item tocado
-                 fica aceso") deixava só ESTE botão de 32px flutuando sobre a
-                 linha, único dos quatro sem a trava. No celular a ação é o
-                 toque no nome (perfil) ou o menu de toque longo. */
-              className="celular:hidden"
-            />
-          )}
-          {podeAgirSobre(m) && podeCastigar && (
-            /* h-moderacao: castigo é a ação de moderação mais usada — fica no hover */
-            <BotaoDeIcone
-              rotulo={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}
-              icone={isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
-              tamanho="sm"
-              perigo
-              aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-              onClick={() =>
-                isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
-              }
-              className="celular:hidden"
-            />
-          )}
-          {podeAgirSobre(m) && podeExpulsar && (
-            <BotaoDeIcone
-              rotulo="Expulsar"
-              icone={<UserX size={16} />}
-              tamanho="sm"
-              perigo
-              aria-label={`Expulsar ${nome}`}
-              onClick={() => kick(m.user.id)}
-              className="celular:hidden"
-            />
-          )}
-          {podeAgirSobre(m) && podeBanir && (
-            <BotaoDeIcone
-              rotulo="Banir"
-              icone={<Gavel size={16} />}
-              tamanho="sm"
-              perigo
-              aria-label={`Banir ${nome}`}
-              onClick={() => ban(m.user.id)}
-              className="celular:hidden"
-            />
-          )}
-        </div>
       </div>
     );
   }
