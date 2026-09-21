@@ -88,6 +88,7 @@ import {
 import { aplicarAssinaturas, type ParticipanteDeTela } from "@/stores/assinaturas-de-tela";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
+import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
@@ -2397,6 +2398,71 @@ export function aplicarAssinaturasDeTela() {
     previa,
     focado,
   });
+}
+
+// ── Câmera oculta por escolha minha ────────────────────────────────────────
+//
+// O par de `silenciados` para o vídeo: some com a câmera de alguém **só para
+// mim**, sem evento nenhum para a sala. A escolha é do menu do participante e
+// mora em `stores/preferencias-por-participante` (`videosDesativados`), que a
+// persiste; aqui mora só a consequência na assinatura da faixa.
+//
+// Ocultar **desassina** a faixa (`setSubscribed(false)`) em vez de só
+// desabilitá-la (`setEnabled(false)`): quem manda ocultar a câmera de alguém
+// quase sempre está reclamando do custo dela — banda e decodificação —, e
+// `setEnabled(false)` continuaria baixando o vídeo inteiro para jogá-lo fora.
+// É a mesma escolha que a regra das telas já faz (`assinaturas-de-tela.ts`):
+// vídeo que ninguém está olhando não é baixado.
+//
+// Desassinar também é o que faz o tile voltar sozinho ao avatar: sem
+// assinatura não há `pub.track`, e `camerasDe` (de onde a grade tira a câmera
+// do tile) exige faixa — ninguém fica olhando um retângulo preto.
+
+/**
+ * Publicações de câmera de um usuário, **assinadas ou não**.
+ *
+ * `camerasDe` não serve aqui pelo mesmo motivo que `telasDe` existe separada
+ * de `videosDe`: ela exige `pub.track`, e uma faixa desassinada não tem faixa
+ * — a publicação sumiria da lista e nunca daria para voltar a assiná-la.
+ */
+function camerasPublicadasDe(userId: string): RemoteTrackPublication[] {
+  return participantesDe(userId).flatMap((p) =>
+    Array.from(p.trackPublications.values()).filter(
+      (pub): pub is RemoteTrackPublication =>
+        pub instanceof RemoteTrackPublication &&
+        pub.kind === Track.Kind.Video &&
+        pub.source !== Track.Source.ScreenShare,
+    ),
+  );
+}
+
+/** Põe as assinaturas de câmera de acordo com `videosDesativados`. */
+export function aplicarVideosOcultos() {
+  const { videosDesativados } = usePreferenciasPorParticipante.getState();
+  for (const [userId, oculto] of Object.entries(videosDesativados)) {
+    for (const pub of camerasPublicadasDe(userId)) {
+      // só mexe quando a assinatura está diferente do que eu pedi: chamar
+      // `setSubscribed` à toa manda um pedido ao SFU a cada evento da sala
+      if (pub.isSubscribed !== !oculto) pub.setSubscribed(!oculto);
+    }
+  }
+}
+
+// `tick` é o pulso dos eventos do SDK (faixa publicada, assinada, saindo). Uma
+// câmera religada chega como publicação **nova**, e nova nasce assinada: sem
+// reaplicar aqui, "ocultar vídeo" duraria só até a pessoa desligar e religar a
+// câmera. Mesmo motivo do `aplicarAssinaturasDeTela` dentro do `rerender`.
+// Sem guarda de `window`: fora do navegador não há sala e o laço não acha nada.
+{
+  let anterior = useVoice.getState().tick;
+  useVoice.subscribe((s) => {
+    if (s.tick === anterior) return;
+    anterior = s.tick;
+    aplicarVideosOcultos();
+  });
+  // e quando a escolha muda no menu do participante (`videosDesativados`), que
+  // é persistida noutra store e não passa pelo `tick` desta
+  usePreferenciasPorParticipante.subscribe(() => aplicarVideosOcultos());
 }
 
 /** Alguém publicou tela nesta sala (mesmo sem eu estar assistindo)? */
