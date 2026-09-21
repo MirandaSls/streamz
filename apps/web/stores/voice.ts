@@ -88,6 +88,7 @@ import {
 import { aplicarAssinaturas, type ParticipanteDeTela } from "@/stores/assinaturas-de-tela";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
+import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
@@ -203,7 +204,6 @@ function encerrarCapturaDaTela() {
  * pessoa desligar a câmera, escolher outro fps ou sair da sala.
  */
 let cameraSobCpu = false;
-
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
   states: Record<string, VoiceStateEvent[]>;
@@ -1407,6 +1407,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
 
+
     // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
     // a valer alta, e o que desce para a faixa (188×106) vira miniatura. Sem
     // reaplicar aqui, a tela que acabou de subir continuaria em baixa até o
@@ -1480,6 +1481,33 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         await abrirConversa(channelId);
         const r = await api.startCall(channelId);
         for (const e of r.states) get().applyState(e);
+
+        // ── o REST não basta: o socket também precisa entrar na voz ──
+        //
+        // O `POST /dms/:id/call` põe a conta no estado de voz, mas quem grava
+        // `voiceChannelId` no socket é o **gateway**, e ele só o faz no
+        // `voice.join`. Sem estas duas linhas, quem liga ficava com o socket sem
+        // canal de voz — e aí o `voice.update` era descartado em silêncio (mudo,
+        // surdo, câmera e tela nunca chegavam ao outro lado), a queda da conexão
+        // não agendava saída nenhuma (o outro lado ficava com um fantasma
+        // permanente, sem `reconnecting` e sem `call.end`) e o F5 não retomava a
+        // chamada. Parecia funcionar porque a primeira reconexão de socket chama
+        // `rejoinAposReconexao`, que emite este mesmo par: o conserto só chegava
+        // depois de a chamada já ter dado errado.
+        //
+        // **Depois** do `POST`, nunca antes: `CallsService.start` decide se o
+        // telefone toca olhando se a sala está vazia, e entrar pelo WS primeiro
+        // faria a chamada nascer como "entrei numa que já estava rolando" — o
+        // outro lado nunca tocaria. **Antes** do LiveKit porque estado de voz não
+        // depende de mídia (a mesma ordem do `connect`): a sala pode demorar ou
+        // falhar, e até lá o gateway já me conta como presente. Repetir o join é
+        // seguro — o servidor o trata como reentrada —; ficar sem ele não é.
+        emit(WS_EVENTS.VOICE_JOIN, { channelId });
+        // as flags **reais** logo em seguida: o join do REST entra com
+        // `VOICE_FLAGS_PADRAO`, então quem liga com o microfone fechado nasceria
+        // desmutado para os outros até o primeiro `syncFlags`
+        emit(WS_EVENTS.VOICE_UPDATE, flags());
+
         if (!r.voice) {
           // sem LiveKit a chamada ainda toca e o estado de voz vale: só não há som
           set({ status: "connected", midiaDisponivel: false, erro: null });
@@ -1509,6 +1537,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
+      // quem atende já ganha `voiceChannelId` pelo próprio `call.accept`, mas só
+      // o `voice.join` passa pela expulsão das outras conexões da conta: sem
+      // ele, atender no celular deixava o desktop na sala até o LiveKit derrubar
+      // a identidade repetida — e lá aparecia "a conexão de voz caiu", como se
+      // fosse queda de rede, em vez do aviso de que entrei em outro aparelho
+      emit(WS_EVENTS.VOICE_JOIN, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
       lembrarSala({ channelId, guildId: null, name: "" });
       await abrirConversa(channelId);
@@ -1543,6 +1577,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     handleRing: (evento) => {
+      // o toque é o **primeiro som** que o WebView2 emite numa chamada, e é
+      // depois do primeiro som que a sessão de áudio existe para ser marcada:
+      // pedir aqui é a melhor chance de a varredura achar alguma coisa, e sobra
+      // tempo de rajada até o "Atender". Quem liga não precisa de um pedido
+      // próprio para o ringback — entra na sala na mesma hora, e o
+      // `publicarMicrofone` de lá pede por ele.
       // chamada recebida não abre modal: o cartão flutuante do canto vive na
       // `VoiceLayer` e reage à fase `incoming` sozinho, sem travar a interface
       get().dispatchCall({ type: "ring", channelId: evento.channelId, from: evento.from });
@@ -2358,6 +2398,71 @@ export function aplicarAssinaturasDeTela() {
     previa,
     focado,
   });
+}
+
+// ── Câmera oculta por escolha minha ────────────────────────────────────────
+//
+// O par de `silenciados` para o vídeo: some com a câmera de alguém **só para
+// mim**, sem evento nenhum para a sala. A escolha é do menu do participante e
+// mora em `stores/preferencias-por-participante` (`videosDesativados`), que a
+// persiste; aqui mora só a consequência na assinatura da faixa.
+//
+// Ocultar **desassina** a faixa (`setSubscribed(false)`) em vez de só
+// desabilitá-la (`setEnabled(false)`): quem manda ocultar a câmera de alguém
+// quase sempre está reclamando do custo dela — banda e decodificação —, e
+// `setEnabled(false)` continuaria baixando o vídeo inteiro para jogá-lo fora.
+// É a mesma escolha que a regra das telas já faz (`assinaturas-de-tela.ts`):
+// vídeo que ninguém está olhando não é baixado.
+//
+// Desassinar também é o que faz o tile voltar sozinho ao avatar: sem
+// assinatura não há `pub.track`, e `camerasDe` (de onde a grade tira a câmera
+// do tile) exige faixa — ninguém fica olhando um retângulo preto.
+
+/**
+ * Publicações de câmera de um usuário, **assinadas ou não**.
+ *
+ * `camerasDe` não serve aqui pelo mesmo motivo que `telasDe` existe separada
+ * de `videosDe`: ela exige `pub.track`, e uma faixa desassinada não tem faixa
+ * — a publicação sumiria da lista e nunca daria para voltar a assiná-la.
+ */
+function camerasPublicadasDe(userId: string): RemoteTrackPublication[] {
+  return participantesDe(userId).flatMap((p) =>
+    Array.from(p.trackPublications.values()).filter(
+      (pub): pub is RemoteTrackPublication =>
+        pub instanceof RemoteTrackPublication &&
+        pub.kind === Track.Kind.Video &&
+        pub.source !== Track.Source.ScreenShare,
+    ),
+  );
+}
+
+/** Põe as assinaturas de câmera de acordo com `videosDesativados`. */
+export function aplicarVideosOcultos() {
+  const { videosDesativados } = usePreferenciasPorParticipante.getState();
+  for (const [userId, oculto] of Object.entries(videosDesativados)) {
+    for (const pub of camerasPublicadasDe(userId)) {
+      // só mexe quando a assinatura está diferente do que eu pedi: chamar
+      // `setSubscribed` à toa manda um pedido ao SFU a cada evento da sala
+      if (pub.isSubscribed !== !oculto) pub.setSubscribed(!oculto);
+    }
+  }
+}
+
+// `tick` é o pulso dos eventos do SDK (faixa publicada, assinada, saindo). Uma
+// câmera religada chega como publicação **nova**, e nova nasce assinada: sem
+// reaplicar aqui, "ocultar vídeo" duraria só até a pessoa desligar e religar a
+// câmera. Mesmo motivo do `aplicarAssinaturasDeTela` dentro do `rerender`.
+// Sem guarda de `window`: fora do navegador não há sala e o laço não acha nada.
+{
+  let anterior = useVoice.getState().tick;
+  useVoice.subscribe((s) => {
+    if (s.tick === anterior) return;
+    anterior = s.tick;
+    aplicarVideosOcultos();
+  });
+  // e quando a escolha muda no menu do participante (`videosDesativados`), que
+  // é persistida noutra store e não passa pelo `tick` desta
+  usePreferenciasPorParticipante.subscribe(() => aplicarVideosOcultos());
 }
 
 /** Alguém publicou tela nesta sala (mesmo sem eu estar assistindo)? */

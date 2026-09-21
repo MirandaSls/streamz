@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissoes da janela principal do Streamz DESKTOP: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao, a criacao da janelinha (splash) que baixa e instala, e as acoes da imagem em tela cheia (abrir no navegador do sistema, copiar o bitmap e Salvar como). O campo platforms existe porque metade destas permissoes nao existe no Android/iOS (maximizar, arrastar a janela, atualizador): sem ele o build mobile falha ao resolver a ACL. As permissoes de celular estao em mobile.json.",
+  "description": "Permissoes da janela principal do Streamz DESKTOP: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao, a criacao da janelinha (splash) que baixa e instala, a tela cheia da janela (o palco de voz cai nela quando a Fullscreen API do DOM nao existe ou e recusada - o WKWebView do macOS nasce com o element fullscreen desligado; ver lib/desktop.ts e components/voice/fullscreen.ts) e as acoes da imagem em tela cheia (abrir no navegador do sistema, copiar o bitmap e Salvar como). O campo platforms existe porque metade destas permissoes nao existe no Android/iOS (maximizar, arrastar a janela, atualizador, tela cheia de janela): sem ele o build mobile falha ao resolver a ACL. As permissoes de celular estao em mobile.json.",
   "platforms": ["windows", "linux", "macOS"],
   "windows": ["main"],
   "permissions": [
@@ -14,6 +14,8 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-is-maximized",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:webview:allow-create-webview-window",

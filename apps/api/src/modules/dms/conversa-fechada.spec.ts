@@ -6,6 +6,8 @@ import type { RealtimeService } from "../realtime/realtime.service";
 import type { FriendsService } from "../friends/friends.service";
 import type { MessagesService } from "../messages/messages.service";
 import type { StorageService } from "../storage/storage.service";
+import type { CallsService } from "../voice/calls.service";
+import type { VoiceService } from "../voice/voice.service";
 
 /**
  * Fechar e reabrir uma conversa (`dMHidden`).
@@ -136,6 +138,9 @@ function servico(ultimaMensagem: Record<string, Date | undefined> = {}) {
     {} as FriendsService,
     {} as MessagesService,
     {} as StorageService,
+    // voz: estes testes não tocam chamada — o par que `sairDaChamada` usa
+    { async expulsarDaVoz() {} } as unknown as VoiceService,
+    { async onDisconnect() {} } as unknown as CallsService,
   );
   return { service, escondidas };
 }

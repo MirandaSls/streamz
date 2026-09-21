@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import {
   CALL_ALONE_TIMEOUT_MS,
   CALL_RING_TIMEOUT_MS,
@@ -83,6 +83,18 @@ export class CallsService {
     const jaEmChamada = (await this.voice.count(channelId)) > 0;
     await this.voice.join(userId, channelId);
 
+    // entrar numa chamada em andamento **é** atender — só que pelo botão
+    // "Entrar" da faixa, não pelo telefone. Sem tirar quem entrou de
+    // `pendentes` (e calar o toque quando não sobra ninguém para atender), o
+    // relógio dos 30 s seguia armado: `expirar` depois encontrava a sala com
+    // quem entrou mas sem quem ligou e encerrava a conversa de quem estava
+    // falando, com "Ninguém atendeu". Um toque vivo ainda trava o relógio da
+    // solidão, que é quem deveria mandar daqui em diante.
+    if (jaEmChamada) {
+      this.pendenteAtendido(channelId, userId);
+      if (this.tocando.get(channelId)?.pendentes.size === 0) this.calar(channelId);
+    }
+
     const de = await this.usuario(userId);
 
     // toca só quando a chamada nasce agora; entrar numa em andamento é silencioso.
@@ -120,12 +132,40 @@ export class CallsService {
     await this.avaliarSolidao(channelId);
   }
 
-  /** Recusa: avisa a conversa e, se ninguém mais estava para atender, encerra. */
+  /**
+   * Recusa: para de tocar para quem recusou e, se a chamada morreu com isso,
+   * avisa a conversa.
+   */
   async decline(userId: string, channelId: string) {
     await this.guilds.assertCanViewChannel(userId, channelId);
+    const toque = this.tocando.get(channelId);
+    // telefone nenhum tocando aqui: não há o que recusar. Silêncio em vez de
+    // erro porque este é o caso legítimo do grupo — quem atendeu calou o toque
+    // e o cartão de chamada de quem ainda não respondeu só some quando a pessoa
+    // clica; o clique não pode virar um aviso de erro na tela dela.
+    if (!toque) return;
+    // recusar é responder a um telefone que está tocando **para você**. Ver a
+    // conversa não basta: sem esta checagem, qualquer participante da conversa
+    // mandava `call.decline` de uma chamada da qual nem foi chamado
+    if (!toque.pendentes.has(userId)) {
+      throw new ForbiddenException("Você não está sendo chamado nesta conversa");
+    }
     const quem = await this.usuario(userId);
-    this.emitir(channelId, { channelId, by: quem, reason: "declined" });
-    this.pendenteAtendido(channelId, userId);
+    toque.pendentes.delete(userId);
+    // sem ninguém para atender não há mais toque: deixar o relógio armado
+    // encerraria depois a chamada de quem sobrou e, pior, o `tocando` órfão
+    // faria a próxima ligação da mesma conversa sair muda
+    if (toque.pendentes.size === 0) this.calar(channelId);
+
+    // `call.ended` só quando a chamada de fato morre: ninguém mais para
+    // atender **e** ninguém além de quem ligou na sala. Emitir sempre (era o
+    // que este método fazia) derrubava o grupo inteiro na recusa de um só —
+    // A liga, B atende, C recusa e A e B eram desligados.
+    const aindaTemQuemAtender = toque.pendentes.size > 0;
+    const outrosNaSala = (await this.voice.count(channelId)) > 1;
+    if (!aindaTemQuemAtender && !outrosNaSala) {
+      this.emitir(channelId, { channelId, by: quem, reason: "declined" });
+    }
     await this.encerrarSeVazia(channelId, quem, "declined");
     await this.avaliarSolidao(channelId);
   }
@@ -173,8 +213,16 @@ export class CallsService {
     const toque = this.tocando.get(channelId);
     if (!toque) return;
     this.calar(channelId);
-    // alguém entrou no meio do caminho? então não expirou nada
-    if ((await this.voice.count(channelId)) > 1) return;
+    // alguém **além de quem ligou** entrou no meio do caminho? então a chamada
+    // foi atendida e não expirou nada. Contar a sala não bastava: quando quem
+    // ligou desligava e quem entrou pelo botão "Entrar" ficava, sobrava uma
+    // pessoa só e o timeout desligava justamente quem estava na chamada. Sem
+    // toque, quem sobrou passa a ser assunto do relógio da solidão.
+    const naSala = await this.voice.membrosDaSala(channelId);
+    if (naSala.some((id) => id !== toque.fromUserId)) {
+      await this.avaliarSolidao(channelId);
+      return;
+    }
     await this.voice.leave(toque.fromUserId, channelId);
     this.emitir(channelId, { channelId, by: null, reason: "timeout" });
   }

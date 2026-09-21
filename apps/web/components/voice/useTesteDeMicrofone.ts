@@ -161,7 +161,11 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
             audio: {
               deviceId: inputId ? { exact: inputId } : undefined,
               // o mesmo processamento que a call publicaria: um teste com outra
-              // cadeia responderia sobre um microfone que não é o seu
+              // cadeia responderia sobre um microfone que não é o seu. Efeito
+              // colateral aceito: com `echoCancellation` ligado (o padrão) o
+              // Chromium pode pôr o sistema em modo de comunicação enquanto o
+              // teste dura, o que no Windows abaixa o volume de outros apps —
+              // some quando o teste para, junto com a captura.
               echoCancellation: eco,
               noiseSuppression: ruido === "padrao",
               autoGainControl: ganho,

@@ -272,7 +272,14 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
           jaPediu = true;
           let faixa: MediaStream | null = null;
           try {
-            faixa = await md.getUserMedia({ audio: true });
+            // `audio: true` puro liga AEC/AGC por padrão, e é só isso que o
+            // Chromium precisa ver para pôr o sistema em "modo de comunicação"
+            // — no Windows isso ativa o ducking do áudio dos outros apps
+            // (Spotify etc.) mesmo sem call nenhuma em curso, só de abrir esta
+            // aba. A sonda quer rótulo, não processamento: pede tudo desligado.
+            faixa = await md.getUserMedia({
+              audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+            });
             // enumerar com a trilha **viva**: é o que o Firefox exige para
             // entregar rótulo sem permissão persistida. No Chromium não muda
             // nada (medido), mas também não custa nada.

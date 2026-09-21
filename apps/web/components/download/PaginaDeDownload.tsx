@@ -207,7 +207,16 @@ export default function PaginaDeDownload() {
       <footer className="border-t border-border-subtle px-10 py-10 celular:pb-[max(2.5rem,env(safe-area-inset-bottom))] celular:pl-[max(1.5rem,env(safe-area-inset-left))] celular:pr-[max(1.5rem,env(safe-area-inset-right))]">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-6">
           <MarcaLockup size={22} className="text-text-strong" />
-          <nav aria-label="Conta" className="flex gap-2">
+          <nav aria-label="Conta" className="flex flex-wrap gap-2">
+            {/* A documentação da API de bots é pública e não exige conta — é a
+                porta de entrada de quem vai escrever um bot, e sem um link aqui
+                a rota `/desenvolvedores` só seria achada por quem já a conhece. */}
+            <Link
+              href="/desenvolvedores"
+              className="inline-flex h-[44px] items-center rounded-lg px-3 text-text-md font-medium text-text-link hover:underline"
+            >
+              Desenvolvedores
+            </Link>
             <Link
               href="/login"
               className="inline-flex h-[44px] items-center rounded-lg px-3 text-text-md font-medium text-text-link hover:underline"

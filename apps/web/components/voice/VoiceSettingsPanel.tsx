@@ -69,6 +69,26 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
     alternar: alternarTeste,
   } = useTesteDeMicrofone();
 
+  /*
+    Preset do processamento — a mesma regra de `settings/VozTab.tsx`, onde o
+    *porquê* está escrito por extenso: com `eco`/`ganho` ligados o sistema põe a
+    saída em modo de comunicação e abaixa/reencoda o som dos outros aplicativos;
+    desligados, os outros apps ficam intactos e a limpeza passa a custar CPU
+    (supressão avançada). O valor é **derivado** das preferências que já
+    existem — nenhum campo novo na store —, então os interruptores abaixo e o
+    preset nunca podem discordar.
+  */
+  const tratamento = audio.processamento.eco || audio.processamento.ganho ? "sistema" : "app";
+  const aplicarTratamento = (valor: "sistema" | "app") =>
+    setAudioPref({
+      processamento:
+        valor === "sistema"
+          ? { ...audio.processamento, eco: true, ganho: true }
+          : // a avançada entra junto: sem ela, sair do modo de comunicação
+            // deixaria o microfone cru — a troca seria uma piora audível
+            { ...audio.processamento, eco: false, ganho: false, ruido: "avancada" },
+    });
+
   // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
   // formato que o `Select` pede — igual ao helper de `VozTab.tsx`
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
@@ -249,8 +269,43 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Processamento de voz
         </h3>
+        {/* O preset está aqui, e não só na aba cheia, porque é **aqui** que o
+            sintoma aparece: a pessoa entra na chamada, a música baixa e estoura,
+            e abre este painel. Mandá-la ao modal de configurações para desfazer
+            o que a chamada acabou de causar seria pedir que ela saísse do lugar
+            onde percebeu o problema. A densidade se resolve com uma coluna só,
+            como a redução de ruído logo abaixo. O texto repete o da aba
+            (`voz.tratamento*` em `lib/i18n.ts`): este painel ainda é todo em
+            pt-BR literal, e misturar `t()` numa seção só deixaria o inglês pela
+            metade. A divisória fica no invólucro (e não no `RadioCards`) pelo
+            mesmo motivo da aba cheia: no fieldset, o traço cairia entre o
+            preset e a sua ajuda. */}
+        <div className="border-b border-border-subtle pb-3">
+          <RadioCards
+            semDivisoria
+            legend="Onde tratar o seu microfone"
+            columns={1}
+            value={tratamento}
+            onChange={aplicarTratamento}
+            options={[
+              {
+                value: "sistema",
+                label: "Sistema",
+                hint: "trata o eco melhor; mexe no som dos outros apps",
+              },
+              { value: "app", label: "No app", hint: "não mexe nos outros apps; usa mais CPU" },
+            ]}
+          />
+          <p className="mt-2 text-xs text-text-muted">
+            “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem
+            fala no alto-falante, mas põe o áudio em modo de comunicação e pode abaixar e estourar
+            música, jogo e vídeo. “No app” sai desse modo e deixa a limpeza com a supressão
+            avançada.
+          </p>
+        </div>
         <ToggleLinha
           titulo="Cancelamento de eco"
+          hint="Enquanto estiver ligado, o sistema trata a chamada como telefonema e pode abaixar e distorcer o som dos outros aplicativos — música, jogo, vídeo. Quem usa fone pode desligar sem ganhar eco."
           checked={audio.processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...audio.processamento, eco } })}
         />
@@ -269,6 +324,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
         <ToggleLinha
           titulo="Controle automático de ganho"
+          hint="Nivela o seu volume quando você fala perto ou longe do microfone. Também depende do modo de comunicação do sistema, então, junto com o cancelamento de eco, é o que abafa os outros aplicativos."
           checked={audio.processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...audio.processamento, ganho } })}
         />

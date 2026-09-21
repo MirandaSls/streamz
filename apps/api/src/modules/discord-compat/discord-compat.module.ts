@@ -10,6 +10,10 @@ import { RolesModule } from "../roles/roles.module";
 import { VoiceModule } from "../voice/voice.module";
 import { BotTokenGuard } from "./bot-token.guard";
 import { DadosDeCompatService } from "./dados.service";
+import {
+  DocumentacaoCompatController,
+  DocumentacaoCompatControllerV9,
+} from "./documentacao/documentacao.controller";
 import { IdsService } from "./ids.service";
 import { PonteDeVozController } from "./ponte-voz.controller";
 import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
@@ -100,6 +104,11 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     // F2: a ponte de voz avisa aqui que caiu (§4 do CONTRATO-F2). Não é uma
     // rota de bot — não leva `BotTokenGuard` nem o filtro de erros do Discord.
     PonteDeVozController,
+    // A especificação OpenAPI da API de bots, que a página de documentação do
+    // site renderiza. **Pública** — sem guard, sem interceptor de rate limit e
+    // sem o filtro de erros do Discord (ver o cabeçalho do controller).
+    DocumentacaoCompatController,
+    DocumentacaoCompatControllerV9,
   ],
   providers: [
     IdsService,

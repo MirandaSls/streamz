@@ -6,6 +6,8 @@ import type { RealtimeService } from "../realtime/realtime.service";
 import type { FriendsService } from "../friends/friends.service";
 import type { MessagesService } from "../messages/messages.service";
 import type { StorageService } from "../storage/storage.service";
+import type { CallsService } from "../voice/calls.service";
+import type { VoiceService } from "../voice/voice.service";
 
 /**
  * A prévia da última mensagem em `GET /dms`, e o que não pode acontecer para
@@ -155,6 +157,9 @@ function servico(
     {} as FriendsService,
     {} as MessagesService,
     {} as StorageService,
+    // voz: estes testes não tocam chamada — o par que `sairDaChamada` usa
+    { async expulsarDaVoz() {} } as unknown as VoiceService,
+    { async onDisconnect() {} } as unknown as CallsService,
   );
   return { service, chamadas, sql: () => sqlDaPrevia };
 }

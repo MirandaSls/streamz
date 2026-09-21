@@ -62,6 +62,14 @@ export default function DMList() {
   // ── j-bots · F4 ── "Descobrir aplicativos" é um item desta lista
   const appsAbertos = useAplicativos((s) => s.aberto);
   const abrirApps = useAplicativos((s) => s.abrir);
+  // Rodada de correção: o diretório cobre a coluna 3 por cima do estado de
+  // Amigos/conversa sem mexer neles (ver comentário abaixo), então nada o
+  // fechava sozinho — clicar em "Amigos" com `friendsOpen` já `true` não
+  // disparava mudança nenhuma e o diretório continuava por cima. Todo item de
+  // navegação desta lista (Amigos, uma conversa, uma pessoa nova) precisa
+  // fechar o diretório ao ser escolhido, senão a seleção visual e a coluna 3
+  // divergem.
+  const fecharApps = useAplicativos((s) => s.fechar);
   /*
     Só um item desta coluna fica marcado por vez, porque só um deles está na
     coluna 3. O diretório **cobre** a coluna 3 (`app/app/page.tsx`) sem mexer no
@@ -123,7 +131,12 @@ export default function DMList() {
         // marca sem pixel: o shell do celular ouve o toque na lista por
         // delegação para empilhar a tela certa (ver `ShellMobile`)
         data-amigos-button
-        onClick={() => setFriendsOpen(true)}
+        onClick={() => {
+          // sem isto o diretório de aplicativos continua por cima da coluna 3
+          // mesmo com `friendsOpen` já `true` (nada mudava para React notar)
+          fecharApps();
+          setFriendsOpen(true);
+        }}
         aria-current={amigosSelecionado ? "true" : undefined}
         /* Era 36 (`h-9`) por `.channel__972a0:not(.dm__972a0) .link__972a0`
            (CSS bruto, `834050.a72484b38a3a361e.css`: `padding-block:8px 8px`
@@ -203,6 +216,7 @@ export default function DMList() {
               data-dm-button
               onClick={() => {
                 setQuery("");
+                fecharApps();
                 void openWith(u.id);
               }}
               // pl-2/gap-2: `.link__972a0{padding-inline:8px 0;gap:8px}` (CSS bruto)
@@ -706,7 +720,13 @@ function LinhaDeConversa({
       <button
         type="button"
         data-dm-button
-        onClick={() => select(dm)}
+        // fecha o diretório de aplicativos junto: ele abre POR CIMA da coluna 3
+        // (ver `stores/aplicativos.ts`), então sem isto a conversa escolhida
+        // continuaria escondida atrás dele — o mesmo motivo do "Amigos" acima
+        onClick={() => {
+          useAplicativos.getState().fechar();
+          select(dm);
+        }}
         aria-current={active ? "true" : undefined}
         aria-label={unread ? `${title} (não lida)` : title}
         // gap-2: `.link__972a0{gap:8px}` (CSS bruto, não 12)

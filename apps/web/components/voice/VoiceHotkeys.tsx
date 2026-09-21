@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
 import { ACOES_DE_VOZ, actionForEvent } from "@/lib/shortcuts";
 import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
 import { pttCombina } from "@/stores/ptt-core";
@@ -93,11 +94,15 @@ export default function VoiceHotkeys() {
  * O palco é achado pelo DOM (`data-voice-panel`/`data-call-stage`) porque o
  * atalho é global e não sabe qual dos dois está montado — guardar o elemento
  * numa store só para isto acoplaria a store ao React.
+ *
+ * Quem alterna é `alternarTelaCheiaDe`, e não um `requestFullscreen` daqui: a
+ * regra tem dois caminhos (elemento do DOM e, quando ele falta ou é recusado,
+ * a janela do app desktop) e um `catch(() => {})` — que era o que havia aqui —
+ * some com os dois. Duplicada, esta linha ficava para trás de cada conserto do
+ * módulo; o alvo nulo também é tratado lá, com aviso no console.
  */
 function alternarPalco() {
   if (typeof document === "undefined") return;
   const palco = document.querySelector<HTMLElement>("[data-voice-panel], [data-call-stage]");
-  if (!palco) return;
-  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-  else void palco.requestFullscreen().catch(() => {});
+  void alternarTelaCheiaDe(palco);
 }

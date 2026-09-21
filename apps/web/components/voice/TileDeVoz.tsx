@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Apps,
   Eye,
@@ -45,6 +45,18 @@ import { useVoice } from "@/stores/voice";
  * que decide **onde** cada tile fica continua em `VoiceGrid`/`PalcoMobile`;
  * aqui é só a peça.
  */
+
+/**
+ * Quanto o clique simples espera pelo segundo antes de trocar o foco.
+ *
+ * Dois cliques na transmissão alternam a tela cheia (é o gesto do Discord) e
+ * **não** podem também fixar o tile: sem esta espera o primeiro dos dois
+ * cliques já teria trocado o palco antes de o segundo chegar. 250ms é o
+ * intervalo em que um duplo clique de fato acontece; um mais lento que isso
+ * troca o foco e depois entra na tela cheia — preferível ao contrário, que
+ * seria atrasar **todo** clique de foco por meio segundo.
+ */
+const ESPERA_DO_DUPLO_CLIQUE = 250;
 
 /** Uma vaga do palco, do ponto de vista de quem desenha. */
 export interface Tile {
@@ -254,6 +266,36 @@ export function VoiceTile({
   const { state, publication, tela, assistindo } = tile;
   const sou = state.user.id === meId;
   const caixa = useRef<HTMLDivElement>(null);
+  /**
+   * O ponteiro está **sobre o retângulo** do tile — e não o `:hover` do CSS.
+   *
+   * O `group-hover` mentia perto da fileira de ações: o palco desenha faixas
+   * transparentes de largura inteira por cima do tile (o cabeçalho do
+   * `CallStage`, que é `absolute inset-x-0 top-0 z-10`, e os controles), e
+   * subir o cursor até o botão "Tela cheia" — que fica a 4px do topo do tile —
+   * levava o ponteiro para dentro dessa faixa. Para o CSS o tile deixava de
+   * estar sob o mouse e a fileira se apagava **debaixo da mão**, no meio do
+   * movimento de clicar nela. Com a geometria, uma vez visíveis os botões só
+   * somem quando o ponteiro sai do tile, que é o que o olho chama de "estar
+   * no tile".
+   */
+  const [pairando, setPairando] = useState(false);
+  useEffect(() => {
+    if (!pairando) return;
+    const aoMover = (e: PointerEvent) => {
+      const r = caixa.current?.getBoundingClientRect();
+      if (!r) return;
+      const dentro =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!dentro) setPairando(false);
+    };
+    // na captura: overlay que pare a propagação não pode deixar a fileira acesa
+    window.addEventListener("pointermove", aoMover, true);
+    return () => window.removeEventListener("pointermove", aoMover, true);
+  }, [pairando]);
+  /** clique simples segurado à espera do segundo (ver `ESPERA_DO_DUPLO_CLIQUE`). */
+  const cliquePendente = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(cliquePendente.current), []);
   const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
   const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
   const pararTela = useVoice((s) => s.pararTela);
@@ -285,11 +327,45 @@ export function VoiceTile({
     <div
       ref={caixa}
       data-voice-tile={tile.key}
+      // dedo não paira (ver `primitivos/Tooltip.tsx`): num toque o estado
+      // ficaria preso aceso, e no celular a fileira nem existe (`semAcoes`)
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") setPairando(true);
+      }}
       // Um clique põe no palco, e o clique no que já está no palco volta para a
       // grade (`setFocado` alterna). Era duplo clique: ninguém adivinha isso, e
       // a print mostra o Discord trocando de foco com um toque só. Os botões de
       // dentro param a propagação — senão "silenciar" também mexeria no palco.
-      onClick={() => onFocar(tile.key)}
+      //
+      // No desktop o foco espera `ESPERA_DO_DUPLO_CLIQUE` porque o **duplo**
+      // clique tem outro dono: a tela cheia. Fazer as duas coisas no mesmo
+      // gesto é o que o Discord não faz.
+      onClick={(e) => {
+        // `semAcoes` é o palco do celular, que abre a tela cheia dele com UM
+        // toque (`PalcoMobile`) e não tem duplo clique a esperar: ali o atraso
+        // seria atraso puro
+        if (semAcoes) {
+          onFocar(tile.key);
+          return;
+        }
+        if (e.detail > 1) return; // o segundo clique é do `onDoubleClick`
+        window.clearTimeout(cliquePendente.current);
+        cliquePendente.current = window.setTimeout(() => onFocar(tile.key), ESPERA_DO_DUPLO_CLIQUE);
+      }}
+      // Dois cliques na transmissão entram/saem da tela cheia, no **mesmo**
+      // elemento que o botão "Tela cheia" usa — gesto e botão abrindo caixas
+      // diferentes seriam duas telas cheias distintas.
+      onDoubleClick={
+        semAcoes
+          ? undefined
+          : (e) => {
+              // botão de dentro já tem ação própria: dois cliques nele não são
+              // "dois cliques na transmissão"
+              if ((e.target as HTMLElement).closest("button")) return;
+              window.clearTimeout(cliquePendente.current);
+              void alternarTelaCheiaDe(caixa.current);
+            }
+      }
       onContextMenu={(e) => {
         e.preventDefault();
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, {
@@ -387,10 +463,28 @@ export function VoiceTile({
       )}
 
       {/* Convite para abrir uma transmissão que ainda não estou assistindo.
-          Pílula de 32px de altura, e não a chapa que cobria o tile inteiro: o
-          botão gigante escondia justamente o tile que ele anuncia (print nosso
-          `2026-09-03 203457`). Não há print do Discord com este botão — os 32
-          são a medida do resto da interface, não medição. */}
+          Pílula discreta, e não a chapa que cobria o tile inteiro: o botão
+          gigante escondia justamente o tile que ele anuncia (print nosso
+          `2026-09-03 203457`).
+
+          **Medido no CSS do Discord**, que tem a classe deste botão exato — o
+          que fica centrado sobre a prévia de uma transmissão
+          (`.watchActionContainer__8151b{position:absolute;inset:0;display:flex;
+          align-items:center;justify-content:center}` e
+          `.watchButton__8151b{border-radius:var(--radius-lg);gap:4px;
+          padding:8px 12px}`, `sob-demanda/abe64b8a525be124.css`):
+          **8px/12px** de respiro em volta de uma linha de 16 = **32** de altura
+          (`h-8` + `px-3` + `leading-4`), **4** entre glifo e rótulo (`gap-1`) e
+          raio **16** (`--radius-lg`), que numa pílula de 32 é o `rounded-full`.
+          O verde de marca saiu: ali o Discord usa um fundo translúcido, e a
+          outra variante do mesmo botão (`.watchButton_ca5185`) nomeia
+          justamente o par `--control-overlay-secondary-*` — o mesmo que este
+          arquivo já usa para "botão flutuando sobre vídeo" (ver `AcaoDoTile` e
+          o "Ver prévia" ao lado). Chapa de marca com sombra sobre a
+          transmissão anunciava um CTA de página, não um convite discreto.
+          Rótulo curto pela mesma razão: quem lê "Assistir" sobre uma
+          transmissão não precisa que lhe repitam o substantivo — a frase
+          inteira continua no `aria-label`. */}
       {/* A minha própria transmissão, no desktop: aviso em vez de vídeo, como
           no Discord. Baixar de volta a tela que esta máquina acabou de
           codificar é decodificar 1440p só para se ver — ver
@@ -431,12 +525,12 @@ export function VoiceTile({
           className="absolute inset-0 grid place-items-center"
         >
           <span
-            className={`flex h-8 items-center rounded-full bg-brand-500 font-semibold text-control-primary-text-default shadow-popout transition group-hover:brightness-110 ${
-              compacto ? "w-8 justify-center" : "gap-2 px-3 text-[13px]"
+            className={`flex h-8 items-center rounded-full bg-control-overlay-secondary-background-default text-text-sm font-medium leading-4 text-control-overlay-secondary-text-default transition group-hover:bg-control-overlay-secondary-background-hover ${
+              compacto ? "w-8 justify-center" : "gap-1 px-3"
             }`}
           >
-            <Play size={14} aria-hidden="true" />
-            {!compacto && "Assistir transmissão"}
+            <Play size={16} aria-hidden="true" />
+            {!compacto && "Assistir"}
           </span>
         </button>
       )}
@@ -464,7 +558,9 @@ export function VoiceTile({
         // como o `.overlayContainer__2f4f7.compact__2f4f7{margin:4px}`.
         <span
           className={`pointer-events-none absolute flex h-[16px] items-center rounded-full bg-status-danger px-[6px] text-[12px] font-bold uppercase leading-[16px] text-control-critical-primary-text-default transition-opacity ${
-            semAcoes ? "" : "group-hover:opacity-0 group-focus-within:opacity-0"
+            // mesma conta da fileira de ações (`pairando`) e não `group-hover`:
+            // os dois moram neste canto e têm de trocar de lugar no mesmo instante
+            semAcoes ? "" : `group-focus-within:opacity-0 ${pairando ? "opacity-0" : ""}`
           } ${compacto ? "right-1 top-1" : "right-2 top-2"}`}
         >
           Ao vivo
@@ -577,7 +673,16 @@ export function VoiceTile({
           que falta não é "assistir", é sair dela: entra o botão de parar,
           pequeno, ao lado do "…" que a print mostra no tile da faixa. */}
       {!semAcoes && (
-        <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+        // `z-20` acima do `z-10` das faixas do palco (cabeçalho do `CallStage`,
+        // controles): elas são transparentes, mas comem o ponteiro, e sem isto
+        // o clique em "Tela cheia" ia parar no cabeçalho invisível. O tile é
+        // `relative` sem `z-index`, então não abre contexto de empilhamento e
+        // os dois números se comparam de verdade.
+        <div
+          className={`absolute right-1 top-1 z-20 flex items-center gap-1 transition focus-within:opacity-100 ${
+            pairando ? "opacity-100" : "opacity-0"
+          }`}
+        >
           {/* A minha própria tela: o "X" de parar a transmissão no hover do
               tile, como no Discord ("Parar transmissão" sobre a prévia). */}
           {tela && sou && (

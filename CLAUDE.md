@@ -150,8 +150,15 @@ chamada em conversa direta é o mesmo caminho, com toque de 30 s em
 `calls.service.ts`. Não há tabela de "sessão de voz": o estado é **efêmero** de
 propósito — sobreviver a um restart seria mentira, porque o cliente caiu junto.
 A implementação é escolhida no boot: `RedisVoiceStateStore` com `REDIS_URL`,
-`MemoryVoiceStateStore` sem ela. Ou seja, isto **já** funciona com várias
-instâncias; o que continua single-process é o token bucket do WS.
+`MemoryVoiceStateStore` sem ela. **Só o `VoiceStateStore` é compartilhado** —
+não confunda isso com "voz funciona com várias instâncias", porque não funciona:
+o toque de 30 s e a solidão vivem em `setTimeout` e num `Map` do processo
+(`calls.service.ts`), a carência de reconexão idem (`chat.gateway.ts`), e
+`expulsarOutrasConexoesDaVoz` escreve em `s.data` de sockets vindos de
+`fetchSockets()` — num socket de outra instância isso é uma cópia, e a marca
+nunca chega ao socket real. Com uma instância (o caso hoje: `REDIS_URL` vazio,
+nenhum compose com réplica) nada disso aparece; o que aparece é que **todo
+deploy zera o estado de voz**. Single-process também o token bucket do WS.
 
 ### Administrador da instância é outro eixo, e não vira permissão (ADR-0008)
 `computePermissions` responde "o que este membro pode fazer **neste servidor**".
