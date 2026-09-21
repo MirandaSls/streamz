@@ -12,8 +12,12 @@ import {
 } from "@/components/voice/fps-da-camera";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
-import { useT } from "@/lib/i18n";
-import { ehMicrofoneDeFoneBluetooth } from "@/lib/microfone";
+import { useT, type ChaveDeTexto } from "@/lib/i18n";
+import {
+  ehMicrofoneDeFoneBluetooth,
+  useSistemaDeAudio,
+  type SistemaDeAudio,
+} from "@/lib/microfone";
 import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
@@ -184,24 +188,23 @@ export default function VozTab() {
     dentro e custa CPU. Daí as duas pontas nomeadas, em vez de dois
     interruptores soltos que ninguém liga ao sintoma.
 
-    **A versão anterior deste comentário — e o texto que ele produzia na tela —
-    prometia o que o preset não entrega.** Dizia que "No app" tirava o áudio do
-    modo de comunicação e que os outros aplicativos ficavam como estavam. Não
-    ficam: no Windows o Chromium marca **toda** captura como
-    `AudioCategory_Communications` incondicionalmente
-    (`media/audio/win/audio_low_latency_input_win.cc`,
-    `SetCommunicationsCategoryAndMaybeRawCaptureMode`, chamada no `Open()`);
-    desligar eco/ganho só troca `AUDCLNT_STREAMOPTIONS_NONE` por
-    `AUDCLNT_STREAMOPTIONS_RAW`, o que muda o processamento da **nossa**
-    captura e nada mais. Ducking e troca de perfil do fone Bluetooth continuam
-    exatamente iguais nos dois presets, e é por isso que o texto agora fala de
-    eco e CPU — o que o preset de fato decide — e manda o resto para o aviso de
-    Bluetooth acima.
+    **O texto desta seção já errou nos dois sentidos, e cada erro estava certo
+    em alguma plataforma.** Primeiro prometeu que "No app" tirava o sistema do
+    modo de comunicação (falso no Windows); depois, corrigindo demais, afirmou
+    que *nenhuma* opção muda o som dos outros aplicativos (falso no macOS, onde
+    o WebKit liga a `VoiceProcessingIO` exatamente quando o cancelamento de eco
+    está ligado, e ela abaixa o áudio dos outros apps). A resposta certa depende
+    do sistema, então ela saiu daqui e virou `sistemaDeAudio` em
+    `lib/microfone.ts`, que é onde ficam as referências ao código do Chromium e
+    do WebKit. O preset volta a falar só do que ele de fato decide: eco e CPU.
 
     O valor é **derivado** das preferências que já existem — não há campo novo na
     store —, então mexer num dos interruptores abaixo reposiciona o preset
     sozinho, sem chance de os dois discordarem.
   */
+  // qual explicação de "e o som dos outros aplicativos?" vale nesta máquina
+  const sistema = useSistemaDeAudio();
+
   const tratamento = processamento.eco || processamento.ganho ? "sistema" : "app";
   const aplicarTratamento = (valor: "sistema" | "app") =>
     setAudioPref({
@@ -223,12 +226,13 @@ export default function VozTab() {
 
     É a causa mais comum de "entrei na call e o som dos outros apps ficou
     abafado", e é a única que **nenhuma** opção desta tela conserta: abrir a
-    captura do fone obriga o Windows a trocar o perfil do aparelho de A2DP
-    (estéreo, banda cheia) para HFP (mono, banda estreita), e a troca vale para
-    o fone inteiro. Por isso o aviso aponta para a saída que existe — usar
-    outro microfone —, em vez de prometer um interruptor.
+    captura do fone obriga o sistema — Windows **e** macOS — a trocar o perfil
+    do aparelho de A2DP (estéreo, banda cheia) para o de chamada (mono, banda
+    estreita), e a troca vale para o fone inteiro. Por isso o aviso aponta para
+    a saída que existe — usar outro microfone —, em vez de prometer um
+    interruptor.
 
-    Com "Padrão do sistema" não dá para saber qual aparelho o Windows vai usar;
+    Com "Padrão do sistema" não dá para saber qual aparelho o sistema vai usar;
     o que dá é ver se existe um candidato na lista e dizer isso com essa
     ressalva, em vez de afirmar o que não se sabe.
   */
@@ -282,17 +286,18 @@ export default function VozTab() {
         {foneEscolhido && (
           <AvisoDeFoneBluetooth>
             O microfone escolhido é o do fone Bluetooth (<strong>{foneEscolhido.label}</strong>).
-            Enquanto ele estiver aberto numa chamada, o Windows põe o fone em modo mãos-livres —
+            Enquanto ele estiver aberto numa chamada, o sistema põe o fone em modo mãos-livres —
             mono e de banda estreita —, e <strong>tudo</strong> que tocar nele sai abafado: música,
-            jogo, vídeo e os outros aplicativos. Isso é do Bluetooth, não do Streamz: nenhuma opção
-            desta tela desfaz. A saída é escolher outro microfone aqui (o do notebook, um USB ou um
-            de mesa) e deixar o fone só como <em>saída</em> — aí ele fica em estéreo.
+            jogo, vídeo e os outros aplicativos. Vale igual no Windows e no Mac, e é do Bluetooth,
+            não do Streamz: nenhuma opção desta tela desfaz. A saída é escolher outro microfone
+            aqui (o do notebook, um USB ou um de mesa) e deixar o fone só como <em>saída</em> — aí
+            ele fica em estéreo.
           </AvisoDeFoneBluetooth>
         )}
         {foneNaLista && (
           <AvisoDeFoneBluetooth>
             A entrada está em “Padrão do sistema” e há um microfone de fone Bluetooth na lista (
-            <strong>{foneNaLista.label}</strong>). Se for ele que o Windows usar, o fone entra em
+            <strong>{foneNaLista.label}</strong>). Se for ele que o sistema usar, o fone entra em
             modo mãos-livres durante a chamada e tudo que tocar nele fica abafado. Para não
             depender do palpite do sistema, escolha aqui um microfone que não seja o do fone.
           </AvisoDeFoneBluetooth>
@@ -372,12 +377,6 @@ export default function VozTab() {
             fieldset o texto de ajuda cairia **depois** do traço e pareceria
             legenda da redução de ruído, que é o bloco seguinte. */}
         <div className="border-b border-border-subtle py-3">
-          {/* As ajudas abaixo não vêm mais do `t()`: as chaves
-              `voz.tratamentoSistemaAjuda`, `voz.tratamentoAppAjuda` e
-              `voz.tratamentoAjuda` ainda prometem que "No app" não mexe nos
-              outros aplicativos, e isso é falso (ver o comentário acima).
-              Texto literal em pt-BR, como o resto da UI, até o `lib/i18n.ts`
-              ser corrigido nos dois idiomas. */}
           <RadioCards
             semDivisoria
             legend={t("voz.tratamento")}
@@ -387,23 +386,16 @@ export default function VozTab() {
               {
                 value: "sistema",
                 label: t("voz.tratamentoSistema"),
-                hint: "trata o eco melhor; a limpeza é do sistema",
+                hint: t("voz.tratamentoSistemaAjuda"),
               },
               {
                 value: "app",
                 label: t("voz.tratamentoApp"),
-                hint: "limpa aqui dentro; usa mais CPU",
+                hint: t("voz.tratamentoAppAjuda"),
               },
             ]}
           />
-          <p className="mt-2 text-xs text-text-muted">
-            “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem
-            fala no alto-falante. “No app” desliga os dois e deixa a limpeza com a supressão
-            avançada, que roda aqui dentro e custa CPU. Nenhuma das duas muda o que acontece com os
-            outros aplicativos — para o Windows, qualquer microfone aberto já é uma chamada, e é
-            isso (não esta escolha) que abaixa o volume dos outros apps e, em fone Bluetooth,
-            deixa tudo abafado.
-          </p>
+          <p className="mt-2 text-xs text-text-muted">{t("voz.tratamentoAjuda")}</p>
         </div>
         <RadioCards
           legend={t("voz.ruido")}
@@ -419,22 +411,43 @@ export default function VozTab() {
           ]}
         />
         <p className="-mt-1 pb-3 text-xs text-text-muted">{t("voz.ruidoAjuda")}</p>
-        {/* Mesmo motivo das ajudas do preset: `voz.ecoAjuda` e `voz.ganhoAjuda`
-            dizem que estes dois interruptores são "o que abafa os outros
-            aplicativos", e não são — o modo de comunicação do Windows não
-            depende deles. Texto literal até o `lib/i18n.ts` acompanhar. */}
         <ToggleLinha
           titulo={t("voz.eco")}
-          hint="Tira do seu microfone o som que sai do seu alto-falante. Quem usa fone pode desligar sem ganhar eco."
+          hint={t("voz.ecoAjuda")}
           checked={processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...processamento, eco } })}
         />
         <ToggleLinha
           titulo={t("voz.ganho")}
-          hint="Nivela o seu volume quando você fala perto ou longe do microfone."
+          hint={t("voz.ganhoAjuda")}
           checked={processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...processamento, ganho } })}
         />
+        {/*
+          A pergunta que traz a pessoa a esta tela quase nunca é "onde tratar o
+          meu microfone": é "por que a minha música baixa quando eu entro na
+          call". A resposta muda com o sistema — e no macOS existe um botão que
+          resolve —, por isso ela fica no fim da seção, depois dos interruptores
+          que ela cita, e só aparece quando já sabemos em que sistema estamos.
+        */}
+        {sistema && (
+          <div className="border-t border-border-subtle pt-3">
+            <h4 className="text-xs font-semibold text-text-default">{t("voz.outrosApps")}</h4>
+            <p className="mt-1 text-xs leading-relaxed text-text-muted">
+              {t(AJUDA_DE_OUTROS_APPS[sistema])}
+            </p>
+            {sistema === "macos-webkit" && processamento.eco && (
+              <Button
+                className="mt-2"
+                variante="secundario"
+                tamanho="sm"
+                onClick={() => setAudioPref({ processamento: { ...processamento, eco: false } })}
+              >
+                {t("voz.desligarEco")}
+              </Button>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section id="testar" title={t("voz.testarMic")}>
@@ -555,6 +568,19 @@ export default function VozTab() {
  * um erro que quebrou alguma coisa — e é por isso que ele não usa vermelho nem
  * some sozinho.
  */
+/**
+ * A explicação de "por que a minha música baixa na call", por sistema.
+ *
+ * O mapa é exaustivo por construção (`Record<SistemaDeAudio, …>`): plataforma
+ * nova em `sistemaDeAudio` quebra o typecheck aqui, que é onde deve doer.
+ */
+const AJUDA_DE_OUTROS_APPS: Record<SistemaDeAudio, ChaveDeTexto> = {
+  windows: "voz.outrosAppsWindows",
+  "macos-webkit": "voz.outrosAppsMacWebkit",
+  "macos-chromium": "voz.outrosAppsMacChromium",
+  outro: "voz.outrosAppsOutro",
+};
+
 function AvisoDeFoneBluetooth({ children }: { children: ReactNode }) {
   return (
     <div className="mt-3 flex items-start gap-2 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">

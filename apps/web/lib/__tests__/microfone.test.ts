@@ -389,3 +389,60 @@ describe("ehMicrofoneDeFoneBluetooth", () => {
     expect(ehMicrofoneDeFoneBluetooth(undefined)).toBe(false);
   });
 });
+
+/* ---------------------------------------------------------------- */
+/* Qual sistema mexe no som dos outros aplicativos                   */
+/* ---------------------------------------------------------------- */
+
+/**
+ * O que esta suíte guarda é a distinção que a tela de voz errou duas vezes: no
+ * Windows nenhuma opção nossa tira o sistema do modo de comunicação; no macOS,
+ * o cancelamento de eco liga a `VoiceProcessingIO` — **mas só no WebKit**
+ * (Safari e o WKWebView do app), porque no Chrome do macOS o AEC de sistema
+ * está atrás de uma `feature` desligada de fábrica. Separar Chromium de WebKit
+ * pelo `userAgent` é a única parte disto que pode errar, então é a que o teste
+ * prende, com `userAgent` reais.
+ */
+describe("sistemaDeAudio", () => {
+  const UA = {
+    chromeWindows:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    edgeWindows:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
+    chromeMac:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    safariMac:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+    // o WKWebView do Tauri não traz `Version/` nem `Chrome/`
+    tauriMac:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+    chromeLinux:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  };
+
+  it("Windows é Windows em qualquer navegador: a atenuação é do sistema", async () => {
+    const { sistemaDeAudio } = await import("@/lib/microfone");
+
+    expect(sistemaDeAudio(UA.chromeWindows)).toBe("windows");
+    expect(sistemaDeAudio(UA.edgeWindows)).toBe("windows");
+  });
+
+  it("no macOS, WebKit e Chromium são casos opostos", async () => {
+    const { sistemaDeAudio } = await import("@/lib/microfone");
+
+    // aqui desligar o eco resolve (o WebKit troca a VoiceProcessingIO pela HAL)
+    expect(sistemaDeAudio(UA.safariMac)).toBe("macos-webkit");
+    expect(sistemaDeAudio(UA.tauriMac)).toBe("macos-webkit");
+    // e aqui não há o que resolver: o AEC é software e não toca na saída
+    expect(sistemaDeAudio(UA.chromeMac)).toBe("macos-chromium");
+  });
+
+  it("o resto não tem mecanismo nenhum", async () => {
+    const { sistemaDeAudio } = await import("@/lib/microfone");
+
+    expect(sistemaDeAudio(UA.chromeLinux)).toBe("outro");
+    expect(sistemaDeAudio("")).toBe("outro");
+    expect(sistemaDeAudio(null)).toBe("outro");
+    expect(sistemaDeAudio(undefined)).toBe("outro");
+  });
+});

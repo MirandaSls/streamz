@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cadeiaDoMicrofone, contextoDeCaptura, type CadeiaDoMicrofone } from "@/lib/supressor-ruido";
 
 /**
@@ -366,14 +367,16 @@ const MARCAS_DE_MAOS_LIVRES = [
 /**
  * O rótulo é de um microfone de fone Bluetooth?
  *
- * Por que isto existe: abrir a captura de um fone Bluetooth faz o Windows
- * trocar o perfil do aparelho de A2DP (estéreo, banda cheia) para HFP (mono,
- * banda estreita). A troca vale para o **fone inteiro**, então música, jogo e
- * vídeo passam a sair abafados enquanto a chamada dura. Nada que este app faça
- * desfaz isso — nem a atenuação de comunicações do Windows, que só mexe em
- * volume, nem desligar o cancelamento de eco, porque o Chromium marca toda
- * captura como `AudioCategory_Communications` de qualquer jeito. Resta avisar
- * e sugerir outro microfone, que é o que a aba "Voz e vídeo" faz.
+ * Por que isto existe: abrir a captura de um fone Bluetooth faz o sistema
+ * trocar o perfil do aparelho de A2DP (estéreo, banda cheia) para o de chamada
+ * (HFP no Windows, mãos-livres também no macOS: mono, banda estreita). A troca
+ * vale para o **fone inteiro**, então música, jogo e vídeo passam a sair
+ * abafados enquanto a chamada dura. Nada que este app faça desfaz isso — não é
+ * volume, é o codec do enlace. Resta avisar e sugerir outro microfone, que é o
+ * que a aba "Voz e vídeo" faz.
+ *
+ * Isto vale nos dois sistemas: o texto antigo dizia "o Windows", e no Mac com
+ * AirPods o efeito é o mesmo (e mais audível, porque o fone é a saída padrão).
  *
  * O rótulo é o único sinal que o navegador entrega: `MediaDeviceInfo` não diz
  * transporte nem perfil. Por isso a heurística erra para menos quando o
@@ -383,4 +386,72 @@ const MARCAS_DE_MAOS_LIVRES = [
 export function ehMicrofoneDeFoneBluetooth(rotulo: string | null | undefined): boolean {
   if (!rotulo) return false;
   return MARCAS_DE_MAOS_LIVRES.some((marca) => marca.test(rotulo));
+}
+
+// ── O que o sistema faz com o som dos outros aplicativos ───────────────────
+
+/**
+ * Qual mecanismo do sistema mexe no som dos **outros** aplicativos enquanto o
+ * nosso microfone está aberto.
+ *
+ * Isto existe porque a tela de voz vinha mentindo em dois sentidos opostos, e
+ * as duas mentiras estavam certas *em alguma* plataforma:
+ *
+ * - **`windows`** — o Chromium (e portanto Chrome, Edge e o WebView2 que
+ *   embrulha o app) marca **toda** captura como `AudioCategory_Communications`
+ *   (`media/audio/win/audio_low_latency_input_win.cc`,
+ *   `SetCommunicationsCategoryAndMaybeRawCaptureMode`, chamada no `Open()`).
+ *   Isso liga a política de comunicação do Windows, cujo padrão de fábrica é
+ *   *"Reduzir o volume dos outros sons em 80%"* (Som ▸ Comunicações). Nenhuma
+ *   opção nossa tira dali: desligar eco/ganho só troca
+ *   `AUDCLNT_STREAMOPTIONS_NONE` por `AUDCLNT_STREAMOPTIONS_RAW`, que muda o
+ *   processamento da **nossa** captura e nada mais.
+ * - **`macos-webkit`** — Safari e o WKWebView do Tauri (o app de macOS) usam a
+ *   `kAudioUnitSubType_VoiceProcessingIO` do Core Audio **exatamente quando o
+ *   cancelamento de eco está ligado**
+ *   (`Source/WebCore/platform/mediastream/cocoa/CoreAudioCaptureSource.cpp`:
+ *   `m_unit = echoCancellation() ? defaultSingleton() : createNonVPIOUnit()`).
+ *   Essa unidade não trata só a entrada: ela assume entrada **e** saída do
+ *   aparelho e abaixa o "outro áudio" — tanto que o próprio WebKit configura
+ *   `kAUVoiceIOProperty_OtherAudioDuckingConfiguration` no nível mínimo e ainda
+ *   chama `AudioDeviceDuck(…, 1.0, …)` para desfazer o que consegue. Aqui,
+ *   portanto, **desligar o cancelamento de eco resolve** — e é a única opção da
+ *   tela que muda alguma coisa para os outros aplicativos.
+ * - **`macos-chromium`** — Chrome e Edge no macOS **não** usam a
+ *   VoiceProcessingIO: `AUAudioInputStream::IsEchoCancellationSupported` começa
+ *   com `if (!media::IsSystemEchoCancellationEnforced()) return false;`, e
+ *   `kEnforceSystemEchoCancellation` é `FEATURE_DISABLED_BY_DEFAULT`
+ *   (`media/base/media_switches.cc`). O eco é cancelado em software (AEC3), sem
+ *   tocar na saída. Nenhuma opção nossa mexe nos outros aplicativos.
+ * - **`outro`** — Linux e o resto: também nada.
+ *
+ * O `userAgent` é o único sinal disponível no cliente, e é o bastante para a
+ * pergunta que interessa (é WebKit ou é Chromium?). Errar aqui só troca o texto
+ * de ajuda exibido — nenhuma decisão de áudio depende disto.
+ */
+export type SistemaDeAudio = "windows" | "macos-webkit" | "macos-chromium" | "outro";
+
+export function sistemaDeAudio(userAgent: string | null | undefined): SistemaDeAudio {
+  const ua = userAgent ?? "";
+  if (/Windows NT/i.test(ua)) return "windows";
+  if (!/Mac OS X|Macintosh/i.test(ua)) return "outro";
+  // Chrome, Chromium, Edge, Opera e o WebView2 trazem `Chrome/` no `userAgent`;
+  // Safari e o WKWebView do Tauri, não. `CriOS` é o Chrome do iPad em modo
+  // desktop, que se anuncia como Macintosh mas por baixo é WebKit — por isso
+  // ele **não** entra aqui.
+  return /Chrome\/|Chromium\/|Edg\//i.test(ua) ? "macos-chromium" : "macos-webkit";
+}
+
+/**
+ * O mesmo, para a tela. Só responde depois de montar: no servidor não existe
+ * `navigator`, e devolver um palpite na primeira renderização trocaria o texto
+ * de ajuda na frente da pessoa. Até lá é `null` — "ainda não sei" — e quem
+ * mostra o aviso não mostra nada.
+ */
+export function useSistemaDeAudio(): SistemaDeAudio | null {
+  const [sistema, setSistema] = useState<SistemaDeAudio | null>(null);
+  useEffect(() => {
+    setSistema(sistemaDeAudio(navigator.userAgent));
+  }, []);
+  return sistema;
 }

@@ -13,10 +13,32 @@ import {
 } from "@/components/voice/fps-da-camera";
 import { BarraDeNivel } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
-import { ehMicrofoneDeFoneBluetooth } from "@/lib/microfone";
+import {
+  ehMicrofoneDeFoneBluetooth,
+  useSistemaDeAudio,
+  type SistemaDeAudio,
+} from "@/lib/microfone";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
+
+/**
+ * A versão curta de "e o som dos outros aplicativos?", por sistema.
+ *
+ * A longa, nos dois idiomas, está em `voz.outrosApps*` (`lib/i18n.ts`); este
+ * painel é todo pt-BR literal (ver o cabeçalho), e trazer `t()` para uma seção
+ * só deixaria o inglês pela metade. O porquê de cada frase — com as linhas do
+ * Chromium e do WebKit — está em `sistemaDeAudio`, em `lib/microfone.ts`.
+ */
+const OUTROS_APPS_CURTO: Record<SistemaDeAudio, string> = {
+  windows:
+    "A música e o vídeo baixam porque o Windows trata todo microfone aberto como chamada e abaixa o resto em 80%. Nada nesta tela muda isso — quem muda é Som ▸ Comunicações, no Windows.",
+  "macos-webkit":
+    "No Mac, o cancelamento de eco liga o processamento de voz do sistema, e é ele que abaixa o som dos outros aplicativos. Desligá-lo resolve na hora; a redução de ruído não tem efeito nenhum sobre isso.",
+  "macos-chromium":
+    "Neste navegador nada aqui mexe no som dos outros aplicativos. Se ele muda durante a chamada, o suspeito é o fone Bluetooth.",
+  outro: "Nada nesta tela mexe no som dos outros aplicativos: tudo aqui trata só a sua voz.",
+};
 
 /**
  * O conteúdo da aba "Voz e vídeo": dispositivos, volumes, modo de entrada,
@@ -74,10 +96,10 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
     Preset do processamento — a mesma regra de `settings/VozTab.tsx`. Ele
     escolhe **onde a sua voz é tratada**: com `eco`/`ganho` ligados quem trata é
     o sistema (de graça); desligados, a limpeza vira a supressão avançada, que
-    roda aqui dentro e custa CPU. O que ele **não** faz é mudar o áudio dos
-    outros aplicativos: o Chromium marca toda captura como stream de
-    comunicações de qualquer jeito, e desligar o eco só muda o processamento da
-    nossa faixa. O valor é **derivado** das preferências que já existem —
+    roda aqui dentro e custa CPU. Se ele mexe ou não no áudio dos **outros**
+    aplicativos depende do sistema, e a resposta está no bloco do fim desta
+    seção (e em `sistemaDeAudio`, em `lib/microfone.ts`): no Windows não mexe,
+    no macOS o cancelamento de eco mexe. O valor é **derivado** das preferências que já existem —
     nenhum campo novo na store —, então os interruptores abaixo e o preset nunca
     podem discordar.
   */
@@ -109,6 +131,9 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   */
   const micEscolhido = devices.inputs.find((d) => d.deviceId === devices.inputId);
   const fone = ehMicrofoneDeFoneBluetooth(micEscolhido?.label) ? micEscolhido : undefined;
+
+  // qual explicação de "e o som dos outros aplicativos?" vale nesta máquina
+  const sistema = useSistemaDeAudio();
 
   return (
     <div className="space-y-5 text-sm text-text-default">
@@ -143,9 +168,9 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
             />
             <p className="min-w-0 text-xs leading-relaxed text-text-muted">
               O microfone é o do fone Bluetooth (<strong>{fone.label}</strong>). Enquanto ele
-              estiver em uso, o Windows põe o fone em modo mãos-livres e <strong>todo</strong> o
-              áudio do sistema sai abafado — música, jogo, vídeo. Escolha outro microfone e deixe o
-              fone só como <em>saída</em>.
+              estiver em uso, o sistema (Windows ou Mac) põe o fone em modo mãos-livres e{" "}
+              <strong>todo</strong> o áudio sai abafado — música, jogo, vídeo. Escolha outro
+              microfone e deixe o fone só como <em>saída</em>.
             </p>
           </div>
         )}
@@ -331,15 +356,14 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
             ]}
           />
           <p className="mt-2 text-xs text-text-muted">
-            Escolhe onde a sua voz é tratada, e é só isso que muda. “Sistema” usa o cancelamento de
-            eco e o ganho do seu computador: é o melhor para quem fala no alto-falante e não custa
-            processador. “No app” desliga os dois e deixa a limpeza com a supressão avançada, que
-            roda aqui dentro. Nenhuma das duas muda o som dos outros aplicativos.
+            Escolhe onde a sua voz é tratada. “Sistema” usa o cancelamento de eco e o ganho do seu
+            computador: é o melhor para quem fala no alto-falante e não custa processador. “No app”
+            desliga os dois e deixa a limpeza com a supressão avançada, que roda aqui dentro.
           </p>
         </div>
         <ToggleLinha
           titulo="Cancelamento de eco"
-          hint="Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco. Mexe só na sua voz: o som dos outros aplicativos é o mesmo dos dois jeitos."
+          hint="Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco."
           checked={audio.processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...audio.processamento, eco } })}
         />
@@ -358,10 +382,38 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
         <ToggleLinha
           titulo="Controle automático de ganho"
-          hint="Nivela o seu volume quando você fala perto ou longe do microfone. Também mexe só na sua voz: desligar não muda em nada o som dos outros aplicativos."
+          hint="Nivela o seu volume quando você fala perto ou longe do microfone. Trata só a sua voz."
           checked={audio.processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...audio.processamento, ganho } })}
         />
+        {/*
+          "Por que a minha música baixou?" é perguntado **aqui**, no meio da
+          chamada — por isso a resposta também mora neste painel, e não só na
+          aba cheia. Versão curta: a longa, nos dois idiomas, está em
+          `voz.outrosApps*` (`lib/i18n.ts`), e o porquê de cada frase está em
+          `sistemaDeAudio` (`lib/microfone.ts`). O botão só aparece onde ele de
+          fato resolve: no WebKit do macOS, onde o cancelamento de eco é o que
+          liga a `VoiceProcessingIO`.
+        */}
+        {sistema && (
+          <div className="border-t border-border-subtle pt-3">
+            <p className="text-xs leading-relaxed text-text-muted">
+              {OUTROS_APPS_CURTO[sistema]}
+            </p>
+            {sistema === "macos-webkit" && audio.processamento.eco && (
+              <Button
+                className="mt-2"
+                variante="secundario"
+                tamanho="sm"
+                onClick={() =>
+                  setAudioPref({ processamento: { ...audio.processamento, eco: false } })
+                }
+              >
+                Desligar o cancelamento de eco
+              </Button>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 border-t border-border-subtle pt-4">
