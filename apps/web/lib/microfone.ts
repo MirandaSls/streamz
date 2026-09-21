@@ -209,7 +209,10 @@ export function abrirMicrofone(
       // `AudioContext` não abrir, publica cru — ficar sem microfone porque a
       // supressão falhou é trocar um defeito por um pior
       try {
-        faixa.setAudioContext(contextoDeCaptura());
+        // o contexto só serve para montar a cadeia (`setProcessor` precisa
+        // dele); sem cadeia a pedir, tomá-lo aqui só abriria uma `AudioContext`
+        // de 48 kHz à toa para quem nunca vai usar supressão nem ganho
+        if (precisaDeCadeia(prefs)) faixa.setAudioContext(contextoDeCaptura());
         await aplicarCadeia(estado, prefs);
       } catch {
         estado.cadeia = null;
@@ -222,7 +225,8 @@ export function abrirMicrofone(
         await sala.publicar(faixa);
         estado.publicado = true;
         // o `publicar` repõe o contexto da `Room` na faixa; o nosso é que vale
-        faixa.setAudioContext(contextoDeCaptura());
+        // — mas só há o que repor quando existe cadeia montada por cima dele
+        if (estado.cadeia) faixa.setAudioContext(contextoDeCaptura());
       }
     } catch (e) {
       await descartar(estado);

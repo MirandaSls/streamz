@@ -115,7 +115,18 @@ const PT_BR = {
   "voz.ruidoAjuda":
     "A avançada roda uma rede neural no seu computador e tira teclado, ventilador e ar-condicionado — em troca de mais CPU. A padrão é a do navegador.",
   "voz.eco": "Cancelamento de eco",
+  "voz.ecoAjuda":
+    "Enquanto estiver ligado, o sistema trata a chamada como telefonema e pode abaixar e distorcer o som dos outros aplicativos — música, jogo, vídeo. Quem usa fone pode desligar sem ganhar eco.",
   "voz.ganho": "Controle automático de ganho",
+  "voz.ganhoAjuda":
+    "Nivela o seu volume quando você fala perto ou longe do microfone. Também depende do modo de comunicação do sistema, então, junto com o cancelamento de eco, é o que abafa os outros aplicativos.",
+  "voz.tratamento": "Onde tratar o seu microfone",
+  "voz.tratamentoSistema": "Sistema",
+  "voz.tratamentoSistemaAjuda": "trata o eco melhor; mexe no som dos outros apps",
+  "voz.tratamentoApp": "No app",
+  "voz.tratamentoAppAjuda": "não mexe nos outros apps; usa mais CPU",
+  "voz.tratamentoAjuda":
+    "“Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem fala no alto-falante, mas põe o áudio em modo de comunicação e pode abaixar e estourar música, jogo e vídeo. “No app” sai desse modo — os outros aplicativos ficam como estavam — e deixa a limpeza com a supressão avançada, que roda aqui dentro e custa CPU.",
   "voz.saida": "Dispositivo de saída",
   "voz.camera": "Câmera",
   "voz.volumeEntrada": "Volume de entrada",
@@ -303,7 +314,18 @@ const EN_US: Dicionario = {
   "voz.ruidoAjuda":
     "Advanced runs a neural network on your computer and removes keyboard, fan and air conditioning noise — at the cost of more CPU. Standard is the browser's own.",
   "voz.eco": "Echo cancellation",
+  "voz.ecoAjuda":
+    "While this is on, your system treats the call like a phone call and may lower and distort the sound of your other apps — music, games, video. If you wear headphones you can turn it off without getting echo back.",
   "voz.ganho": "Automatic gain control",
+  "voz.ganhoAjuda":
+    "Evens out your volume when you speak close to or far from the microphone. It also relies on the system's communication mode, so together with echo cancellation it is what muffles your other apps.",
+  "voz.tratamento": "Where to process your microphone",
+  "voz.tratamentoSistema": "System",
+  "voz.tratamentoSistemaAjuda": "better with echo; touches your other apps' sound",
+  "voz.tratamentoApp": "In the app",
+  "voz.tratamentoAppAjuda": "leaves other apps alone; uses more CPU",
+  "voz.tratamentoAjuda":
+    "“System” uses your computer's echo cancellation and gain control: best if you speak through speakers, but it puts audio into communication mode and can lower and distort music, games and video. “In the app” leaves that mode — your other apps stay as they were — and hands the clean-up to advanced noise suppression, which runs in here and costs CPU.",
   "voz.saida": "Output device",
   "voz.camera": "Camera",
   "voz.volumeEntrada": "Input volume",

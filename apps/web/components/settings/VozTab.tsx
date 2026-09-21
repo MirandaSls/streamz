@@ -176,6 +176,33 @@ export default function VozTab() {
     if (previaPedida.current) void abrirPrevia(cameraId, cameraFps);
   }, [cameraFps, cameraId, abrirPrevia]);
 
+  /*
+    O preset existe porque o compromisso do processamento de voz é invisível:
+    com `eco`/`ganho` ligados (o padrão), o sistema operacional põe a saída em
+    **modo de comunicação** enquanto a chamada dura — e abaixa e reencoda o som
+    de todo o resto (o relato clássico é "entrei na call e o Spotify estourou").
+    Desligar os dois sai desse modo, mas tira o cancelamento de eco de quem fala
+    no alto-falante, que é um defeito pior por ser silencioso: quem causa o eco
+    não o ouve. Daí as duas pontas nomeadas, em vez de dois interruptores soltos
+    que ninguém liga ao sintoma: "Sistema" paga com o áudio dos outros apps,
+    "No app" paga com CPU (a supressão avançada, o RNNoise, assume a limpeza que
+    o sistema deixaria de fazer).
+
+    O valor é **derivado** das preferências que já existem — não há campo novo na
+    store —, então mexer num dos interruptores abaixo reposiciona o preset
+    sozinho, sem chance de os dois discordarem.
+  */
+  const tratamento = processamento.eco || processamento.ganho ? "sistema" : "app";
+  const aplicarTratamento = (valor: "sistema" | "app") =>
+    setAudioPref({
+      processamento:
+        valor === "sistema"
+          ? { ...processamento, eco: true, ganho: true }
+          : // a avançada entra junto: sem ela, sair do modo de comunicação
+            // deixaria o microfone cru — a troca seria uma piora audível
+            { ...processamento, eco: false, ganho: false, ruido: "avancada" },
+    });
+
   // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
   // formato que o `Select` pede
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
@@ -291,6 +318,26 @@ export default function VozTab() {
       </Section>
 
       <Section id="processamento" title={t("voz.processamento")}>
+        {/* A divisória fica no invólucro, e não no `RadioCards`: com ela no
+            fieldset o texto de ajuda cairia **depois** do traço e pareceria
+            legenda da redução de ruído, que é o bloco seguinte. */}
+        <div className="border-b border-border-subtle py-3">
+          <RadioCards
+            semDivisoria
+            legend={t("voz.tratamento")}
+            value={tratamento}
+            onChange={aplicarTratamento}
+            options={[
+              {
+                value: "sistema",
+                label: t("voz.tratamentoSistema"),
+                hint: t("voz.tratamentoSistemaAjuda"),
+              },
+              { value: "app", label: t("voz.tratamentoApp"), hint: t("voz.tratamentoAppAjuda") },
+            ]}
+          />
+          <p className="mt-2 text-xs text-text-muted">{t("voz.tratamentoAjuda")}</p>
+        </div>
         <RadioCards
           legend={t("voz.ruido")}
           columns={3}
@@ -307,11 +354,13 @@ export default function VozTab() {
         <p className="-mt-1 pb-3 text-xs text-text-muted">{t("voz.ruidoAjuda")}</p>
         <ToggleLinha
           titulo={t("voz.eco")}
+          hint={t("voz.ecoAjuda")}
           checked={processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...processamento, eco } })}
         />
         <ToggleLinha
           titulo={t("voz.ganho")}
+          hint={t("voz.ganhoAjuda")}
           checked={processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...processamento, ganho } })}
         />
