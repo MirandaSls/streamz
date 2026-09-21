@@ -359,6 +359,23 @@ interface UIState {
    */
   chatDaCallPorCanal: ChatPorCanal;
   /**
+   * O palco da chamada está **expandido dentro da janela**.
+   *
+   * Não confundir com `telaCheia` (`stores/voice`, ver `components/voice/
+   * fullscreen.ts`): aquela é a tela cheia de verdade — do elemento ou da
+   * janela do app —, e some com o sistema inteiro. Esta é um modo **nosso**: o
+   * palco toma a região de conteúdo (cabeçalho da conversa, chat e coluna da
+   * direita ficam atrás dele) e a barra lateral da esquerda continua na tela,
+   * que foi o pedido.
+   *
+   * Mora aqui, e não num `useState` do palco, por dois motivos concretos:
+   * quem desenha o palco (`CallStage`) e quem divide a coluna (`CallSplit`)
+   * são irmãos — o estado teria de subir até o `DMView`/`page.tsx` para os
+   * dois lerem —, e o `CallStage` **remonta** quando a conversa abre ou fecha
+   * (o `DMView` o troca de lugar na árvore), o que apagaria um estado local.
+   */
+  palcoExpandido: boolean;
+  /**
    * Pilha de modais. É pilha, e não um só, porque confirmar algo de dentro das
    * configurações (apagar um cargo, um emoji, o servidor) precisa abrir a caixa
    * **por cima** — antes o confirm fechava a tela de configurações inteira e,
@@ -402,6 +419,12 @@ interface UIState {
   toggleVoiceChat: (channelId?: string | null) => void;
   /** Canal apagado: some com a preferência dele em vez de guardar um fantasma. */
   esquecerChatDaCall: (channelId: string) => void;
+  /**
+   * Liga/desliga o palco expandido. Quem liga é o botão do palco; quem desliga
+   * é ele, o Esc, o fim da chamada e o desmonte do palco — um modo global que
+   * sobrevivesse à call deixaria a próxima conversa com a interface presa.
+   */
+  definirPalcoExpandido: (valor: boolean) => void;
   /** Empilha um modal sobre o que já estiver aberto. */
   openModal: (modal: Modal) => void;
   /** Desempilha o modal do topo; confirm/prompt pendente resolve cancelado. */
@@ -463,6 +486,7 @@ export const useUI = create<UIState>((set, get) => ({
   view: "dm",
   membersOpen: true,
   chatDaCallPorCanal: {},
+  palcoExpandido: false,
   modals: [],
   contextMenu: null,
   popover: null,
@@ -503,6 +527,8 @@ export const useUI = create<UIState>((set, get) => ({
 
   esquecerChatDaCall: (channelId) =>
     set((s) => ({ chatDaCallPorCanal: esquecerChatDoCanal(s.chatDaCallPorCanal, channelId) })),
+
+  definirPalcoExpandido: (valor) => set({ palcoExpandido: valor }),
 
   openModal: (modal) =>
     set((s) => ({ modals: [...s.modals, modal], contextMenu: null, popover: null })),
