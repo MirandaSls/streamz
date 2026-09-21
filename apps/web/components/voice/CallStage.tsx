@@ -3,13 +3,14 @@
 import { useEffect, useRef } from "react";
 import {
   AlertTriangle,
+  AtSign,
   ChevronDown,
   MessageSquare,
   Phone,
   RotateCw,
   UserPlus,
 } from "@/components/ui/icones";
-import { displayNameOf, isGroupChannel } from "@streamz/shared";
+import { SCREEN_QUALITY, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
@@ -21,9 +22,10 @@ import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
+import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { ui, useUI } from "@/stores/ui";
-import { useVoice } from "@/stores/voice";
+import { participantesDe, telasDe, useVoice } from "@/stores/voice";
 
 /**
  * A chamada de uma conversa direta ocupando a área principal, como no Discord:
@@ -62,6 +64,37 @@ import { useVoice } from "@/stores/voice";
  * intacta) e a seta do canto inferior esquerdo da faixa de chamada de conversa
  * (print `2026-08-31 122612`, x≈407 y≈501), que é de onde a nossa saiu.
  */
+/**
+ * A chave de um tile de **tela** é `"<userId>:<trackSid>"`; a de uma pessoa é
+ * só o id dela. É a mesma chave que `chaveDoTileDeTela` monta em
+ * `assinaturas-de-tela.ts` — aqui ela é desmontada para o cabeçalho saber de
+ * quem é a transmissão que está no destaque.
+ */
+export function telaNoDestaque(focado: string | null): { userId: string; trackSid: string } | null {
+  if (!focado) return null;
+  const corte = focado.indexOf(":");
+  if (corte < 0) return null;
+  return { userId: focado.slice(0, corte), trackSid: focado.slice(corte + 1) };
+}
+
+/**
+ * O selo de qualidade da transmissão em destaque — `"720p 30FPS"` na print
+ * `p5`, onde ele antecede o "AO VIVO" vermelho.
+ *
+ * **Diz só o que se sabe.** A altura vem das dimensões que o servidor de mídia
+ * publica junto com a faixa (`TrackPublication.dimensions`) e vale para
+ * qualquer um; a taxa de quadros **não trafega** — ela é escolha de quem
+ * transmite (`SCREEN_QUALITY`), e só a minha está nesta máquina. Para a tela de
+ * outra pessoa o selo sai `"1080p"`, sem fps, em vez de um número inventado.
+ * `null` quando não se sabe nem a resolução: aí fica só o "AO VIVO".
+ */
+export function seloDaTransmissao(altura?: number | null, fps?: number | null): string | null {
+  const partes: string[] = [];
+  if (altura) partes.push(`${altura}p`);
+  if (fps) partes.push(`${fps}FPS`);
+  return partes.length > 0 ? partes.join(" ") : null;
+}
+
 export default function CallStage({
   channelId,
   titulo,
@@ -84,6 +117,13 @@ export default function CallStage({
 }) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const conectadoAqui = useVoice((s) => s.channelId === channelId);
+  // o cabeçalho muda de assunto quando uma transmissão sobe ao destaque: sai o
+  // título centralizado, entram a trilha e o selo de qualidade da print `p5`
+  const meId = useAuth((s) => s.user?.id);
+  // `tick` é o pulso das faixas do SDK — é dele que vem a resolução do selo
+  useVoice((s) => s.tick);
+  const focado = useVoice((s) => s.focado);
+  const screenQuality = useVoice((s) => s.screenQuality);
   const status = useVoice((s) => s.status);
   const erro = useVoice((s) => s.erro);
   const call = useVoice((s) => s.call);
@@ -174,6 +214,25 @@ export default function CallStage({
   const grupo = conversa ? isGroupChannel(conversa) : false;
   const destinatario = conversa && !grupo ? conversa.others[0] : null;
 
+  // Quem está no destaque, quando o destaque é uma tela. A publicação é
+  // procurada pelo `trackSid` da chave (e não pela primeira tela do dono):
+  // quem transmite duas telas tem dois tiles, e a resolução é de uma delas.
+  const noDestaque = telaNoDestaque(focado);
+  const donoDaTela = noDestaque
+    ? (estados.find((e) => e.user.id === noDestaque.userId) ?? null)
+    : null;
+  const publicacaoEmDestaque = noDestaque
+    ? (participantesDe(noDestaque.userId)
+        .flatMap(telasDe)
+        .find((p) => p.trackSid === noDestaque.trackSid) ?? null)
+    : null;
+  const selo = donoDaTela
+    ? seloDaTransmissao(
+        publicacaoEmDestaque?.dimensions?.height,
+        donoDaTela.user.id === meId ? SCREEN_QUALITY[screenQuality].frameRate : null,
+      )
+    : null;
+
   if (semChamada) return null;
 
   const subtitulo = chamando
@@ -248,15 +307,46 @@ export default function CallStage({
             que mantém o título de fato centralizado — os dois lados dividem a
             sobra — sem espremer o selo "ao vivo", que precisa de ~230px e não
             cabia nos 96. */}
-        <span className="flex min-w-0 flex-1 basis-0 items-start [&>*]:pointer-events-auto">
-          <AoVivoIndicador />
+        {/* **Com uma transmissão no destaque o canto esquerdo vira trilha**, e
+            não mais o selo "Você está ao vivo": é o que a print `p5` mostra —
+            `@ Md · (avatar) Tela de Arthur`, dizendo de onde se está vendo e o
+            que se está vendo. O selo de transmitir volta assim que o destaque
+            sai (e o "Parar transmissão" dele continua na barra de controles).
+
+            Medido em `p5` (2874×1798, **2×** — a cápsula de desligar mede 100px
+            ali para os ~48 de sempre, e o "AO VIVO" 32 para os 16 já medidos no
+            tile): trilha começando em x=33 (**16** de folga, o `px-4` que o
+            cabeçalho já tem) e centrada em y≈50 (**25**, que é o `py-3` sobre
+            uma linha de ~26); avatar de 48px (**24**). O "@" sai em cinza
+            (`#7a7b83`) e o resto em branco (`#dcdcdf`). */}
+        <span className="flex min-w-0 flex-1 basis-0 items-center [&>*]:pointer-events-auto">
+          {donoDaTela ? (
+            <span className="flex w-max items-center gap-2 text-sm font-semibold text-text-strong">
+              <span className="flex items-center gap-1 text-text-muted">
+                <AtSign size={16} aria-hidden="true" />
+                <span className="max-w-[14ch] truncate">{titulo}</span>
+              </span>
+              <span aria-hidden="true" className="text-text-muted">
+                ·
+              </span>
+              <Avatar user={donoDaTela.user} size="sm" surface="border-black" />
+              <span className="max-w-[20ch] truncate">
+                Tela de {displayNameOf(donoDaTela.user)}
+              </span>
+            </span>
+          ) : (
+            <AoVivoIndicador />
+          )}
         </span>
 
         {/* título centralizado: o palco é simétrico, e o nome no canto puxaria a
             atenção para fora das pessoas. Na faixa ele não existe — ver `faixa`.
             Expandido o palco **é** a região inteira e cobre o cabeçalho da
             conversa, que era quem dizia o nome: o título volta. */}
-        {(!faixa || expandido) && (
+        {/* com a transmissão em destaque o nome já está na trilha da esquerda,
+            e repeti-lo no meio seria dizer duas vezes a mesma coisa — na `p5`
+            o Discord não desenha título nenhum */}
+        {(!faixa || expandido) && !donoDaTela && (
           <span className="flex min-w-0 flex-col items-center text-center">
             <span className="max-w-full truncate text-sm font-semibold text-text-strong">
               {titulo}
@@ -265,7 +355,25 @@ export default function CallStage({
           </span>
         )}
 
-        <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1 [&>*]:pointer-events-auto">
+        <span className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2 [&>*]:pointer-events-auto">
+          {/* Selo de qualidade + "AO VIVO", colados numa pílula só, no canto
+              superior direito (print `p5`, medido em 2×): altura 32 (**16**),
+              16 de folga da borda direita, cinza `#4f5059` e vermelho
+              `#c23d40` — este último é o `--status-danger` que o selo do tile
+              já usa. O cinza **não tem token equivalente** no nosso tema; fica
+              no `background-surface-higher`, que é o mais próximo. */}
+          {donoDaTela && (
+            <span className="flex h-4 shrink-0 items-center overflow-hidden rounded-full text-[12px] font-bold leading-4">
+              {selo && (
+                <span className="bg-background-surface-higher px-[6px] text-text-strong">
+                  {selo}
+                </span>
+              )}
+              <span className="bg-status-danger px-[6px] uppercase text-control-critical-primary-text-default">
+                Ao vivo
+              </span>
+            </span>
+          )}
           {grupo && (
             <BotaoDeIcone
               rotulo="Adicionar pessoas"

@@ -338,7 +338,6 @@ export function VoiceTile({
   useEffect(() => () => window.clearTimeout(cliquePendente.current), []);
   const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
   const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
-  const pararTela = useVoice((s) => s.pararTela);
   // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
   // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
@@ -554,6 +553,28 @@ export function VoiceTile({
         </span>
       )}
 
+      {/* Desfazer o "Ver prévia" da minha captura nativa — o **único** ícone
+          que ainda pousa sobre uma transmissão, e ele é nosso: no Discord a
+          própria tela não tem prévia para ligar, então também não há o que
+          desligar. Sem ele o "Ver prévia" seria de mão única, e prévia ligada
+          é faixa assinada (`assinaturas-de-tela.ts`) — o custo que o aviso
+          existe para evitar.
+
+          Canto inferior **direito**, e não o de cima: lá mora o "AO VIVO", que
+          desde as prints `p2`/`p4`/`p6` não pisca mais no hover. Embaixo à
+          esquerda fica o rótulo de nome; esta é a quina que sobra. */}
+      {!semAcoes && tile.minhaTelaNativa && assistindo && (
+        <div
+          className={`absolute bottom-1 right-1 z-20 transition focus-within:opacity-100 ${
+            pairando ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <AcaoDoTile label="Ocultar prévia" onClick={() => onPreviaDaMinhaTela?.(tile.key, false)}>
+            <EyeOff size={14} />
+          </AcaoDoTile>
+        </div>
+      )}
+
       {tela && !assistindo && !tile.minhaTelaNativa && (
         <button
           type="button"
@@ -580,10 +601,11 @@ export function VoiceTile({
           esquerda, o aviso de transmissão em cima à direita. Dentro do rótulo
           ele competia com o nome pela mesma linha e sumia junto com ela. */}
       {tela && (
-        // some no hover: as ações do tile moram neste mesmo canto, e as duas
-        // coisas empilhadas viravam um borrão vermelho com botões por cima. O
-        // selo diz "isto é uma transmissão", que é informação de relance — no
-        // hover a pergunta já é outra.
+        // **Sempre visível.** Ele sumia no hover porque a fileira de ações
+        // morava neste mesmo canto; agora o card de tela não tem fileira
+        // nenhuma (ver o bloco de ações lá embaixo), e nas prints `p2`/`p4`/
+        // `p6` o "AO VIVO" é o *único* elemento persistente do card — some o
+        // motivo de ele piscar debaixo da mão.
         //
         // Medido na print `2026-08-31 123917` (1:1): selo de **16px** de altura
         // (coluna x=610, y=125–140), 59 de largura para "AO VIVO"
@@ -597,11 +619,9 @@ export function VoiceTile({
         // sobre a transmissão escura. No tile compacto a margem cai para 4,
         // como o `.overlayContainer__2f4f7.compact__2f4f7{margin:4px}`.
         <span
-          className={`pointer-events-none absolute flex h-[16px] items-center rounded-full bg-status-danger px-[6px] text-[12px] font-bold uppercase leading-[16px] text-control-critical-primary-text-default transition-opacity ${
-            // mesma conta da fileira de ações (`pairando`) e não `group-hover`:
-            // os dois moram neste canto e têm de trocar de lugar no mesmo instante
-            semAcoes ? "" : `group-focus-within:opacity-0 ${pairando ? "opacity-0" : ""}`
-          } ${compacto ? "right-1 top-1" : "right-2 top-2"}`}
+          className={`pointer-events-none absolute flex h-[16px] items-center rounded-full bg-status-danger px-[6px] text-[12px] font-bold uppercase leading-[16px] text-control-critical-primary-text-default ${
+            compacto ? "right-1 top-1" : "right-2 top-2"
+          }`}
         >
           Ao vivo
         </span>
@@ -709,10 +729,23 @@ export function VoiceTile({
         {state.user.bot && <TagDeBot caixaEstreita={rotuloPequeno} />}
       </span>
 
-      {/* Ações do hover, no canto superior direito. Numa tela **já assistida** o
-          que falta não é "assistir", é sair dela: entra o botão de parar,
-          pequeno, ao lado do "…" que a print mostra no tile da faixa. */}
-      {!semAcoes && (
+      {/* Ações do hover, no canto superior direito — **só no card de pessoa**.
+          Sobre uma transmissão o Discord não desenha fileira nenhuma: nas
+          prints `p2`/`p4`/`p6` o card de tela tem o selo "AO VIVO" e mais
+          nada, e no destaque (`p3`, `p5`) a transmissão fica limpa de ponta a
+          ponta. Seis ícones por cima do que a pessoa abriu para ser lido
+          tapavam justamente o conteúdo.
+
+          As funções não sumiram, mudaram de lugar — e é o lugar do Discord:
+          - **Parar transmissão** mora na barra de controles, onde o mesmo
+            botão que iniciou a tela a encerra (`ScreenShareButton`); na `p2`
+            o Discord também põe o "Parar de compartilhar" fora do card;
+          - **Parar de assistir** está no menu de contexto do tile (botão
+            direito), que o `onContextMenu` logo acima já abre com o item;
+          - **Palco** é o clique no próprio card, e **tela cheia** o duplo
+            clique (os dois já eram os gestos, ver `ESPERA_DO_DUPLO_CLIQUE`) —
+            mais o par de ícones do canto do palco, em `CallStage`. */}
+      {!semAcoes && !tela && (
         // `z-20` acima do `z-10` das faixas do palco (cabeçalho do `CallStage`,
         // controles): elas são transparentes, mas comem o ponteiro, e sem isto
         // o clique em "Tela cheia" ia parar no cabeçalho invisível. O tile é
@@ -723,51 +756,25 @@ export function VoiceTile({
             pairando ? "opacity-100" : "opacity-0"
           }`}
         >
-          {/* A minha própria tela: o "X" de parar a transmissão no hover do
-              tile, como no Discord ("Parar transmissão" sobre a prévia). */}
-          {tela && sou && (
-            <AcaoDoTile label="Parar transmissão" onClick={() => void pararTela()}>
-              <MonitorX size={14} />
-            </AcaoDoTile>
+          {!sou && (
+            <>
+              <AcaoDoTile
+                label={`Volume de ${nome}`}
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
+                }}
+              >
+                <Volume2 size={14} />
+              </AcaoDoTile>
+              <AcaoDoTile
+                label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
+                onClick={() => toggleSilenciado(state.user.id)}
+              >
+                <VolumeX size={14} className={silenciado ? "text-status-danger" : undefined} />
+              </AcaoDoTile>
+            </>
           )}
-          {tela
-            ? tile.minhaTelaNativa
-              ? assistindo && (
-                  <AcaoDoTile
-                    label="Ocultar prévia"
-                    onClick={() => onPreviaDaMinhaTela?.(tile.key, false)}
-                  >
-                    <EyeOff size={14} />
-                  </AcaoDoTile>
-                )
-              : assistindo &&
-                !sou && (
-                  <AcaoDoTile
-                    label={`Parar de assistir a ${nome}`}
-                    onClick={() => onPararDeAssistir(state.user.id)}
-                  >
-                    <MonitorX size={14} />
-                  </AcaoDoTile>
-                )
-            : !sou && (
-                <>
-                  <AcaoDoTile
-                    label={`Volume de ${nome}`}
-                    onClick={(e) => {
-                      const r = e.currentTarget.getBoundingClientRect();
-                      abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
-                    }}
-                  >
-                    <Volume2 size={14} />
-                  </AcaoDoTile>
-                  <AcaoDoTile
-                    label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
-                    onClick={() => toggleSilenciado(state.user.id)}
-                  >
-                    <VolumeX size={14} className={silenciado ? "text-status-danger" : undefined} />
-                  </AcaoDoTile>
-                </>
-              )}
           <AcaoDoTile
             label={grande ? "Sair do palco" : "Colocar no palco"}
             onClick={() => onFocar(tile.key)}

@@ -82,6 +82,28 @@ import {
 /** Uma vaga do palco: alguém, ou o convite que ocupa a vaga vazia. */
 type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
 
+/**
+ * A transmissão que sobe ao destaque **sozinha**, ou `null` para deixar a
+ * grade como está.
+ *
+ * Só a tela de **outra pessoa** que eu escolhi assistir: abrir uma transmissão
+ * e continuar com ela do tamanho de um selo não é o que ninguém pediu. A
+ * **minha** nunca — nem a do navegador, nem a da captura nativa —, e isso é
+ * medição, não opinião: na print `p2` o usuário está transmitindo pelo Discord
+ * do navegador e a própria tela é **mais um card na grade**, ao lado das
+ * pessoas, com o selo "Ao vivo"; o palco continua vazio. Era daqui que vinha o
+ * "a minha tela não aparece": ela aparecia, mas engolindo o palco inteiro — a
+ * regra antiga só excluía a captura nativa do desktop (`minhaTelaNativa`), e no
+ * navegador `assistindo` é verdadeiro para a minha própria tela por definição.
+ *
+ * Pôr a minha no palco também custa caro no desktop: lá ela seria assinada de
+ * volta do SFU (ver `assinaturas-de-tela.ts`), que é a volta de 1440p que o
+ * "Ver prévia" existe para evitar.
+ */
+export function telaQueAssumeOPalco(tiles: readonly Tile[], meuId?: string): Tile | null {
+  return tiles.find((t) => t.tela && t.assistindo && t.userId !== meuId) ?? null;
+}
+
 export default function VoiceGrid({
   channelId,
   nomeDoCanal,
@@ -169,13 +191,7 @@ export default function VoiceGrid({
     return [pessoa, ...telas];
   });
 
-  // transmissão que eu **estou assistindo** assume o palco sozinha (Discord).
-  // Só quando ninguém escolheu nada à mão — ver `focoAutomatico` na store —, e
-  // só depois de assistida: subir ao palco uma tela fechada daria o convite
-  // "Assistir transmissão" em tamanho de cinema. A **minha** tela nunca sobe
-  // sozinha: no palco ela seria assinada, e é justamente a volta da própria
-  // transmissão que deixava o PC lento.
-  const telaAssistida = tiles.find((t) => t.tela && t.assistindo && !t.minhaTelaNativa) ?? null;
+  const telaAssistida = telaQueAssumeOPalco(tiles, me?.id);
   const chaveDaTela = telaAssistida?.key ?? null;
   useEffect(() => {
     if (focoAutomatico && chaveDaTela && focado !== chaveDaTela) {

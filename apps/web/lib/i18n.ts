@@ -113,20 +113,34 @@ const PT_BR = {
   "voz.ruidoPadrao": "Padrão",
   "voz.ruidoAvancada": "Avançada",
   "voz.ruidoAjuda":
-    "A avançada roda uma rede neural no seu computador e tira teclado, ventilador e ar-condicionado — em troca de mais CPU. A padrão é a do navegador.",
+    "A avançada roda uma rede neural no seu computador e tira teclado, ventilador e ar-condicionado — em troca de mais CPU. A padrão é a do navegador. Os três níveis tratam só a sua voz: nenhum deles muda o som dos outros aplicativos.",
   "voz.eco": "Cancelamento de eco",
   "voz.ecoAjuda":
-    "Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco. Mexe só na sua voz: ligado ou desligado, o som dos outros aplicativos é o mesmo.",
+    "Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco.",
   "voz.ganho": "Controle automático de ganho",
   "voz.ganhoAjuda":
-    "Nivela o seu volume quando você fala perto ou longe do microfone. Também mexe só na sua voz: desligar não muda em nada o som dos outros aplicativos.",
+    "Nivela o seu volume quando você fala perto ou longe do microfone. Trata só a sua voz.",
   "voz.tratamento": "Onde tratar o seu microfone",
   "voz.tratamentoSistema": "Sistema",
   "voz.tratamentoSistemaAjuda": "trata o eco melhor; não custa CPU",
   "voz.tratamentoApp": "No app",
   "voz.tratamentoAppAjuda": "limpa o ruído aqui dentro; usa mais CPU",
   "voz.tratamentoAjuda":
-    "Escolhe onde a sua voz é tratada, e é só isso que muda. “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem fala no alto-falante e não custa processador. “No app” desliga os dois e deixa a limpeza com a supressão avançada, que roda aqui dentro e usa mais CPU. Nenhuma das duas muda o que acontece com o som dos outros aplicativos: qualquer microfone aberto põe o sistema em modo de comunicação, e nem desligar o eco tira ele de lá.",
+    "Escolhe onde a sua voz é tratada. “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem fala no alto-falante e não custa processador. “No app” desliga os dois e deixa a limpeza com a supressão avançada, que roda aqui dentro e usa mais CPU.",
+  // ── "por que a música baixa quando eu entro na call?" ──
+  // Três textos porque são três mecanismos diferentes, e só um deles tem
+  // conserto nesta tela. Ver `sistemaDeAudio` em `lib/microfone.ts` para as
+  // linhas de código do Chromium e do WebKit que sustentam cada afirmação.
+  "voz.outrosApps": "E o som dos outros aplicativos?",
+  "voz.outrosAppsWindows":
+    "O Windows trata qualquer microfone aberto como chamada e, de fábrica, abaixa em 80% o volume de todo o resto enquanto ela dura — é isso que deixa música e vídeo baixos, não as opções acima. Nenhuma delas tira o sistema desse modo. Quem muda é o próprio Windows, em Som ▸ Mais configurações de som ▸ Comunicações ▸ “Não fazer nada”.",
+  "voz.outrosAppsMacWebkit":
+    "No app de Mac (e no Safari), o macOS liga o processamento de voz do sistema enquanto o cancelamento de eco estiver ativo — e é ele que abaixa o som dos outros aplicativos. Desligar “Cancelamento de eco” aqui embaixo tira esse processamento do caminho na hora, sem sair da chamada. É a única opção desta tela que muda alguma coisa para os outros aplicativos; a redução de ruído não muda.",
+  "voz.outrosAppsMacChromium":
+    "No Chrome e no Edge do macOS nada nesta tela mexe no som dos outros aplicativos: o cancelamento de eco é feito em software, sem tocar na saída do computador. Se o som dos outros apps ainda muda durante a chamada, o suspeito é o fone Bluetooth — veja o aviso na seção de dispositivos.",
+  "voz.outrosAppsOutro":
+    "Nesta plataforma nenhuma opção desta tela mexe no som dos outros aplicativos: tudo aqui trata só a sua voz.",
+  "voz.desligarEco": "Desligar o cancelamento de eco",
   "voz.saida": "Dispositivo de saída",
   "voz.camera": "Câmera",
   "voz.volumeEntrada": "Volume de entrada",
@@ -312,20 +326,30 @@ const EN_US: Dicionario = {
   "voz.ruidoPadrao": "Standard",
   "voz.ruidoAvancada": "Advanced",
   "voz.ruidoAjuda":
-    "Advanced runs a neural network on your computer and removes keyboard, fan and air conditioning noise — at the cost of more CPU. Standard is the browser's own.",
+    "Advanced runs a neural network on your computer and removes keyboard, fan and air conditioning noise — at the cost of more CPU. Standard is the browser's own. All three levels only process your voice: none of them changes your other apps' sound.",
   "voz.eco": "Echo cancellation",
   "voz.ecoAjuda":
-    "Removes the echo of your speakers from your voice, so the others don't hear themselves back. If you wear headphones you can turn it off without getting echo back. It only touches your voice: on or off, your other apps sound exactly the same.",
+    "Removes the echo of your speakers from your voice, so the others don't hear themselves back. If you wear headphones you can turn it off without getting echo back.",
   "voz.ganho": "Automatic gain control",
   "voz.ganhoAjuda":
-    "Evens out your volume when you speak close to or far from the microphone. It also only touches your voice: turning it off changes nothing about your other apps' sound.",
+    "Evens out your volume when you speak close to or far from the microphone. It only processes your voice.",
   "voz.tratamento": "Where to process your microphone",
   "voz.tratamentoSistema": "System",
   "voz.tratamentoSistemaAjuda": "better with echo; costs no CPU",
   "voz.tratamentoApp": "In the app",
   "voz.tratamentoAppAjuda": "cleans the noise in here; uses more CPU",
   "voz.tratamentoAjuda":
-    "This picks where your voice is processed, and that is all it changes. “System” uses your computer's echo cancellation and gain control: best if you speak through speakers, and it costs no CPU. “In the app” turns both off and hands the clean-up to advanced noise suppression, which runs in here and uses more CPU. Neither changes what happens to your other apps' sound: any open microphone puts the system into communication mode, and turning echo cancellation off does not take it out of there.",
+    "This picks where your voice is processed. “System” uses your computer's echo cancellation and gain control: best if you speak through speakers, and it costs no CPU. “In the app” turns both off and hands the clean-up to advanced noise suppression, which runs in here and uses more CPU.",
+  "voz.outrosApps": "What about your other apps' sound?",
+  "voz.outrosAppsWindows":
+    "Windows treats any open microphone as a call and, out of the box, lowers everything else by 80% for as long as it lasts — that, and not the options above, is what makes music and video go quiet. None of them takes the system out of that mode. The setting that does belongs to Windows: Sound ▸ More sound settings ▸ Communications ▸ “Do nothing”.",
+  "voz.outrosAppsMacWebkit":
+    "In the Mac app (and in Safari), macOS turns on system voice processing for as long as echo cancellation is on — and that is what lowers your other apps' sound. Turning “Echo cancellation” off below takes that processing out of the way immediately, without leaving the call. It is the only option on this screen that changes anything for other apps; noise suppression does not.",
+  "voz.outrosAppsMacChromium":
+    "In Chrome and Edge on macOS nothing on this screen touches your other apps' sound: echo cancellation runs in software and never touches your computer's output. If other apps still sound different during a call, suspect the Bluetooth headset — see the warning in the devices section.",
+  "voz.outrosAppsOutro":
+    "On this platform nothing on this screen touches your other apps' sound: everything here only processes your voice.",
+  "voz.desligarEco": "Turn echo cancellation off",
   "voz.saida": "Output device",
   "voz.camera": "Camera",
   "voz.volumeEntrada": "Input volume",

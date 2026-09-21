@@ -85,11 +85,7 @@ import {
   type RestricoesDeMicrofone,
   type SalaDoMicrofone,
 } from "@/lib/microfone";
-import {
-  aplicarAssinaturas,
-  chaveDoTileDeTela,
-  type ParticipanteDeTela,
-} from "@/stores/assinaturas-de-tela";
+import { aplicarAssinaturas, type ParticipanteDeTela } from "@/stores/assinaturas-de-tela";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
@@ -1214,28 +1210,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         } else {
           set({ screenOn: true });
           tocarSom("transmissao-iniciada");
-          // **A minha tela vai para o palco**, como no Discord: quem acabou de
-          // escolher uma janela precisa conferir o que foi ao ar (e o botão de
-          // parar mora no próprio tile). Só aqui, no caminho do **navegador**:
-          // esta faixa é local, já está nesta máquina e desenhá-la em tamanho
-          // grande não pede nada ao servidor de mídia. `publicarTelaNativa`
-          // **não** faz o mesmo de propósito — lá a tela é o participante
-          // `<userId>#tela` e pôr a chave dele em `focado` a assinaria de
-          // volta do SFU (ver `assinaturas-de-tela.ts`), que é justamente a
-          // volta de 1440p que o "Ver prévia" existe para evitar.
-          //
-          // `focoAutomatico: false` porque isto é escolha explícita, como o
-          // clique no tile: sem ele, o efeito da grade devolveria o palco à
-          // transmissão que eu estava assistindo no instante seguinte.
-          //
-          // A chave sai da **publicação local** (`telasDe(lp)`), que é a mesma
-          // de onde a grade tira o tile — deduzi-la de outro lugar seria focar
-          // uma chave que não existe no palco.
-          const meuId = meuIdNaSala();
-          const minhaTela = telasDe(lp)[0];
-          if (meuId && minhaTela) {
-            set({ focado: chaveDoTileDeTela(meuId, minhaTela.trackSid), focoAutomatico: false });
-          }
+          // **Sem mexer no palco.** Ir ao ar pelo navegador já põe a minha tela
+          // na grade como mais um card, que é o que a print `p2` mostra o
+          // Discord fazendo — promovê-la ao destaque tirava dali justamente o
+          // card que o usuário estava pedindo. Ver `telaQueAssumeOPalco`, em
+          // `VoiceGrid.tsx`, que é onde a regra do destaque mora inteira.
         }
       } catch (e) {
         if (capturaDaTela === stream) capturaDaTela = null;
