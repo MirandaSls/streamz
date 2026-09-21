@@ -57,19 +57,22 @@ docker build -f apps/api/Dockerfile -t streamz-api .   # contexto = raiz do mono
 docker build -f apps/web/Dockerfile -t streamz-web .   # NEXT_PUBLIC_* via --build-arg
 ```
 
-O CI (`.github/workflows/ci.yml`) roda exatamente esta sequência — `prisma
-generate` → build do `shared` → typecheck dos três pacotes → testes → `next
-build` — e num job à parte builda as duas imagens. Reproduza-a localmente antes
-de abrir PR.
+**Não existe mais CI no GitHub.** Os workflows foram removidos em `a534a08d`
+(2026-09-03): a cobrança da conta travou os runners, e `.github/workflows/` só
+tem `ios.yml`. Quem roda essa sequência — `prisma generate` → build do `shared`
+→ typecheck dos três pacotes → testes → `next build` — é
+`scripts/publicar-local.sh`, **neste servidor**. Rode-a antes de abrir PR: não
+há mais nada verde ou vermelho aparecendo no PR para te avisar.
 
-**No `main`, CI verde vai para produção sozinho** (ADR-0007): as imagens são
-publicadas em `ghcr.io/mirandasls/streamz-{api,web}:sha-<7 do commit>` e o
-`deploy.yml` manda o servidor puxá-las por SSH. Voltar versão é rodar esse mesmo
-workflow à mão com a tag antiga — nada é rebuildado. Duas consequências para
-quem mexe no código: `NEXT_PUBLIC_*` é embutida no build da imagem e agora mora
-nas *variables* do repositório (mudar o `.env` do servidor não tem efeito), e o
-servidor avança com `--ff-only`, então editar arquivo à mão lá trava o próximo
-deploy em vez de ser sobrescrito.
+**Mergear no `main` não publica nada.** A ADR-0007 descreve o deploy
+automático por `deploy.yml`, e ele não existe mais (ver acima): publicar é rodar
+`scripts/publicar-local.sh` à mão, que verifica, builda
+`ghcr.io/mirandasls/streamz-{api,web}:sha-<7 do commit>` e troca os contêineres.
+Voltar versão é o mesmo script com a referência antiga — as imagens já no disco
+são reaproveitadas. Duas consequências para quem mexe no código: `NEXT_PUBLIC_*`
+é embutida no build da imagem (mudar o `.env` do servidor não tem efeito sobre
+ela), e cada publicação usa uma worktree destacada — **nunca** dê `checkout` em
+`/opt/stack/streamz`, cujo HEAD descreve o compose que está no ar.
 
 Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @streamz/api test`,
 `pnpm --filter @streamz/web test`). **Verificação = typecheck limpo nos três
