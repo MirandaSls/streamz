@@ -344,3 +344,43 @@ async function descartar(estado: Vivo) {
 export function faixaDoMicrofone(): FaixaDeMicrofone | null {
   return vivo?.faixa ?? null;
 }
+
+// ── Microfone de fone Bluetooth ────────────────────────────────────────────
+
+/**
+ * Rótulos com que o sistema nomeia a captura do perfil mãos-livres.
+ *
+ * O Windows batiza o ponto de captura do HFP de `Headset (<fone> Hands-Free AG
+ * Audio)` — em pt-BR, `Fone de Ouvido (<fone> Áudio Mãos-Livres AG)`. O macOS
+ * usa `<fone> (Hands-Free)`. "Headset" e "Fone" sozinhos ficam de fora de
+ * propósito: qualquer headset USB se chama assim e não tem este problema.
+ */
+const MARCAS_DE_MAOS_LIVRES = [
+  /hands[\s-]?free/i,
+  /m[ãa]os[\s-]?livres/i,
+  /\bHFP\b/i,
+  /\bAG Audio\b/i,
+  /bluetooth/i,
+];
+
+/**
+ * O rótulo é de um microfone de fone Bluetooth?
+ *
+ * Por que isto existe: abrir a captura de um fone Bluetooth faz o Windows
+ * trocar o perfil do aparelho de A2DP (estéreo, banda cheia) para HFP (mono,
+ * banda estreita). A troca vale para o **fone inteiro**, então música, jogo e
+ * vídeo passam a sair abafados enquanto a chamada dura. Nada que este app faça
+ * desfaz isso — nem a atenuação de comunicações do Windows, que só mexe em
+ * volume, nem desligar o cancelamento de eco, porque o Chromium marca toda
+ * captura como `AudioCategory_Communications` de qualquer jeito. Resta avisar
+ * e sugerir outro microfone, que é o que a aba "Voz e vídeo" faz.
+ *
+ * O rótulo é o único sinal que o navegador entrega: `MediaDeviceInfo` não diz
+ * transporte nem perfil. Por isso a heurística erra para menos quando o
+ * fabricante inventa o nome — e errar para menos é o lado certo: um aviso que
+ * não aparece incomoda menos que um aviso falso em quem usa microfone de mesa.
+ */
+export function ehMicrofoneDeFoneBluetooth(rotulo: string | null | undefined): boolean {
+  if (!rotulo) return false;
+  return MARCAS_DE_MAOS_LIVRES.some((marca) => marca.test(rotulo));
+}
