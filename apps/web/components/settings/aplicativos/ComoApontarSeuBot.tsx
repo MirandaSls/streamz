@@ -55,6 +55,23 @@ export function ComoApontarSeuBot() {
         instância.
       </p>
 
+      {/* Esta seção resolve "como aponto"; a referência completa (todas as
+          rotas, eventos do gateway, permissões, códigos de erro) mora na página
+          pública e não cabe dentro do modal de configurações. */}
+      <p className="mb-6 text-text-sm text-text-subtle">
+        A referência completa da API — rotas, eventos do gateway, permissões e códigos de erro — está
+        em{" "}
+        <a
+          href="/desenvolvedores"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-text-link hover:underline"
+        >
+          Desenvolvedores
+        </a>
+        .
+      </p>
+
       <Trecho
         titulo="discord.js v14"
         nota="O `rest.api` vai sem o `/v10`: a lib acrescenta a versão sozinha. A URL do gateway não se configura — o `WebSocketManager` a pede pelo mesmo REST, então trocar o `rest.api` já a redireciona."
