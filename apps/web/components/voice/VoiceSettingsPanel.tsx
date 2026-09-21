@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Mic, Video } from "@/components/ui/icones";
+import { AlertTriangle, Keyboard, Mic, Video } from "@/components/ui/icones";
 import { Button } from "@/components/ui/primitivos";
 import { RadioCards, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { pttRotulo } from "@/stores/ptt-core";
@@ -13,6 +13,7 @@ import {
 } from "@/components/voice/fps-da-camera";
 import { BarraDeNivel } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
+import { ehMicrofoneDeFoneBluetooth } from "@/lib/microfone";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -70,13 +71,15 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   } = useTesteDeMicrofone();
 
   /*
-    Preset do processamento — a mesma regra de `settings/VozTab.tsx`, onde o
-    *porquê* está escrito por extenso: com `eco`/`ganho` ligados o sistema põe a
-    saída em modo de comunicação e abaixa/reencoda o som dos outros aplicativos;
-    desligados, os outros apps ficam intactos e a limpeza passa a custar CPU
-    (supressão avançada). O valor é **derivado** das preferências que já
-    existem — nenhum campo novo na store —, então os interruptores abaixo e o
-    preset nunca podem discordar.
+    Preset do processamento — a mesma regra de `settings/VozTab.tsx`. Ele
+    escolhe **onde a sua voz é tratada**: com `eco`/`ganho` ligados quem trata é
+    o sistema (de graça); desligados, a limpeza vira a supressão avançada, que
+    roda aqui dentro e custa CPU. O que ele **não** faz é mudar o áudio dos
+    outros aplicativos: o Chromium marca toda captura como stream de
+    comunicações de qualquer jeito, e desligar o eco só muda o processamento da
+    nossa faixa. O valor é **derivado** das preferências que já existem —
+    nenhum campo novo na store —, então os interruptores abaixo e o preset nunca
+    podem discordar.
   */
   const tratamento = audio.processamento.eco || audio.processamento.ganho ? "sistema" : "app";
   const aplicarTratamento = (valor: "sistema" | "app") =>
@@ -84,7 +87,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
       processamento:
         valor === "sistema"
           ? { ...audio.processamento, eco: true, ganho: true }
-          : // a avançada entra junto: sem ela, sair do modo de comunicação
+          : // a avançada entra junto: sem ela, tirar o tratamento do sistema
             // deixaria o microfone cru — a troca seria uma piora audível
             { ...audio.processamento, eco: false, ganho: false, ruido: "avancada" },
     });
@@ -93,6 +96,19 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   // formato que o `Select` pede — igual ao helper de `VozTab.tsx`
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
     opcoesDe(lista, prefixo).map((o) => ({ value: o.id, label: o.nome }));
+
+  /*
+    O aviso de fone Bluetooth também mora aqui, e não só na aba "Voz e vídeo".
+    O sintoma — "entrei na call e tudo ficou abafado" — aparece **durante** a
+    chamada, e este painel é o que a pessoa abre quando isso acontece; mandá-la
+    ao modal de configurações para entender o que acabou de ouvir seria tirá-la
+    do lugar onde percebeu o problema (é o mesmo motivo do preset, abaixo).
+    Aqui só o caso do microfone já escolhido: a versão cheia (`VozTab.tsx`)
+    cobre também o "Padrão do sistema" com um fone na lista, e esta coluna de
+    380px não comporta dois blocos de aviso.
+  */
+  const micEscolhido = devices.inputs.find((d) => d.deviceId === devices.inputId);
+  const fone = ehMicrofoneDeFoneBluetooth(micEscolhido?.label) ? micEscolhido : undefined;
 
   return (
     <div className="space-y-5 text-sm text-text-default">
@@ -115,6 +131,24 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           emptyLabel="Nenhuma saída encontrada"
           disabled={devices.outputs.length === 0}
         />
+        {fone && (
+          // mesma moldura do aviso da aba cheia (`AvisoDeFoneBluetooth` em
+          // `settings/VozTab.tsx`): traço sutil sobre `background-base-lowest`
+          // e o triângulo em `status-warning` — recado para ler, não erro
+          <div className="flex items-start gap-2 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2">
+            <AlertTriangle
+              size={14}
+              className="mt-0.5 shrink-0 text-status-warning"
+              aria-hidden="true"
+            />
+            <p className="min-w-0 text-xs leading-relaxed text-text-muted">
+              O microfone é o do fone Bluetooth (<strong>{fone.label}</strong>). Enquanto ele
+              estiver em uso, o Windows põe o fone em modo mãos-livres e <strong>todo</strong> o
+              áudio do sistema sai abafado — música, jogo, vídeo. Escolha outro microfone e deixe o
+              fone só como <em>saída</em>.
+            </p>
+          </div>
+        )}
         {!devices.autorizado && (
           <p className="text-xs text-status-warning">
             {explicarMidia(devices.motivo) ??
@@ -269,12 +303,12 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Processamento de voz
         </h3>
-        {/* O preset está aqui, e não só na aba cheia, porque é **aqui** que o
-            sintoma aparece: a pessoa entra na chamada, a música baixa e estoura,
-            e abre este painel. Mandá-la ao modal de configurações para desfazer
-            o que a chamada acabou de causar seria pedir que ela saísse do lugar
-            onde percebeu o problema. A densidade se resolve com uma coluna só,
-            como a redução de ruído logo abaixo. O texto repete o da aba
+        {/* O preset está aqui, e não só na aba cheia, porque é **aqui** que a
+            pessoa repara na própria voz: ela entra na chamada, se ouve com eco
+            (ou com o ventilador junto) e abre este painel. Mandá-la ao modal de
+            configurações para ajustar o que acabou de ouvir seria pedir que
+            saísse do lugar onde percebeu o problema. A densidade se resolve com
+            uma coluna só, como a redução de ruído logo abaixo. O texto repete o da aba
             (`voz.tratamento*` em `lib/i18n.ts`): este painel ainda é todo em
             pt-BR literal, e misturar `t()` numa seção só deixaria o inglês pela
             metade. A divisória fica no invólucro (e não no `RadioCards`) pelo
@@ -291,21 +325,21 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
               {
                 value: "sistema",
                 label: "Sistema",
-                hint: "trata o eco melhor; mexe no som dos outros apps",
+                hint: "trata o eco melhor; não custa CPU",
               },
-              { value: "app", label: "No app", hint: "não mexe nos outros apps; usa mais CPU" },
+              { value: "app", label: "No app", hint: "limpa o ruído aqui dentro; usa mais CPU" },
             ]}
           />
           <p className="mt-2 text-xs text-text-muted">
-            “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem
-            fala no alto-falante, mas põe o áudio em modo de comunicação e pode abaixar e estourar
-            música, jogo e vídeo. “No app” sai desse modo e deixa a limpeza com a supressão
-            avançada.
+            Escolhe onde a sua voz é tratada, e é só isso que muda. “Sistema” usa o cancelamento de
+            eco e o ganho do seu computador: é o melhor para quem fala no alto-falante e não custa
+            processador. “No app” desliga os dois e deixa a limpeza com a supressão avançada, que
+            roda aqui dentro. Nenhuma das duas muda o som dos outros aplicativos.
           </p>
         </div>
         <ToggleLinha
           titulo="Cancelamento de eco"
-          hint="Enquanto estiver ligado, o sistema trata a chamada como telefonema e pode abaixar e distorcer o som dos outros aplicativos — música, jogo, vídeo. Quem usa fone pode desligar sem ganhar eco."
+          hint="Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco. Mexe só na sua voz: o som dos outros aplicativos é o mesmo dos dois jeitos."
           checked={audio.processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...audio.processamento, eco } })}
         />
@@ -324,7 +358,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
         <ToggleLinha
           titulo="Controle automático de ganho"
-          hint="Nivela o seu volume quando você fala perto ou longe do microfone. Também depende do modo de comunicação do sistema, então, junto com o cancelamento de eco, é o que abafa os outros aplicativos."
+          hint="Nivela o seu volume quando você fala perto ou longe do microfone. Também mexe só na sua voz: desligar não muda em nada o som dos outros aplicativos."
           checked={audio.processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...audio.processamento, ganho } })}
         />

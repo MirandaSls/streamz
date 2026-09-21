@@ -1,7 +1,14 @@
 "use client";
 
-import { useRef } from "react";
-import { AlertTriangle, MessageSquare, Phone, RotateCw, UserPlus } from "@/components/ui/icones";
+import { useEffect, useRef } from "react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  MessageSquare,
+  Phone,
+  RotateCw,
+  UserPlus,
+} from "@/components/ui/icones";
 import { displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
@@ -15,7 +22,7 @@ import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
 import { useDMs } from "@/stores/dms";
-import { ui } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -36,6 +43,24 @@ import { useVoice } from "@/stores/voice";
  * chamada perdida). Enquanto não existir, a duração simplesmente não é
  * registrada em lugar nenhum — este comentário já afirmou o contrário, e a
  * correção é criar o tipo de mensagem em `packages/shared` antes de tudo.
+ *
+ * ## Duas maneiras de "aumentar o palco", e elas não são a mesma
+ *
+ * 1. **Expandir** (a seta de `BotaoDeExpandir`, `ui.palcoExpandido`): o palco
+ *    se promove sobre a **região de conteúdo** — cabeçalho da conversa, chat e
+ *    coluna da direita ficam atrás dele — e a **barra lateral da esquerda
+ *    continua na tela**. É um modo nosso, dentro da janela, e sai no Esc.
+ * 2. **Tela cheia** (`IconesDoCanto`, `fullscreen.ts`): a de verdade, do
+ *    elemento ou da janela do app. Some com a barra lateral, com o navegador e
+ *    com o sistema.
+ *
+ * As duas continuam existindo porque respondem a pedidos diferentes ("quero a
+ * chamada maior, sem perder a navegação" e "quero só a chamada"), e nenhum dos
+ * dois botões mudou de ação: a expansão é botão novo. No Discord a primeira
+ * não tem botão próprio — lá quem faz isso é o balão que esconde a conversa
+ * (print `2026-09-04 001246`, com o palco ocupando a região e a lateral
+ * intacta) e a seta do canto inferior esquerdo da faixa de chamada de conversa
+ * (print `2026-08-31 122612`, x≈407 y≈501), que é de onde a nossa saiu.
  */
 export default function CallStage({
   channelId,
@@ -90,11 +115,66 @@ export default function CallStage({
    */
   const molduraVisivel = ehMobile ? !paisagem || visivel : visivel;
 
+  const definirExpandido = useUI((s) => s.definirPalcoExpandido);
+  const palcoExpandido = useUI((s) => s.palcoExpandido);
+
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
+  /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
+  const semChamada = estados.length === 0 && !chamando;
+
+  /**
+   * O modo só vale **enquanto o botão que o desfaz está na tela**.
+   *
+   * A regra é essa, e não "enquanto houver chamada", por um caso concreto: eu
+   * desligo, mas os outros continuam na call. O palco vira o cartão "entrar na
+   * chamada", que não desenha controle nenhum — e um `palcoExpandido` ligado
+   * ali é chat escondido sem botão de voltar. O `palcoExpandido` é global (o
+   * `CallSplit`, que é irmão daqui, também o lê), então ninguém mais vai
+   * desligá-lo.
+   */
+  const podeExpandir = !ehMobile && !semChamada && (conectadoAqui || chamando);
+  useEffect(() => {
+    if (!podeExpandir) definirExpandido(false);
+  }, [podeExpandir, definirExpandido]);
+
+  /**
+   * A conta é refeita na **renderização**, e não só pelo efeito acima, porque
+   * efeito roda depois da pintura: girar o telefone (ou desligar a chamada)
+   * com o modo ligado pintaria um quadro com o palco promovido sobre uma tela
+   * que não é mais a dele. **No celular ele nem existe** — lá o palco já é a
+   * tela toda e a conversa é outra tela, não uma coluna ao lado.
+   */
+  const expandido = palcoExpandido && podeExpandir;
+
+  // O palco saiu da tela (troquei de conversa, entrei num canal de voz, o
+  // `DMView` o trocou de lugar na árvore): quem ligou o modo é quem o apaga.
+  useEffect(() => () => definirExpandido(false), [definirExpandido]);
+
+  /**
+   * Esc sai do modo **sem desligar a chamada**.
+   *
+   * Fase de borbulha e `defaultPrevented` respeitado de propósito: modal,
+   * popout e menu abertos por cima do palco também fecham no Esc e têm de
+   * ganhar — é a mesma regra do Esc da tela cheia de janela (`fullscreen.ts`).
+   *
+   * Em tela cheia o Esc é do navegador, e ouvi-lo aqui também devolveria o
+   * palco à faixa de 199px no mesmo gesto que só queria sair da tela cheia.
+   */
+  useEffect(() => {
+    if (!expandido || telaCheia) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      definirExpandido(false);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [expandido, telaCheia, definirExpandido]);
+
   const grupo = conversa ? isGroupChannel(conversa) : false;
   const destinatario = conversa && !grupo ? conversa.others[0] : null;
 
-  if (estados.length === 0 && !chamando) return null;
+  if (semChamada) return null;
 
   const subtitulo = chamando
     ? "Chamando…"
@@ -108,12 +188,27 @@ export default function CallStage({
       {...doPalco}
       data-call-stage={channelId}
       aria-label={`Chamada em ${titulo}`}
-      // a tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é promovido
-      // pelo compositor, então não há classe de posicionamento a aplicar aqui.
+      // A tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é
+      // promovido pelo compositor, então não há classe de posicionamento a
+      // aplicar para ela aqui.
+      //
+      // **Expandido é o contrário disso**: não há compositor nenhum, quem
+      // promove somos nós. O `absolute inset-0` sobe até o `relative` da região
+      // de conteúdo (`app/app/page.tsx`, a `<div className="relative flex
+      // min-w-0 flex-1">` que embrulha o `DMView`) — nenhum dos invólucros do
+      // caminho é posicionado, e o `CallSplit` tira o `relative` do dele quando
+      // o modo está ligado, justamente para não prender o palco na faixa. O
+      // resultado é o pedido: o palco cobre cabeçalho, conversa e coluna da
+      // direita, e a barra lateral da esquerda, que é irmã da região, continua.
+      // `z-20` porque o cabeçalho da conversa (`HeaderBar`) flutua em `z-10`
+      // sobre a mesma região; o véu de modal é `z-50` e continua por cima.
+      //
       // Fundo preto puro, que é o token `--black` do Discord (não o preto do
       // Tailwind): prints 1:1 `2026-08-31 160106` (pixels 600,250 e 1200,150) e
       // `101857` (1000,100 e todo o vão entre tiles) dão `#000000`.
-      className="relative flex min-w-0 flex-1 flex-col bg-black"
+      className={`flex flex-col bg-black ${
+        expandido ? "absolute inset-0 z-20" : "relative min-w-0 flex-1"
+      }`}
     >
       {erro && conectadoAqui && status === "error" && (
         <div
@@ -158,8 +253,10 @@ export default function CallStage({
         </span>
 
         {/* título centralizado: o palco é simétrico, e o nome no canto puxaria a
-            atenção para fora das pessoas. Na faixa ele não existe — ver `faixa`. */}
-        {!faixa && (
+            atenção para fora das pessoas. Na faixa ele não existe — ver `faixa`.
+            Expandido o palco **é** a região inteira e cobre o cabeçalho da
+            conversa, que era quem dizia o nome: o título volta. */}
+        {(!faixa || expandido) && (
           <span className="flex min-w-0 flex-col items-center text-center">
             <span className="max-w-full truncate text-sm font-semibold text-text-strong">
               {titulo}
@@ -181,11 +278,23 @@ export default function CallStage({
               style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
             />
           )}
+          {/* Expandido a conversa está **atrás** do palco: o balão não pode
+              continuar dizendo "ocultar" nem marcado como ligado, ou seria um
+              botão que se diz ligado sem nada na tela para mostrar. Mostrar a
+              conversa então quer dizer recolher o palco antes — e reabrir o
+              chat, se quem expandiu também o tinha fechado. */}
           <BotaoDeIcone
-            rotulo={chatAberto ? "Ocultar conversa" : "Mostrar conversa"}
-            ativo={chatAberto}
+            rotulo={chatAberto && !expandido ? "Ocultar conversa" : "Mostrar conversa"}
+            ativo={chatAberto && !expandido}
             icone={<MessageSquare size={20} />}
-            onClick={onToggleChat}
+            onClick={() => {
+              if (!expandido) {
+                onToggleChat();
+                return;
+              }
+              definirExpandido(false);
+              if (!chatAberto) onToggleChat();
+            }}
             tamanho="md"
             style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
           />
@@ -238,6 +347,20 @@ export default function CallStage({
             leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
             onLeave={() => void endCall()}
           />
+          {/* A seta de expandir **não** depende do `temTelaCheia` logo abaixo:
+              ela não usa a Fullscreen API nenhuma, é leiaute nosso, e é
+              justamente onde aquela não existe (webview com o recurso
+              desligado) que ela precisa continuar. Fora do celular pelo mesmo
+              motivo do canto: no telefone o palco já é a tela toda. */}
+          {!ehMobile && (
+            <BotaoDeExpandir
+              expandido={expandido}
+              onAlternar={() => definirExpandido(!expandido)}
+              visivel={visivel}
+              moldura={daMoldura}
+            />
+          )}
+
           {/* fora do celular: a tela cheia do palco inteiro não é o gesto do
               telefone — lá se toca no tile (ver `PalcoMobile`).
 
@@ -258,6 +381,66 @@ export default function CallStage({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * A seta que expande o palco dentro da janela, no canto inferior **esquerdo**.
+ *
+ * Lugar medido na print `2026-08-31 122612` (1:1, 1919 de largura), onde o
+ * Discord põe a seta da faixa de chamada de conversa: centro em x≈407 com a
+ * região de conteúdo começando em x≈375 — 32px da borda, ou seja, caixa de 32
+ * (`BotaoDeIcone` `md`) com **16 de folga** (`left-4`). O centro vertical é
+ * y≈501, o mesmo da fileira de controles, que é a âncora que o `IconesDoCanto`
+ * já resolveu do outro lado (`bottom-[30px]`: caixa de 32 com a base a 30
+ * centra nos 46 da cápsula de desligar — a conta está lá).
+ *
+ * **A direção da seta é nossa, e diverge do print de propósito.** No Discord
+ * ela aponta para baixo com a chamada aberta porque lá o clique *recolhe* a
+ * call inteira; aqui o modo é outro — o palco cresce para baixo, por cima da
+ * conversa —, então a seta aponta para onde o palco vai: ▾ para expandir, ▴
+ * (a mesma, girada) para devolver o espaço. Uma seta que aponta para o lado
+ * oposto do movimento seria pior que a divergência.
+ *
+ * Fica fora do `IconesDoCanto` porque aquele canto é medido como um par —
+ * "ações sobre a janela", diz o cabeçalho de lá — e um terceiro ícone mudaria
+ * o desenho que o print fixou. Esta é ação sobre o **leiaute**, e tem o canto
+ * dela.
+ */
+function BotaoDeExpandir({
+  expandido,
+  onAlternar,
+  visivel,
+  moldura,
+}: {
+  expandido: boolean;
+  onAlternar: () => void;
+  visivel: boolean;
+  moldura?: { onPointerEnter: () => void; onPointerLeave: () => void };
+}) {
+  return (
+    <div
+      {...moldura}
+      className={`absolute bottom-[30px] left-4 z-10 transition-opacity duration-200 ${
+        visivel ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
+      <BotaoDeIcone
+        rotulo={expandido ? "Recolher o palco" : "Expandir o palco"}
+        // `ativo` é o que põe o `aria-pressed` no botão (ver o primitivo): para
+        // o leitor de tela este é um interruptor, não dois botões diferentes
+        ativo={expandido}
+        icone={
+          <ChevronDown
+            size={20}
+            className={`transition-transform duration-150 ${expandido ? "rotate-180" : ""}`}
+          />
+        }
+        tamanho="md"
+        comFundo
+        onClick={onAlternar}
+      />
+    </div>
   );
 }
 

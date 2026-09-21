@@ -338,3 +338,54 @@ describe("dono da faixa de microfone", () => {
     await fecharMicrofone();
   });
 });
+
+/**
+ * O aviso de fone Bluetooth é decidido pelo **rótulo** do dispositivo — o
+ * navegador não conta transporte nem perfil. Errar para mais é o lado caro:
+ * quem usa microfone de mesa levaria um aviso sobre um problema que não tem,
+ * e o aviso inteiro perderia crédito. Daí os negativos abaixo pesarem tanto
+ * quanto os positivos.
+ */
+describe("ehMicrofoneDeFoneBluetooth", () => {
+  it("reconhece as formas com que os sistemas batizam o perfil mãos-livres", async () => {
+    const { ehMicrofoneDeFoneBluetooth } = await import("@/lib/microfone");
+
+    for (const rotulo of [
+      // Windows em inglês
+      "Headset (WH-1000XM4 Hands-Free AG Audio)",
+      // Windows em pt-BR
+      "Fone de Ouvido (WH-1000XM4 Áudio Mãos-Livres AG)",
+      // macOS
+      "WH-1000XM4 (Hands-Free)",
+      // driver que anuncia o perfil pela sigla
+      "Microfone HFP (Galaxy Buds)",
+      // alguns drivers só dizem o transporte
+      "Bluetooth Audio Input",
+    ]) {
+      expect(ehMicrofoneDeFoneBluetooth(rotulo), rotulo).toBe(true);
+    }
+  });
+
+  it("não avisa quem não tem o problema", async () => {
+    const { ehMicrofoneDeFoneBluetooth } = await import("@/lib/microfone");
+
+    for (const rotulo of [
+      // "Headset" sozinho é qualquer fone com fio: não troca perfil nenhum
+      "Headset USB",
+      "Microfone (Realtek Audio)",
+      "Webcam C920",
+      "Microfone de mesa (Yeti Stereo Microphone)",
+      "Padrão - Alto-falantes (Realtek High Definition Audio)",
+    ]) {
+      expect(ehMicrofoneDeFoneBluetooth(rotulo), rotulo).toBe(false);
+    }
+  });
+
+  it("lista anônima não vira aviso: sem rótulo não há o que afirmar", async () => {
+    const { ehMicrofoneDeFoneBluetooth } = await import("@/lib/microfone");
+
+    expect(ehMicrofoneDeFoneBluetooth("")).toBe(false);
+    expect(ehMicrofoneDeFoneBluetooth(null)).toBe(false);
+    expect(ehMicrofoneDeFoneBluetooth(undefined)).toBe(false);
+  });
+});

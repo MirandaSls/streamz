@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
 import { PTT_RELEASE_MS, type CameraFps } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { Button } from "@/components/ui/primitivos";
@@ -13,6 +13,7 @@ import {
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useT } from "@/lib/i18n";
+import { ehMicrofoneDeFoneBluetooth } from "@/lib/microfone";
 import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
@@ -178,15 +179,24 @@ export default function VozTab() {
 
   /*
     O preset existe porque o compromisso do processamento de voz é invisível:
-    com `eco`/`ganho` ligados (o padrão), o sistema operacional põe a saída em
-    **modo de comunicação** enquanto a chamada dura — e abaixa e reencoda o som
-    de todo o resto (o relato clássico é "entrei na call e o Spotify estourou").
-    Desligar os dois sai desse modo, mas tira o cancelamento de eco de quem fala
-    no alto-falante, que é um defeito pior por ser silencioso: quem causa o eco
-    não o ouve. Daí as duas pontas nomeadas, em vez de dois interruptores soltos
-    que ninguém liga ao sintoma: "Sistema" paga com o áudio dos outros apps,
-    "No app" paga com CPU (a supressão avançada, o RNNoise, assume a limpeza que
-    o sistema deixaria de fazer).
+    com `eco`/`ganho` ligados (o padrão) quem limpa o microfone é o sistema;
+    desligados, quem limpa é a supressão avançada (o RNNoise), que roda aqui
+    dentro e custa CPU. Daí as duas pontas nomeadas, em vez de dois
+    interruptores soltos que ninguém liga ao sintoma.
+
+    **A versão anterior deste comentário — e o texto que ele produzia na tela —
+    prometia o que o preset não entrega.** Dizia que "No app" tirava o áudio do
+    modo de comunicação e que os outros aplicativos ficavam como estavam. Não
+    ficam: no Windows o Chromium marca **toda** captura como
+    `AudioCategory_Communications` incondicionalmente
+    (`media/audio/win/audio_low_latency_input_win.cc`,
+    `SetCommunicationsCategoryAndMaybeRawCaptureMode`, chamada no `Open()`);
+    desligar eco/ganho só troca `AUDCLNT_STREAMOPTIONS_NONE` por
+    `AUDCLNT_STREAMOPTIONS_RAW`, o que muda o processamento da **nossa**
+    captura e nada mais. Ducking e troca de perfil do fone Bluetooth continuam
+    exatamente iguais nos dois presets, e é por isso que o texto agora fala de
+    eco e CPU — o que o preset de fato decide — e manda o resto para o aviso de
+    Bluetooth acima.
 
     O valor é **derivado** das preferências que já existem — não há campo novo na
     store —, então mexer num dos interruptores abaixo reposiciona o preset
@@ -198,8 +208,8 @@ export default function VozTab() {
       processamento:
         valor === "sistema"
           ? { ...processamento, eco: true, ganho: true }
-          : // a avançada entra junto: sem ela, sair do modo de comunicação
-            // deixaria o microfone cru — a troca seria uma piora audível
+          : // a avançada entra junto: sem ela, desligar eco e ganho deixaria o
+            // microfone cru — a troca seria uma piora audível
             { ...processamento, eco: false, ganho: false, ruido: "avancada" },
     });
 
@@ -207,6 +217,27 @@ export default function VozTab() {
   // formato que o `Select` pede
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
     opcoesDe(lista, prefixo).map((o) => ({ value: o.id, label: o.nome }));
+
+  /*
+    O microfone escolhido é o de um fone Bluetooth?
+
+    É a causa mais comum de "entrei na call e o som dos outros apps ficou
+    abafado", e é a única que **nenhuma** opção desta tela conserta: abrir a
+    captura do fone obriga o Windows a trocar o perfil do aparelho de A2DP
+    (estéreo, banda cheia) para HFP (mono, banda estreita), e a troca vale para
+    o fone inteiro. Por isso o aviso aponta para a saída que existe — usar
+    outro microfone —, em vez de prometer um interruptor.
+
+    Com "Padrão do sistema" não dá para saber qual aparelho o Windows vai usar;
+    o que dá é ver se existe um candidato na lista e dizer isso com essa
+    ressalva, em vez de afirmar o que não se sabe.
+  */
+  const micEscolhido = devices.inputs.find((d) => d.deviceId === devices.inputId);
+  const foneEscolhido = ehMicrofoneDeFoneBluetooth(micEscolhido?.label) ? micEscolhido : undefined;
+  const foneNaLista =
+    devices.inputId === null
+      ? devices.inputs.find((d) => ehMicrofoneDeFoneBluetooth(d.label))
+      : undefined;
 
   return (
     <>
@@ -247,6 +278,25 @@ export default function VozTab() {
             onChange={(outputVolume) => s.set({ outputVolume })}
           />
         </div>
+
+        {foneEscolhido && (
+          <AvisoDeFoneBluetooth>
+            O microfone escolhido é o do fone Bluetooth (<strong>{foneEscolhido.label}</strong>).
+            Enquanto ele estiver aberto numa chamada, o Windows põe o fone em modo mãos-livres —
+            mono e de banda estreita —, e <strong>tudo</strong> que tocar nele sai abafado: música,
+            jogo, vídeo e os outros aplicativos. Isso é do Bluetooth, não do Streamz: nenhuma opção
+            desta tela desfaz. A saída é escolher outro microfone aqui (o do notebook, um USB ou um
+            de mesa) e deixar o fone só como <em>saída</em> — aí ele fica em estéreo.
+          </AvisoDeFoneBluetooth>
+        )}
+        {foneNaLista && (
+          <AvisoDeFoneBluetooth>
+            A entrada está em “Padrão do sistema” e há um microfone de fone Bluetooth na lista (
+            <strong>{foneNaLista.label}</strong>). Se for ele que o Windows usar, o fone entra em
+            modo mãos-livres durante a chamada e tudo que tocar nele fica abafado. Para não
+            depender do palpite do sistema, escolha aqui um microfone que não seja o do fone.
+          </AvisoDeFoneBluetooth>
+        )}
 
         <div className="mt-3 flex items-center gap-3">
           {!devices.autorizado && (
@@ -322,6 +372,12 @@ export default function VozTab() {
             fieldset o texto de ajuda cairia **depois** do traço e pareceria
             legenda da redução de ruído, que é o bloco seguinte. */}
         <div className="border-b border-border-subtle py-3">
+          {/* As ajudas abaixo não vêm mais do `t()`: as chaves
+              `voz.tratamentoSistemaAjuda`, `voz.tratamentoAppAjuda` e
+              `voz.tratamentoAjuda` ainda prometem que "No app" não mexe nos
+              outros aplicativos, e isso é falso (ver o comentário acima).
+              Texto literal em pt-BR, como o resto da UI, até o `lib/i18n.ts`
+              ser corrigido nos dois idiomas. */}
           <RadioCards
             semDivisoria
             legend={t("voz.tratamento")}
@@ -331,12 +387,23 @@ export default function VozTab() {
               {
                 value: "sistema",
                 label: t("voz.tratamentoSistema"),
-                hint: t("voz.tratamentoSistemaAjuda"),
+                hint: "trata o eco melhor; a limpeza é do sistema",
               },
-              { value: "app", label: t("voz.tratamentoApp"), hint: t("voz.tratamentoAppAjuda") },
+              {
+                value: "app",
+                label: t("voz.tratamentoApp"),
+                hint: "limpa aqui dentro; usa mais CPU",
+              },
             ]}
           />
-          <p className="mt-2 text-xs text-text-muted">{t("voz.tratamentoAjuda")}</p>
+          <p className="mt-2 text-xs text-text-muted">
+            “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem
+            fala no alto-falante. “No app” desliga os dois e deixa a limpeza com a supressão
+            avançada, que roda aqui dentro e custa CPU. Nenhuma das duas muda o que acontece com os
+            outros aplicativos — para o Windows, qualquer microfone aberto já é uma chamada, e é
+            isso (não esta escolha) que abaixa o volume dos outros apps e, em fone Bluetooth,
+            deixa tudo abafado.
+          </p>
         </div>
         <RadioCards
           legend={t("voz.ruido")}
@@ -352,15 +419,19 @@ export default function VozTab() {
           ]}
         />
         <p className="-mt-1 pb-3 text-xs text-text-muted">{t("voz.ruidoAjuda")}</p>
+        {/* Mesmo motivo das ajudas do preset: `voz.ecoAjuda` e `voz.ganhoAjuda`
+            dizem que estes dois interruptores são "o que abafa os outros
+            aplicativos", e não são — o modo de comunicação do Windows não
+            depende deles. Texto literal até o `lib/i18n.ts` acompanhar. */}
         <ToggleLinha
           titulo={t("voz.eco")}
-          hint={t("voz.ecoAjuda")}
+          hint="Tira do seu microfone o som que sai do seu alto-falante. Quem usa fone pode desligar sem ganhar eco."
           checked={processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...processamento, eco } })}
         />
         <ToggleLinha
           titulo={t("voz.ganho")}
-          hint={t("voz.ganhoAjuda")}
+          hint="Nivela o seu volume quando você fala perto ou longe do microfone."
           checked={processamento.ganho}
           onChange={(ganho) => setAudioPref({ processamento: { ...processamento, ganho } })}
         />
@@ -472,6 +543,28 @@ export default function VozTab() {
 
       {erro && <p className="text-sm text-status-danger">{erro}</p>}
     </>
+  );
+}
+
+/**
+ * Bloco de aviso da seção de dispositivos.
+ *
+ * Mesma moldura dos outros avisos das configurações (`AlertTriangle` em
+ * `--status-warning` sobre `--background-base-lowest`, ver
+ * `NotificacoesTab`/`SegurancaTab`): é um recado que a pessoa precisa ler, não
+ * um erro que quebrou alguma coisa — e é por isso que ele não usa vermelho nem
+ * some sozinho.
+ */
+function AvisoDeFoneBluetooth({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+      <AlertTriangle
+        size={16}
+        className="mt-0.5 shrink-0 text-status-warning"
+        aria-hidden="true"
+      />
+      <p className="min-w-0 text-xs leading-relaxed text-text-muted">{children}</p>
+    </div>
   );
 }
 

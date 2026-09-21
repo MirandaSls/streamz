@@ -35,6 +35,25 @@
 //!   não deixa o Windows sem ducking para sempre;
 //! - quem já escolheu "não fazer nada" não é tocado.
 //!
+//! **O que isto NÃO resolve — leia antes de culpar este arquivo.**
+//! `UserDuckingPreference` só escolhe *quanto* a política de comunicações
+//! abaixa os outros sons: as opções da aba Comunicações são literalmente
+//! "silenciar / reduzir 80% / reduzir 50% / não fazer nada". É **volume**.
+//! Ela não desfaz — e nenhum valor dela desfaz — o que a *categoria* do stream
+//! provoca:
+//!
+//! - **Fone Bluetooth**: abrir o microfone do fone obriga o Windows a trocar o
+//!   perfil do aparelho de A2DP (estéreo, banda cheia) para HFP (mono, banda
+//!   estreita). O fone inteiro passa a soar abafado, música e vídeo junto. É o
+//!   aparelho, não a política; só sair desse microfone devolve o A2DP.
+//! - **Driver com perfil de comunicação** (Realtek/Nahimic/Waves e afins):
+//!   alguns trocam a cadeia de efeitos do ponto de saída enquanto existe
+//!   stream de comunicação, o que também soa como "abafado".
+//!
+//! Ou seja: "o som dos outros ficou **baixo**" é este arquivo; "o som dos
+//! outros ficou **abafado**" não é, e não vai ser. O aviso ao usuário mora na
+//! web (`components/settings/VozTab.tsx`).
+//!
 //! A regra é pura e testada (`Ambiente` é o registro e o arquivo); o registro
 //! real só existe no Windows. Nos outros alvos os comandos não fazem nada.
 

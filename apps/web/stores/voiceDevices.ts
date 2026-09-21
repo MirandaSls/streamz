@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { create } from "zustand";
+import { restaurarAtenuacaoDoWindows, suspenderAtenuacaoDoWindows } from "@/lib/desktop";
 
 /**
  * Microfone, saída de áudio e câmera escolhidos pelo usuário.
@@ -213,6 +214,31 @@ let jaPediu = false;
 /** Um `refresh` de cada vez: quatro componentes montando juntos não são quatro prompts. */
 let emCurso: Promise<void> | null = null;
 
+/**
+ * Suspende a atenuação do Windows antes de abrir uma captura, e a devolve
+ * depois. Sempre pareados — inclusive no caminho de erro.
+ *
+ * Toda captura de microfone do Chromium abre como stream de **comunicações**
+ * (`AudioCategory_Communications`, decidido no `Open()` da captura WASAPI e sem
+ * opção de desligar), e o padrão do Windows é abaixar em 80% o volume dos
+ * outros aplicativos enquanto isso dura. Não é só a chamada que abre captura: a
+ * sonda de rótulos logo abaixo e o teste de microfone também — e sem isto
+ * montar a aba "Voz e vídeo" já abaixava a música.
+ *
+ * Quem conta quantos pedidos estão de pé é a própria ponte (`lib/desktop.ts`),
+ * para que a suspensão da chamada participe da mesma conta só por usar o par.
+ * Estes dois nomes existem porque dizem a intenção no ponto de uso; não há
+ * regra aqui.
+ */
+export async function suspenderAtenuacaoDaCaptura(): Promise<void> {
+  await suspenderAtenuacaoDoWindows();
+}
+
+/** Par de `suspenderAtenuacaoDaCaptura`. */
+export function devolverAtenuacao(): void {
+  void restaurarAtenuacaoDoWindows();
+}
+
 export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   inputs: [],
   outputs: [],
@@ -271,12 +297,19 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
         } else {
           jaPediu = true;
           let faixa: MediaStream | null = null;
+          // antes do `getUserMedia`: esta sonda abre uma captura de verdade, e
+          // sem isto só montar a aba "Voz e vídeo" já abaixava o volume dos
+          // outros aplicativos (ver `suspenderAtenuacaoDaCaptura`, acima)
+          await suspenderAtenuacaoDaCaptura();
           try {
-            // `audio: true` puro liga AEC/AGC por padrão, e é só isso que o
-            // Chromium precisa ver para pôr o sistema em "modo de comunicação"
-            // — no Windows isso ativa o ducking do áudio dos outros apps
-            // (Spotify etc.) mesmo sem call nenhuma em curso, só de abrir esta
-            // aba. A sonda quer rótulo, não processamento: pede tudo desligado.
+            // A sonda quer rótulo, não processamento: pedir tudo desligado
+            // poupa a cadeia de tratamento **da nossa** captura (é o que vira
+            // `AUDCLNT_STREAMOPTIONS_RAW` no Windows). O que isto **não** faz
+            // é tirar o stream da categoria de comunicações — o Chromium a
+            // marca incondicionalmente —, e é a categoria, não o processamento,
+            // que liga o ducking do Windows e põe o fone Bluetooth em
+            // mãos-livres. Do ducking cuida a linha acima; do fone, só avisar
+            // (`ehMicrofoneDeFoneBluetooth`).
             faixa = await md.getUserMedia({
               audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
             });
@@ -288,6 +321,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
             motivo = "negado";
           } finally {
             faixa?.getTracks().forEach((t) => t.stop());
+            devolverAtenuacao();
           }
           if (motivo === "ok" && !temRotulo(todos)) motivo = "sem-rotulos";
         }

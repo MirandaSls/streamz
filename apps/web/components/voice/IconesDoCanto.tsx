@@ -10,6 +10,14 @@ import { BotaoDeIcone } from "@/components/ui/primitivos";
  * **soltos**, fora de qualquer cápsula: são ações sobre a janela, não sobre a
  * chamada, e misturá-las com o microfone confundiria as duas coisas.
  *
+ * **São dois, e continuam dois.** Expandir o palco dentro da janela (o modo
+ * `ui.palcoExpandido`) é ação sobre o leiaute, não sobre a janela, e por isso
+ * tem canto próprio — a seta do canto inferior **esquerdo**, que é onde o
+ * Discord põe a dele (`BotaoDeExpandir`, em `CallStage.tsx`, com a medida).
+ * Um terceiro ícone aqui desmancharia o par que o print 101857 mediu, e
+ * deixaria dois glifos parecidos ("expandir" e "tela cheia") colados, com a
+ * dica como única diferença entre duas ações que não são a mesma.
+ *
  * Medido na print `2026-08-31 101857` (1:1, 1918×905):
  * - glifo de **20px** nos dois (pop-out x=1829–1849 / y=856–875; tela cheia
  *   x=1877–1896 / y=857–874) → `BotaoDeIcone` `md` (caixa 32, ícone 20);

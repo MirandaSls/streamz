@@ -26,6 +26,7 @@ import {
   tetoDoPalco,
 } from "@/components/voice/call-split-layout";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -51,6 +52,22 @@ import { useVoice } from "@/stores/voice";
  *
  * A tela cheia (ver `fullscreen.ts`) não tem nada a ver com esta divisão: o
  * elemento em tela cheia é promovido pelo compositor e ignora as medidas daqui.
+ *
+ * O **palco expandido** (`ui.palcoExpandido`, ver `CallStage`) tem, e é o único
+ * estado de fora que esta divisão precisa conhecer: ali quem promove o palco
+ * somos nós, com um `absolute inset-0` que sobe até a região de conteúdo. Duas
+ * coisas têm de sair da frente, e as duas moram na divisão **vertical** — que
+ * é a da conversa direta, a única cujo palco (`CallStage`) oferece o botão
+ * hoje; o canal de voz (`VoicePanel`) ainda não entra neste modo, e por isso a
+ * divisão horizontal ficou como estava em vez de ganhar um ramo que ninguém
+ * executa e que, ligado por engano, esconderia a conversa sem botão de volta:
+ *
+ * - o **invólucro do palco não pode ser `relative`**, ou o `absolute` pararia
+ *   nele — o palco ficaria preso na faixa de 199px que deveria ter deixado;
+ * - a conversa e o divisor **somem de verdade** (`hidden`), e não só por
+ *   ficarem atrás: escondido a CSS, nada ali recebe Tab, e um Tab que caísse no
+ *   composer invisível seria o pior tipo de defeito de teclado. `hidden` e não
+ *   desmontar, para a conversa voltar como estava quando o palco recolher.
  */
 
 /** Enquanto a coluna não foi medida (primeiro quadro, SSR): evita salto visível. */
@@ -164,6 +181,10 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
   const [disponivel, setDisponivel] = useState(0);
   const [proporcao, setProporcao] = useState<number | null>(null);
   const ehMobile = useEhMobile();
+  // mesma conta do `CallStage` (lá está o porquê de o celular ficar de fora):
+  // os dois precisam concordar no mesmo quadro, ou o palco se promove sem a
+  // conversa sair da frente — ou o contrário
+  const expandido = useUI((s) => s.palcoExpandido) && !ehMobile;
   const chave = ehMobile ? CHAVE_PROPORCAO_MOBILE : CHAVE_PROPORCAO;
   const ehMobileRef = useRef(ehMobile);
   ehMobileRef.current = ehMobile;
@@ -259,11 +280,20 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         // o `maxHeight` em CSS cobre o quadro entre a coluna encolher e o
         // observador reagir: sem ele a altura de uma tela grande engoliria o
         // chat por um instante
-        style={{
-          height: altura,
-          maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)`,
-        }}
-        className="relative flex min-h-0 shrink-0 flex-col"
+        style={
+          expandido
+            ? undefined
+            : {
+                height: altura,
+                maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)`,
+              }
+        }
+        className={
+          // expandido o palco está fora do fluxo (ver o cabeçalho do arquivo):
+          // sem `relative` para não prendê-lo, e sem altura para este invólucro
+          // vazio não deixar uma faixa de 199px por baixo dele
+          expandido ? "flex min-h-0 flex-1 flex-col" : "relative flex min-h-0 shrink-0 flex-col"
+        }
       >
         {chamada}
       </div>
@@ -284,10 +314,13 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         // mantém a borda transparente, então nada disso aparece na tela.
         className={`h-px shrink-0 cursor-row-resize border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none ${
           ehMobile ? PEGA_TOQUE : "border-y-2"
-        }`}
+        } ${expandido ? "hidden" : ""}`}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{chat}</div>
+      {/* `hidden` no lugar de `flex`, e não os dois na mesma classe: as duas
+          declaram `display`, e qual vence sairia da ordem do CSS gerado, não
+          da ordem em que estão escritas aqui. */}
+      <div className={expandido ? "hidden" : "flex min-h-0 min-w-0 flex-1 flex-col"}>{chat}</div>
     </div>
   );
 }
