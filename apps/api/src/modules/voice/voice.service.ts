@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { createHmac } from "node:crypto";
-import { AccessToken, TrackSource } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, TrackSource } from "livekit-server-sdk";
 import {
   Permission,
   hasPermission,
@@ -130,6 +130,9 @@ export class VoiceService {
     const redis = redisClient();
     return redis ? new RedisVoiceStateStore(redis) : new MemoryVoiceStateStore();
   })();
+
+  /** Cliente de sala do LiveKit, criado na primeira revogação (ver `roomService`). */
+  private roomClient: RoomServiceClient | null = null;
 
   constructor(
     private readonly guilds: GuildsService,
@@ -525,6 +528,118 @@ export class VoiceService {
     const channel = await this.canal(channelId);
     await this.broadcast(channelId, channel?.guildId ?? null, userId, VOICE_FLAGS_PADRAO, false);
     return channel;
+  }
+
+  // ── expulsão de verdade (estado + credencial do LiveKit) ───
+
+  /**
+   * O `RoomServiceClient` — a API de **servidor** do LiveKit, a única que
+   * desconecta alguém que já está na sala.
+   *
+   * `null` sem credencial, como o resto do módulo: voz é dependência opcional
+   * (o mesmo tratamento do R2) e a falta dela não pode derrubar uma expulsão.
+   */
+  private roomService(): RoomServiceClient | null {
+    if (!this.isConfigured()) return null;
+    if (!this.roomClient) {
+      // `LIVEKIT_URL` é o `wss://` que o cliente usa; a API de servidor fala
+      // HTTP. Trocar o esquema aqui é uma linha e evita depender de o SDK
+      // fazê-lo por conta própria.
+      const http = process.env.LIVEKIT_URL!.replace(/^ws/i, "http");
+      this.roomClient = new RoomServiceClient(
+        http,
+        process.env.LIVEKIT_API_KEY!,
+        process.env.LIVEKIT_API_SECRET!,
+      );
+    }
+    return this.roomClient;
+  }
+
+  /**
+   * Derruba um participante da sala no LiveKit — o que **invalida** a
+   * credencial dele ali.
+   *
+   * Sem isto, "expulso da voz" é um pedido educado ao cliente
+   * (`WS_EVENTS.VOICE_EVICTED`): o token é assinado com uma hora de validade e
+   * nada o revogava, então quem saiu do grupo, foi removido, expulso ou banido
+   * continuava ouvindo e publicando até o token vencer — bastava ignorar o
+   * evento. A saída deixa de ser cooperativa aqui.
+   *
+   * **Nunca lança.** Quem chama é sempre uma operação que já aconteceu no
+   * banco; o LiveKit fora do ar não pode desfazê-la. O que se perde nesse caso
+   * é a mídia no ar até o token vencer, e isso fica no log.
+   */
+  async removerDaSala(room: string, identity: string): Promise<void> {
+    const client = this.roomService();
+    if (!client) return;
+    try {
+      await client.removeParticipant(room, identity);
+    } catch (e) {
+      // "não está na sala" é o caso comum e não é falha: a identidade de tela
+      // quase nunca existe, e o estado do Streamz pode estar um passo à frente
+      // do LiveKit. Só o que não for isso merece barulho.
+      const erro = e as { code?: string; message?: string };
+      const detalhe = erro?.message ?? String(e);
+      if (erro?.code === "not_found") {
+        this.logger.debug(`LiveKit: ${identity} já não estava em ${room}`);
+      } else {
+        this.logger.warn(`LiveKit não removeu ${identity} de ${room}: ${detalhe}`);
+      }
+    }
+  }
+
+  /**
+   * Tira alguém da chamada de um canal **de vez**: estado efêmero, conexão de
+   * voz e a segunda conexão de tela.
+   *
+   * É o par de `leave` para quem **perdeu o acesso** em vez de ter desligado.
+   * O `leave` sozinho só apaga o estado do Streamz — a conexão com o LiveKit
+   * fica de pé, e quem foi removido de um grupo seguia no palco de todo mundo.
+   *
+   * Também não lança: ver `removerDaSala`.
+   */
+  async expulsarDaVoz(userId: string, channelId: string): Promise<void> {
+    const canal = await this.canal(channelId);
+    // canal já apagado (o último a sair de um grupo leva o grupo junto) cai no
+    // prefixo de conversa, que é o que ele tinha: `salaDe` só olha o tipo
+    const sala = this.salaDe(canal?.type ?? "DM", channelId);
+    try {
+      // o estado primeiro: é ele que emite `voice.state` com `connected: false`
+      // e some com a pessoa do palco de quem ficou
+      await this.leave(userId, channelId);
+    } catch (e) {
+      this.logger.error(
+        `Falha ao tirar ${userId} do estado de voz de ${channelId}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+    await this.removerDaSala(sala, userId);
+    // a tela do app de desktop é um segundo participante, com token próprio:
+    // sem esta linha a pessoa sai da chamada e continua transmitindo a tela
+    await this.removerDaSala(sala, identidadeDeTela(userId));
+  }
+
+  /**
+   * Desliga alguém de **qualquer** canal de voz de um servidor — o que kick,
+   * ban e saída do servidor precisam fazer.
+   *
+   * A lista de canais vem do **servidor**, não da associação do usuário:
+   * `channelsOf` parte dos servidores em que a pessoa é membro e, depois do
+   * `delete` do `GuildMember`, não devolveria mais nada. Assim funciona antes
+   * e depois de a linha sumir.
+   */
+  async desligarDoServidor(userId: string, guildId: string): Promise<void> {
+    const canais = await this.prisma.channel.findMany({
+      where: { guildId, type: "VOICE" },
+      select: { id: true },
+    });
+    if (canais.length === 0) return;
+    const mapa = await this.store.membersOf(canais.map((c) => c.id));
+    for (const [channelId, membros] of mapa) {
+      if (membros.some((m) => m.userId === userId)) {
+        await this.expulsarDaVoz(userId, channelId);
+      }
+    }
   }
 
   /**

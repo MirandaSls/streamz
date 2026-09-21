@@ -15,6 +15,8 @@ import type { GuildsService } from "../guilds/guilds.service";
 import type { MessagesService } from "../messages/messages.service";
 import type { ReadStateService } from "../read-state/read-state.service";
 import type { StorageService } from "../storage/storage.service";
+import type { CallsService } from "../voice/calls.service";
+import type { VoiceService } from "../voice/voice.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { JwtPayload } from "../../common/jwt.guard";
 
@@ -211,6 +213,9 @@ function servicoDeConversas(canal: Record<string, unknown>) {
     {} as unknown as FriendsService,
     messages,
     {} as unknown as StorageService,
+    // voz: estes testes não tocam chamada — o par que `sairDaChamada` usa
+    { async expulsarDaVoz() {} } as unknown as VoiceService,
+    { async onDisconnect() {} } as unknown as CallsService,
   );
   return { dms, emissoes };
 }

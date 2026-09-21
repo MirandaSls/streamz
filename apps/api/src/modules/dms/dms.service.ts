@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   PayloadTooLargeException,
   ServiceUnavailableException,
@@ -39,6 +40,8 @@ import { ReadStateService } from "../read-state/read-state.service";
 import { FriendsService } from "../friends/friends.service";
 import { MessagesService } from "../messages/messages.service";
 import { StorageService } from "../storage/storage.service";
+import { CallsService } from "../voice/calls.service";
+import { VoiceService } from "../voice/voice.service";
 import { sniffImage } from "../uploads/media";
 
 /**
@@ -83,6 +86,8 @@ const WITH_MEMBERS = {
 
 @Injectable()
 export class DMsService {
+  private readonly logger = new Logger(DMsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
@@ -90,6 +95,10 @@ export class DMsService {
     private readonly friends: FriendsService,
     private readonly messages: MessagesService,
     private readonly storage: StorageService,
+    // quem perde o acesso à conversa tem de sair da chamada junto — ver
+    // `sairDaChamada`
+    private readonly voice: VoiceService,
+    private readonly calls: CallsService,
   ) {}
 
   /**
@@ -285,6 +294,9 @@ export class DMsService {
     if (channel.type !== "GROUP") {
       throw new BadRequestException("Não é possível sair de uma conversa 1-a-1");
     }
+
+    // antes de mexer no vínculo: ver `sairDaChamada`
+    await this.sairDaChamada(meId, channelId);
 
     const restantes = channel.members.filter((p) => p.userId !== meId);
     if (restantes.length === 0) {
@@ -555,6 +567,36 @@ export class DMsService {
   }
 
   /**
+   * Desliga alguém da chamada da conversa: estado de voz, conexão no LiveKit
+   * e o que o `CallsService` guarda (toque pendente, fim por sala vazia).
+   *
+   * É o mesmo par que o gateway dispara quando o socket cai — perder o acesso
+   * tem de valer tanto quanto fechar a aba. Sem isto, quem sai (ou é removido)
+   * de um grupo no meio da chamada **continua ouvindo e falando**, e para
+   * sempre: ele deixou de ser `ChannelMember`, então o `voice.state` dos outros
+   * já não chega nele e a interface dele congela sem desligar nada.
+   *
+   * Chamar **antes** de apagar o `ChannelMember` é obrigatório: o `voice.state`
+   * de uma conversa vai para os participantes (não há sala de servidor a que
+   * recorrer), e depois do `delete` o próprio removido não estaria na lista de
+   * destinatários do seu desligamento.
+   *
+   * Não lança: a saída do grupo já aconteceu e não se desfaz porque o LiveKit
+   * está fora do ar.
+   */
+  private async sairDaChamada(userId: string, channelId: string): Promise<void> {
+    try {
+      await this.voice.expulsarDaVoz(userId, channelId);
+      await this.calls.onDisconnect(userId, channelId);
+    } catch (e) {
+      this.logger.error(
+        `Falha ao tirar ${userId} da chamada de ${channelId}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+  }
+
+  /**
    * "Esta conversa saiu da minha coluna" — para **todas** as minhas conexões.
    *
    * Fechar a conversa e sair do grupo são decisões da conta, não da aba: sem
@@ -599,6 +641,8 @@ export class DMsService {
     const alvo = channel.members.find((m) => m.userId === userId);
     if (!alvo) throw new NotFoundException("Esta pessoa não está no grupo");
 
+    // antes do delete: ver `sairDaChamada`
+    await this.sairDaChamada(userId, channelId);
     await this.prisma.$transaction([
       this.prisma.channelMember.delete({
         where: { channelId_userId: { channelId, userId } },

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   PayloadTooLargeException,
   ServiceUnavailableException,
@@ -82,8 +83,20 @@ interface GuildPermissionContext {
   roles: Role[];
 }
 
+/**
+ * Desligar alguém da voz de um servidor. Quem implementa é o `VoiceService`
+ * (`desligarDoServidor`); ver `GuildsService.registrarDesligamentoDeVoz` para
+ * o porquê de ser um plugue e não uma injeção.
+ */
+export type DesligamentoDeVoz = (userId: string, guildId: string) => Promise<void>;
+
 @Injectable()
 export class GuildsService {
+  private readonly logger = new Logger(GuildsService.name);
+
+  /** Ver `registrarDesligamentoDeVoz`. Nulo até o `VoiceModule` se plugar. */
+  private desligarDaVoz: DesligamentoDeVoz | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
@@ -92,6 +105,25 @@ export class GuildsService {
     // h-moderacao: kick/ban/unban/papel entram no registro de auditoria
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * Plugue do módulo de voz: sair, ser expulso ou banido tem de **tirar a
+   * pessoa da chamada**, não só das salas do Socket.IO.
+   *
+   * Não é uma injeção porque a seta entre os dois módulos já aponta ao
+   * contrário — `VoiceModule` importa `GuildsModule`, porque todo assert de
+   * canal da voz vem daqui. Injetar `VoiceService` fecharia o ciclo e a saída
+   * seria um `forwardRef`, que funciona e esconde a dependência de verdade (é
+   * o raciocínio que o `InteractionsModule` já registrou). Então quem se pluga
+   * é a voz, no `onModuleInit` do `VoiceModule`, e este arquivo continua sem
+   * saber que existe módulo de voz.
+   *
+   * Sem ninguém registrado (um teste que monta só este service) o caminho é
+   * inerte — o que se perde é a desconexão, não a moderação.
+   */
+  registrarDesligamentoDeVoz(fn: DesligamentoDeVoz): void {
+    this.desligarDaVoz = fn;
+  }
 
   /**
    * Cria o servidor com o dono como membro OWNER, o par de canais iniciais
@@ -1164,14 +1196,38 @@ export class GuildsService {
     }));
   }
 
-  /** Tira os sockets do ex-membro das salas do servidor e de todos os canais dele. */
+  /**
+   * Tira o ex-membro das salas do servidor e de todos os canais dele — e da
+   * **chamada de voz**, se ele estava em uma.
+   *
+   * A ordem importa: o `voice.state` de saída vai para a sala do servidor, e
+   * quem já tivesse sido tirado dela não receberia o próprio desligamento — a
+   * chamada ficaria de pé na tela dele, sem nada para desligar.
+   */
   private async detachFromGuildRooms(guildId: string, userId: string) {
+    await this.cortarAVoz(guildId, userId);
     const channels = await this.prisma.channel.findMany({
       where: { guildId },
       select: { id: true },
     });
     this.realtime.leaveChannelRooms(userId, channels.map((c) => c.id));
     this.realtime.leaveGuildRoom(userId, guildId);
+  }
+
+  /**
+   * Nunca lança: a expulsão já está gravada no banco e não pode ser desfeita
+   * porque o servidor de mídia caiu. Falhou, registra e segue.
+   */
+  private async cortarAVoz(guildId: string, userId: string) {
+    if (!this.desligarDaVoz) return;
+    try {
+      await this.desligarDaVoz(userId, guildId);
+    } catch (e) {
+      this.logger.error(
+        `Falha ao desligar ${userId} da voz de ${guildId}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
   }
 
   /**

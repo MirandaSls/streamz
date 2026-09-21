@@ -7,6 +7,8 @@ import type { RealtimeService } from "../realtime/realtime.service";
 import type { FriendsService } from "../friends/friends.service";
 import type { MessagesService } from "../messages/messages.service";
 import type { StorageService } from "../storage/storage.service";
+import type { CallsService } from "../voice/calls.service";
+import type { VoiceService } from "../voice/voice.service";
 
 /**
  * Privacidade por servidor (item 6 do contrato de menus): `POST /dms` (via
@@ -104,6 +106,9 @@ function servico(opcoes: {
     friends,
     {} as MessagesService,
     {} as StorageService,
+    // voz: estes testes não tocam chamada — o par que `sairDaChamada` usa
+    { async expulsarDaVoz() {} } as unknown as VoiceService,
+    { async onDisconnect() {} } as unknown as CallsService,
   );
 }
 

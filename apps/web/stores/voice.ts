@@ -203,7 +203,6 @@ function encerrarCapturaDaTela() {
  * pessoa desligar a câmera, escolher outro fps ou sair da sala.
  */
 let cameraSobCpu = false;
-
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
   states: Record<string, VoiceStateEvent[]>;
@@ -1407,6 +1406,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
 
+
     // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
     // a valer alta, e o que desce para a faixa (188×106) vira miniatura. Sem
     // reaplicar aqui, a tela que acabou de subir continuaria em baixa até o
@@ -1480,6 +1480,33 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         await abrirConversa(channelId);
         const r = await api.startCall(channelId);
         for (const e of r.states) get().applyState(e);
+
+        // ── o REST não basta: o socket também precisa entrar na voz ──
+        //
+        // O `POST /dms/:id/call` põe a conta no estado de voz, mas quem grava
+        // `voiceChannelId` no socket é o **gateway**, e ele só o faz no
+        // `voice.join`. Sem estas duas linhas, quem liga ficava com o socket sem
+        // canal de voz — e aí o `voice.update` era descartado em silêncio (mudo,
+        // surdo, câmera e tela nunca chegavam ao outro lado), a queda da conexão
+        // não agendava saída nenhuma (o outro lado ficava com um fantasma
+        // permanente, sem `reconnecting` e sem `call.end`) e o F5 não retomava a
+        // chamada. Parecia funcionar porque a primeira reconexão de socket chama
+        // `rejoinAposReconexao`, que emite este mesmo par: o conserto só chegava
+        // depois de a chamada já ter dado errado.
+        //
+        // **Depois** do `POST`, nunca antes: `CallsService.start` decide se o
+        // telefone toca olhando se a sala está vazia, e entrar pelo WS primeiro
+        // faria a chamada nascer como "entrei numa que já estava rolando" — o
+        // outro lado nunca tocaria. **Antes** do LiveKit porque estado de voz não
+        // depende de mídia (a mesma ordem do `connect`): a sala pode demorar ou
+        // falhar, e até lá o gateway já me conta como presente. Repetir o join é
+        // seguro — o servidor o trata como reentrada —; ficar sem ele não é.
+        emit(WS_EVENTS.VOICE_JOIN, { channelId });
+        // as flags **reais** logo em seguida: o join do REST entra com
+        // `VOICE_FLAGS_PADRAO`, então quem liga com o microfone fechado nasceria
+        // desmutado para os outros até o primeiro `syncFlags`
+        emit(WS_EVENTS.VOICE_UPDATE, flags());
+
         if (!r.voice) {
           // sem LiveKit a chamada ainda toca e o estado de voz vale: só não há som
           set({ status: "connected", midiaDisponivel: false, erro: null });
@@ -1509,6 +1536,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
+      // quem atende já ganha `voiceChannelId` pelo próprio `call.accept`, mas só
+      // o `voice.join` passa pela expulsão das outras conexões da conta: sem
+      // ele, atender no celular deixava o desktop na sala até o LiveKit derrubar
+      // a identidade repetida — e lá aparecia "a conexão de voz caiu", como se
+      // fosse queda de rede, em vez do aviso de que entrei em outro aparelho
+      emit(WS_EVENTS.VOICE_JOIN, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
       lembrarSala({ channelId, guildId: null, name: "" });
       await abrirConversa(channelId);
@@ -1543,6 +1576,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     handleRing: (evento) => {
+      // o toque é o **primeiro som** que o WebView2 emite numa chamada, e é
+      // depois do primeiro som que a sessão de áudio existe para ser marcada:
+      // pedir aqui é a melhor chance de a varredura achar alguma coisa, e sobra
+      // tempo de rajada até o "Atender". Quem liga não precisa de um pedido
+      // próprio para o ringback — entra na sala na mesma hora, e o
+      // `publicarMicrofone` de lá pede por ele.
       // chamada recebida não abre modal: o cartão flutuante do canto vive na
       // `VoiceLayer` e reage à fase `incoming` sozinho, sem travar a interface
       get().dispatchCall({ type: "ring", channelId: evento.channelId, from: evento.from });

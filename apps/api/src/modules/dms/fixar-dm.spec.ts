@@ -8,6 +8,8 @@ import type { RealtimeService } from "../realtime/realtime.service";
 import type { FriendsService } from "../friends/friends.service";
 import type { MessagesService } from "../messages/messages.service";
 import type { StorageService } from "../storage/storage.service";
+import type { CallsService } from "../voice/calls.service";
+import type { VoiceService } from "../voice/voice.service";
 
 /**
  * Fixar/desafixar conversa de DM (`PUT`/`DELETE /dms/:id/pin`, item 1 do
@@ -184,6 +186,9 @@ function servico(canais: ReturnType<typeof canal>[], ultimaMensagem: Record<stri
     {} as FriendsService,
     {} as MessagesService,
     {} as StorageService,
+    // voz: estes testes não tocam chamada — o par que `sairDaChamada` usa
+    { async expulsarDaVoz() {} } as unknown as VoiceService,
+    { async onDisconnect() {} } as unknown as CallsService,
   );
   return { service, pins, escondidas, eventos };
 }
