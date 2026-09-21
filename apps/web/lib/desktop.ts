@@ -309,9 +309,15 @@ export async function focarJanela(): Promise<void> {
  * Existe porque a primeira nem sempre está disponível no app desktop — o
  * WKWebView do macOS nasce com o *element fullscreen* desligado, e aí o botão
  * de tela cheia do palco simplesmente não fazia nada. Quando a do DOM falta ou
- * é recusada, o usuário quer a segunda: é pior (ninguém promove elemento
- * nenhum), mas é tela cheia. Quem escolhe entre as duas é
- * `components/voice/fullscreen.ts`.
+ * é recusada, quem pediu o **palco** em tela cheia aceita a segunda: é pior
+ * (ninguém promove elemento nenhum), mas a chamada ocupa a tela.
+ *
+ * **Só o palco.** Isto aqui não é um substituto genérico da Fullscreen API, e
+ * chamar daqui para ampliar um elemento qualquer é trocar a ação do usuário
+ * por outra — foi assim que a 1.3.0 saiu com o botão de tela cheia da tela
+ * compartilhada pondo o *aplicativo* em tela cheia em vez da transmissão. Quem
+ * escolhe entre as duas é `components/voice/fullscreen.ts`, e lá a escolha é
+ * explícita (`recuarParaAJanela`). Chamador novo passa por lá.
  *
  * As permissões são `core:window:allow-set-fullscreen` e
  * `core:window:allow-is-fullscreen`, em `capabilities/default.json` — sem a
@@ -682,9 +688,32 @@ export async function iniciarServicoDeChamada(titulo: string, texto: string): Pr
  * Tem de vir **antes** do `getUserMedia`. Fora do Tauri é no-op; nos outros
  * sistemas o comando existe e não faz nada. Best-effort: falhar só mantém o
  * comportamento antigo.
+ *
+ * **Só volume.** A preferência escolhe *quanto* o Windows abaixa os outros
+ * sons ("silenciar / 80% / 50% / não fazer nada"). Ela não tira o stream da
+ * categoria de comunicações, e é a categoria — não a atenuação — que troca o
+ * fone Bluetooth para mãos-livres e liga o perfil de comunicação de alguns
+ * drivers. Se o relato for "abafado", e não "baixo", a resposta não está aqui
+ * (ver `src-tauri/src/atenuacao.rs` e o aviso em `settings/VozTab.tsx`).
  */
+/**
+ * Quantos pedidos de suspensão estão de pé agora.
+ *
+ * O lado Rust guarda **um** valor (`atenuacao.rs`): `suspender` é idempotente e
+ * `restaurar` desfaz de uma vez. Sem contar aqui, o primeiro a fechar a captura
+ * devolveria o ducking a quem ainda está com a dele aberta — e isso acontece de
+ * verdade: a sonda de dispositivos e o teste de microfone rodam **dentro** da
+ * chamada, quando alguém abre as configurações de voz no meio dela.
+ *
+ * A contagem mora aqui, e não em quem chama, para que **todos** os caminhos
+ * participem dela só por usar o par — inclusive o da chamada, em `stores/voice`.
+ */
+let pedidosDeSuspensao = 0;
+
 export async function suspenderAtenuacaoDoWindows(): Promise<void> {
   if (!isTauri()) return;
+  // só o primeiro pedido vai ao Rust; os outros só entram na contagem
+  if (++pedidosDeSuspensao > 1) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("suspender_atenuacao_do_windows");
@@ -696,6 +725,11 @@ export async function suspenderAtenuacaoDoWindows(): Promise<void> {
 /** Fim da call: a preferência de comunicações do Windows volta ao que era. */
 export async function restaurarAtenuacaoDoWindows(): Promise<void> {
   if (!isTauri()) return;
+  // `max(0, …)`: há caminhos de saída que restauram sem ter suspendido (uma
+  // entrada na sala que falha antes de publicar o microfone, por exemplo), e
+  // deixar a conta ficar negativa travaria a próxima suspensão de verdade
+  pedidosDeSuspensao = Math.max(0, pedidosDeSuspensao - 1);
+  if (pedidosDeSuspensao > 0) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("restaurar_atenuacao_do_windows");

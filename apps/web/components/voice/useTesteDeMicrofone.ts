@@ -11,7 +11,14 @@ import {
 } from "@/lib/supressor-ruido";
 import { rmsDeAmostras } from "@/stores/voice-falantes";
 import { useVoice } from "@/stores/voice";
-import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from "@/stores/voiceDevices";
+import {
+  aplicarSaida,
+  devolverAtenuacao,
+  explicarMidia,
+  motivoDaFalha,
+  suspenderAtenuacaoDaCaptura,
+  useVoiceDevicesStore,
+} from "@/stores/voiceDevices";
 
 /**
  * "Testar microfone" — o do popover de supressão de ruído e o da aba
@@ -127,6 +134,8 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
     let timer: ReturnType<typeof setInterval> | null = null;
     let fonte: MediaStreamAudioSourceNode | null = null;
     let ligada: MediaStreamTrack | null = null;
+    /** pedi a suspensão da atenuação? só quem pediu devolve. */
+    let atenuacaoSuspensa = false;
 
     // tomar o contexto fora do fluxo assíncrono: se falhar, o teste nem começa
     // (e o `dono` é devolvido na hora, senão o outro montado ficaria travado)
@@ -155,17 +164,21 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
       let faixa = faixaDeMonitoracao();
 
       if (!faixa) {
-        // fora de qualquer call: a captura é deste hook
+        // fora de qualquer call: a captura é deste hook — e captura do
+        // Chromium é sempre stream de comunicações, então a atenuação dos
+        // outros aplicativos tem de ser suspensa **antes** do `getUserMedia`
+        // (a flag vai primeiro para o par nunca ficar solto)
+        atenuacaoSuspensa = true;
+        await suspenderAtenuacaoDaCaptura();
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: {
               deviceId: inputId ? { exact: inputId } : undefined,
               // o mesmo processamento que a call publicaria: um teste com outra
-              // cadeia responderia sobre um microfone que não é o seu. Efeito
-              // colateral aceito: com `echoCancellation` ligado (o padrão) o
-              // Chromium pode pôr o sistema em modo de comunicação enquanto o
-              // teste dura, o que no Windows abaixa o volume de outros apps —
-              // some quando o teste para, junto com a captura.
+              // cadeia responderia sobre um microfone que não é o seu. O que
+              // estes três decidem é só o tratamento da própria faixa —
+              // desligar o eco não tira o stream do modo de comunicação do
+              // sistema, e é por isso que a suspensão acima existe.
               echoCancellation: eco,
               noiseSuppression: ruido === "padrao",
               autoGainControl: ganho,
@@ -247,6 +260,9 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
       cadeiaPropria.current = null;
       void cadeia?.destroy().catch(() => {});
       stream?.getTracks().forEach((t) => t.stop());
+      // depois de parar a faixa: `devolverAtenuacao` só restaura quando não
+      // sobra captura nossa aberta
+      if (atenuacaoSuspensa) devolverAtenuacao();
       // o contexto é um por aba: devolve, não fecha
       liberarContextoDeCaptura();
       if (dono === token.current) dono = null;
