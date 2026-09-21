@@ -25,7 +25,11 @@ import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
-import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
+import {
+  alternarTelaCheiaDe,
+  soltarTelaCheiaDe,
+  suportaTelaCheia,
+} from "@/components/voice/fullscreen";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { abrirMenuDeParticipante, abrirVolumeDe } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
@@ -267,6 +271,42 @@ export function VoiceTile({
   const sou = state.user.id === meId;
   const caixa = useRef<HTMLDivElement>(null);
   /**
+   * **Tela cheia de um tile nunca é a da janela sozinha** — mas no app desktop
+   * ela vem acompanhada dela.
+   *
+   * Dentro do Tauri (WebView2) o `requestFullscreen` só faz o tile preencher o
+   * interior da janela, que não cresce; a janela em tela cheia sozinha mostra o
+   * app com o leiaute normal — foi o defeito da 1.3.0. Por isso
+   * `alternarTelaCheiaDe` faz **as duas** ali (ver `fullscreen.ts`), e o que o
+   * `recuarParaAJanela: false` recusa é só o consolo: se o DOM não promover o
+   * tile, é melhor nada acontecer do que o app inteiro perder a moldura com a
+   * transmissão do mesmo tamanho no meio da grade.
+   *
+   * O mesmo `false` responde o `suportaTelaCheia`, que sem recuo pergunta ao
+   * DOM: "sim" no navegador e no WebView2 (onde o botão voltou a aparecer,
+   * porque agora funciona), "não" no WKWebView do macOS, que nasce com o
+   * *element fullscreen* desligado e onde o botão seria inerte.
+   *
+   * Resolvido num efeito, como em `useTelaCheia`: no HTML do servidor não há
+   * `document`, e decidir na primeira renderização deixaria a hidratação
+   * discordando da marcação.
+   */
+  const [podeTelaCheia, setPodeTelaCheia] = useState(false);
+  useEffect(() => {
+    setPodeTelaCheia(suportaTelaCheia({ recuarParaAJanela: false }));
+  }, []);
+  /**
+   * O tile pode sumir em tela cheia (a pessoa parou de transmitir, a chamada
+   * acabou). O navegador solta a tela cheia do DOM sozinho quando o elemento
+   * deixa a página — a janela do Tauri não —, e sem isto sobraria um app sem
+   * moldura e sem botão para desfazer. O elemento é capturado na montagem: no
+   * desmonte o `ref` já pode ter sido zerado pelo React.
+   */
+  useEffect(() => {
+    const el = caixa.current;
+    return () => soltarTelaCheiaDe(el);
+  }, []);
+  /**
    * O ponteiro está **sobre o retângulo** do tile — e não o `:hover` do CSS.
    *
    * O `group-hover` mentia perto da fileira de ações: o palco desenha faixas
@@ -356,14 +396,14 @@ export function VoiceTile({
       // elemento que o botão "Tela cheia" usa — gesto e botão abrindo caixas
       // diferentes seriam duas telas cheias distintas.
       onDoubleClick={
-        semAcoes
+        semAcoes || !podeTelaCheia
           ? undefined
           : (e) => {
               // botão de dentro já tem ação própria: dois cliques nele não são
               // "dois cliques na transmissão"
               if ((e.target as HTMLElement).closest("button")) return;
               window.clearTimeout(cliquePendente.current);
-              void alternarTelaCheiaDe(caixa.current);
+              void alternarTelaCheiaDe(caixa.current, { recuarParaAJanela: false });
             }
       }
       onContextMenu={(e) => {
@@ -734,8 +774,11 @@ export function VoiceTile({
           >
             {grande ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </AcaoDoTile>
-          {!compacto && (
-            <AcaoDoTile label="Tela cheia" onClick={() => void alternarTelaCheiaDe(caixa.current)}>
+          {!compacto && podeTelaCheia && (
+            <AcaoDoTile
+              label="Tela cheia"
+              onClick={() => void alternarTelaCheiaDe(caixa.current, { recuarParaAJanela: false })}
+            >
               <Maximize size={14} />
             </AcaoDoTile>
           )}
