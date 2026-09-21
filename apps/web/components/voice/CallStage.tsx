@@ -28,9 +28,14 @@ import { useVoice } from "@/stores/voice";
  * uma call rolando e entra sem ninguém precisar ligar de novo.
  *
  * O que o palco **não** mostra é a duração. No Discord o cronômetro não fica na
- * tela: quanto tempo durou é informação de depois, e aparece na mensagem de
- * sistema quando a chamada termina — na tela, ele só faria a conversa parecer
+ * tela: quanto tempo durou é informação de depois, que lá aparece na mensagem
+ * de sistema do fim da chamada — na tela, ele só faria a conversa parecer
  * cronometrada.
+ *
+ * PENDENTE: essa mensagem de sistema **não existe no Streamz** (nem a de
+ * chamada perdida). Enquanto não existir, a duração simplesmente não é
+ * registrada em lugar nenhum — este comentário já afirmou o contrário, e a
+ * correção é criar o tipo de mensagem em `packages/shared` antes de tudo.
  */
 export default function CallStage({
   channelId,
@@ -63,7 +68,7 @@ export default function CallStage({
   const conversa = useDMs((s) => s.channels.find((d) => d.id === channelId) ?? null);
 
   const palco = useRef<HTMLDivElement>(null);
-  const { telaCheia, alternar } = useTelaCheia(palco);
+  const { telaCheia, alternar, suportada: temTelaCheia } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
   const ehMobile = useEhMobile();
   const paisagem = useEhPaisagem();
@@ -129,17 +134,26 @@ export default function CallStage({
         </div>
       )}
 
+      {/* ARMADILHA: este cabeçalho é transparente e cobre a faixa inteira do
+          topo do palco (~56px). Enquanto ele recebia ponteiro, roubava o hover
+          e o clique de tudo que o tile desenha ali em cima — no modo foco o
+          tile começa em y=0 e a fileira de ações dele fica a `top-1`, ou seja,
+          **dentro** desta faixa. Por isso a caixa e os slots de leiaute são
+          `pointer-events-none` e só o conteúdo de verdade (selo e botões)
+          volta a receber ponteiro; é o mesmo padrão do selo flutuante do
+          celular em `VoicePanel`. Os `onPointerEnter/Leave` de `daMoldura`
+          continuam valendo: o React os propaga a partir dos filhos. */}
       <div
         {...daMoldura}
-        className={`absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 transition-opacity duration-200 ${
-          molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 transition-opacity duration-200 ${
+          molduraVisivel ? "opacity-100" : "opacity-0"
         }`}
       >
         {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
             que mantém o título de fato centralizado — os dois lados dividem a
             sobra — sem espremer o selo "ao vivo", que precisa de ~230px e não
             cabia nos 96. */}
-        <span className="flex min-w-0 flex-1 basis-0 items-start">
+        <span className="flex min-w-0 flex-1 basis-0 items-start [&>*]:pointer-events-auto">
           <AoVivoIndicador />
         </span>
 
@@ -154,7 +168,7 @@ export default function CallStage({
           </span>
         )}
 
-        <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1">
+        <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1 [&>*]:pointer-events-auto">
           {grupo && (
             <BotaoDeIcone
               rotulo="Adicionar pessoas"
@@ -225,8 +239,15 @@ export default function CallStage({
             onLeave={() => void endCall()}
           />
           {/* fora do celular: a tela cheia do palco inteiro não é o gesto do
-              telefone — lá se toca no tile (ver `PalcoMobile`) */}
-          {!ehMobile && (
+              telefone — lá se toca no tile (ver `PalcoMobile`).
+
+              `temTelaCheia`: onde a Fullscreen API não existe (webview com o
+              recurso desligado, WebKit antigo) o canto inteiro sai da tela. O
+              par de ícones é uma coisa só — o outro já nasce desabilitado
+              ("em breve") —, e um canto que só mostra o que não dá para usar
+              é pior que canto nenhum. Melhor isso do que um botão que o
+              usuário clica e nada acontece, que foi o defeito daqui. */}
+          {!ehMobile && temTelaCheia && (
             <IconesDoCanto
               telaCheia={telaCheia}
               onTelaCheia={alternar}
