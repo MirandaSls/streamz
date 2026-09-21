@@ -478,43 +478,6 @@ textarea:focus-visible:not([data-sem-anel]),
   animation: gravando-atalho 1s ease-in infinite;
 }
 
-/*
- * Seção de configurações que acabou de receber o salto do menu lateral
- * (`ui/JanelaDeConfiguracoes`, `irParaSecao`).
- *
- * `.container__75920.flash__75920{background:var(--message-mentioned-background-default)}`,
- * `.full-motion .container__75920.flash__75920{animation:settingNavAnchorFlash__75920
- * 2.25s ease;background:transparent}` e `@keyframes
- * settingNavAnchorFlash__75920{0%,11.11%{background:transparent}33.33%,77.78%{background:var(--message-mentioned-background-default)}to{background:transparent}}`
- * (`css-bruto/sob-demanda/48832ff684019b72.css`). A classe sai no
- * `animationend`.
- *
- * Sem movimento o Discord troca a animação por fundo parado enquanto a classe
- * dura. Aqui é igual: com `reduzir-movimento` (ou `prefers-reduced-motion`) o
- * nome da animação vira `none` e o fundo fica aceso — e como aí não existe
- * `animationend`, quem aplica a classe também a tira depois dos mesmos 2,25s.
- */
-@keyframes flash-da-secao {
-  0%,
-  11.11% {
-    background: transparent;
-  }
-  33.33%,
-  77.78% {
-    background: var(--message-mentioned-background-default);
-  }
-  to {
-    background: transparent;
-  }
-}
-.anim-flash-da-secao {
-  animation: flash-da-secao 2.25s ease;
-}
-html.reduzir-movimento .anim-flash-da-secao {
-  animation-name: none !important;
-  background: var(--message-mentioned-background-default);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .anim-toque-recebido,
   .anim-gravando-atalho {
@@ -522,10 +485,6 @@ html.reduzir-movimento .anim-flash-da-secao {
   }
   .anim-toque-recebido {
     opacity: 0;
-  }
-  .anim-flash-da-secao {
-    animation: none;
-    background: var(--message-mentioned-background-default);
   }
 }
 
