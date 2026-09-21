@@ -1,6 +1,7 @@
 # ADR-0007: Entrega contínua por GHCR e SSH de comando forçado
 
-**Status:** Aceita (2026-08-28)
+**Status:** Parcialmente revogada (2026-09-03) — ver "Revogação" no fim.
+Aceita originalmente em 2026-08-28.
 **Data:** 2026-08-28
 **Decisores:** Arthur Miranda
 **Escopo afetado:** `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`,
@@ -98,3 +99,26 @@ Se aparecer um segundo servidor (aí o certo é o servidor puxar sozinho, não o
 empurrar para cada um), se as imagens precisarem de assinatura (`cosign`), ou se
 o volume de builds estourar os minutos do Actions — nesse caso a opção B volta à
 mesa, mas para *buildar*, não para deployar.
+
+
+## Revogação parcial (2026-09-03)
+
+A **automação** desta ADR não existe mais. Em `a534a08d` os workflows do GitHub
+Actions foram removidos: a cobrança da conta travou os runners, nenhum job
+iniciava, e o repositório é privado com o runner Windows custando 2×. Sobrou
+`.github/workflows/ios.yml`.
+
+O que **continua valendo** — e é o miolo da decisão:
+
+- a imagem é construída **fora** da produção e versionada por
+  `ghcr.io/mirandasls/streamz-{api,web}:sha-<7 do commit>`;
+- voltar versão é apontar para a tag antiga, sem rebuildar;
+- o que sobe é rastreável até o commit.
+
+O que **mudou**: quem faz isso é `scripts/publicar-local.sh`, rodado à mão neste
+servidor, e não um workflow disparado pelo merge. Mergear no `main` não publica
+nada. Não há mais checagem automática no PR — a verificação é a do script, ou a
+que quem abre o PR rodar.
+
+**Quando reabrir:** se a conta do GitHub destravar. Os arquivos de workflow não
+estão mais no repositório; restaurá-los é `git show a534a08d^:.github/workflows/ci.yml`.
