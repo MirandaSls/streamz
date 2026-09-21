@@ -296,6 +296,56 @@ export async function focarJanela(): Promise<void> {
   }
 }
 
+// ── Tela cheia da janela ───────────────────────────────────────────────────
+
+/**
+ * Tela cheia da **janela**, que não é a tela cheia do DOM.
+ *
+ * São duas coisas diferentes com o mesmo nome. A Fullscreen API do navegador
+ * *promove um elemento*: o palco vira o conteúdo da tela, o compositor entra no
+ * modo de baixa latência e o Esc devolve. O `setFullscreen` do Tauri tira a
+ * moldura da **janela inteira**, com o app do jeito que está dentro dela.
+ *
+ * Existe porque a primeira nem sempre está disponível no app desktop — o
+ * WKWebView do macOS nasce com o *element fullscreen* desligado, e aí o botão
+ * de tela cheia do palco simplesmente não fazia nada. Quando a do DOM falta ou
+ * é recusada, o usuário quer a segunda: é pior (ninguém promove elemento
+ * nenhum), mas é tela cheia. Quem escolhe entre as duas é
+ * `components/voice/fullscreen.ts`.
+ *
+ * As permissões são `core:window:allow-set-fullscreen` e
+ * `core:window:allow-is-fullscreen`, em `capabilities/default.json` — sem a
+ * primeira a ACL do Tauri recusa a chamada e estas funções respondem como se
+ * não houvesse desktop. No celular não existe nada disto (ver `mobile.json`).
+ */
+export async function janelaEmTelaCheia(): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    return await getCurrentWindow().isFullscreen();
+  } catch {
+    // sem a ponte (ou sem a permissão) a resposta honesta é "não está"
+    return false;
+  }
+}
+
+/**
+ * Põe (ou tira) a janela do app em tela cheia. Devolve `true` só quando a
+ * chamada foi mesmo feita — `false` fora do Tauri e quando a ACL ou a ponte
+ * recusaram. Quem chama precisa dessa diferença para não marcar "em tela
+ * cheia" com a janela do mesmo tamanho de antes.
+ */
+export async function definirTelaCheiaDaJanela(valor: boolean): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setFullscreen(valor);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Tauri ──────────────────────────────────────────────────────────────────
 
 /** Handlers de clique pendentes, indexados pelo id da notificação. */
@@ -578,6 +628,8 @@ export function ouvirTelaEncerrada(ouvinte: (motivo: MotivoDeEncerramento) => vo
     parar?.();
   };
 }
+
+// ── Atenuação de comunicação do Windows ────────────────────────────────────
 
 // ── Chamada em segundo plano (Android) ─────────────────────────────────────
 
