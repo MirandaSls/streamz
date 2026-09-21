@@ -239,7 +239,17 @@ function BarraDoDesktop({
         disabled={!guild}
         aria-haspopup="menu"
         aria-expanded={menuAberto}
-        className="-ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-[4px] py-1 pl-1 pr-2 text-left text-heading-md font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
+        /*
+          Com o menu aberto o Discord mantém a pílula acesa mesmo se o mouse
+          sai do botão (é assim que "101733", tirado com o dropdown aberto,
+          mostra o trecho "Notas" com o mesmo fundo — `#222226` a 34,34,37 —
+          de `bg-interactive-background-hover` enquanto o resto da barra segue
+          na cor base; "201805", fechado e sem hover, não tem pílula nenhuma).
+          `hover:` sozinho apaga o fundo assim que o cursor sai a caminho de um
+          item do menu, então o estado aberto entra como classe condicional,
+          não só pseudo-classe.
+        */
+        className={`-ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-[4px] py-1 pl-1 pr-2 text-left text-heading-md font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent ${menuAberto ? "bg-interactive-background-hover" : ""}`}
       >
         <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
         {/*
