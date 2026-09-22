@@ -28,7 +28,11 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # `tray-icon` habilita a API de bandeja (tauri::tray::TrayIconBuilder).
 # `image-png` permite carregar/usar ícones PNG (usado pelo tray e por Image).
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+# `devtools`: o inspetor também nos builds de release. O Discord faz o mesmo
+# (Ctrl+Shift+I abre lá), e sem ele todo defeito que só aparece no app
+# instalado — o áudio do macOS de 2026-09-22 foi um — vira depoimento em
+# vez de log. Em debug o Tauri já o liga sozinho; esta linha é o release.
+tauri = { version = "2", features = ["tray-icon", "image-png", "devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

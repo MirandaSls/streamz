@@ -318,6 +318,64 @@ function reaplicarProcessamento(estado: Vivo) {
 }
 
 /**
+ * Confere o que o navegador **entregou** contra o que nós **pedimos**, e repara
+ * o único desvio que faz estrago fora do app.
+ *
+ * Por que isto existe: em 2026-09-22 o usuário entrou numa call com música
+ * tocando, já com o tratamento "No app" (ou seja, `echoCancellation: false`
+ * pedido no `getUserMedia`), e o som da máquina inteira ficou abafado na hora.
+ * Alternar uma preferência qualquer e voltar ao **mesmo** estado consertava.
+ * Mesmas restrições, resultados diferentes — então o que estava no ar não era
+ * o que tínhamos pedido, e nada no app olhava para isso.
+ *
+ * `getSettings()` é a única fonte do que a captura realmente é. Comparar com o
+ * pedido transforma um relato ("ficou abafado") no fato que falta ("pedimos
+ * `echoCancellation: false` e viemos com `true`").
+ *
+ * **O reparo é só para o cancelamento de eco, e só quando ele veio ligado sem
+ * termos pedido.** É o único dos quatro cuja ponta errada sai do app: no macOS
+ * o WebKit entrega entrada e saída do aparelho à `VoiceProcessingIO` quando ele
+ * está ativo (ver `SistemaDeAudio`). Os outros três só afetam a nossa própria
+ * voz — anotar basta, reabrir o dispositivo por causa deles custaria mais do
+ * que corrige. Uma tentativa só: se a reabertura também vier com eco, insistir
+ * viraria laço, e o aviso no log já conta o que houve.
+ */
+async function conferirCaptura(estado: Vivo) {
+  const real = estado.faixa.mediaStreamTrack.getSettings?.();
+  if (!real) return;
+  const pedido = processamentoDe(estado.prefs.restricoes);
+  // `undefined` = o navegador não publica esta restrição; não é divergência
+  const divergencias = (["echoCancellation", "noiseSuppression", "autoGainControl"] as const)
+    .filter((chave) => real[chave] !== undefined && real[chave] !== pedido[chave])
+    .map((chave) => `${chave}: pedimos ${pedido[chave]}, veio ${real[chave]}`);
+  if (divergencias.length === 0) return;
+
+  console.warn(
+    "[voz] a captura aberta não confere com o que foi pedido",
+    { divergencias, aparelho: real.deviceId, taxa: real.sampleRate },
+  );
+
+  if (pedido.echoCancellation !== false || real.echoCancellation !== true) return;
+  console.warn(
+    "[voz] o cancelamento de eco veio ligado sem termos pedido — no macOS é ele " +
+      "que entrega o aparelho ao processamento de voz do sistema e abafa os " +
+      "outros aplicativos; reabrindo a captura para desligá-lo",
+  );
+  try {
+    await reabrirCaptura(estado, estado.prefs.restricoes);
+    const depois = estado.faixa.mediaStreamTrack.getSettings?.()?.echoCancellation;
+    if (depois === true) {
+      console.warn(
+        "[voz] a reabertura também veio com cancelamento de eco: este navegador " +
+          "não o desliga para este aparelho",
+      );
+    }
+  } catch (e) {
+    console.warn("[voz] não deu para reabrir a captura para desligar o eco", e);
+  }
+}
+
+/**
  * Leva a faixa aberta das restrições `atuais` para as `novas` — reabrindo o
  * dispositivo **só** quando não há outro jeito.
  *
@@ -443,6 +501,10 @@ export function abrirMicrofone(
         // — mas só há o que repor quando existe cadeia montada por cima dele
         if (estado.cadeia) faixa.setAudioContext(contextoDaCadeia(estado.prefs));
       }
+      // depois de publicar: a conferência pode reabrir a captura, e reabrir
+      // antes da publicação deixaria a sala esperando por um `getUserMedia` a
+      // mais no caminho crítico da entrada
+      await conferirCaptura(estado);
     } catch (e) {
       await descartar(estado);
       throw e;
