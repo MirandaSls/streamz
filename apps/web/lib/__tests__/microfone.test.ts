@@ -138,10 +138,29 @@ interface ProcessamentoFalso {
   voiceIsolation: boolean;
 }
 
+/** As restrições como o SDK as recebe: o `deviceId` pode chegar embrulhado. */
+type RestricoesFalsas = Record<string, unknown>;
+
+/**
+ * Como o `constraintsForOptions` do livekit-client 2.22.0: ele **muta** o
+ * objeto de opções que recebe (`constraints.audio = options.audio` e depois
+ * `constraints.audio.deviceId ??= { ideal: "default" }`). O dublê repete o
+ * vício de propósito — é dele que saía a reabertura a cada troca de
+ * preferência, e um dublê educado não pegaria isso.
+ */
+function comoOSdkMuta(restricoes: RestricoesFalsas): RestricoesFalsas {
+  restricoes.deviceId ??= { ideal: "default" };
+  return restricoes;
+}
+
 class FaixaFalsa {
   processor: ProcessadorFalso | null = null;
   mudo = false;
   parada = false;
+  /** ouvintes de `restarted`: o `LocalTrack` do LiveKit é um EventEmitter. */
+  private ouvintes = new Set<() => void>();
+  /** o objeto de restrições que cada `restartTrack` recebeu, na ordem. */
+  readonly recebidas: RestricoesFalsas[] = [];
   /** o que foi reconfigurado ao vivo, na ordem: é o que o `applyConstraints` recebeu. */
   readonly aplicadas: ProcessamentoFalso[] = [];
   /** quantas vezes o dispositivo foi fechado e reaberto. */
@@ -182,13 +201,33 @@ class FaixaFalsa {
     }
     this.aplicadas.push(p);
   }
-  async restartTrack() {
+  async restartTrack(restricoes?: RestricoesFalsas) {
+    if (restricoes) this.recebidas.push(comoOSdkMuta(restricoes));
     this.reinicios += 1;
     const nova = new FaixaFalsaDeMidia();
     this.midia.stop();
     this.midia = nova;
     // é o que o `LocalTrack.restart` faz: reinicia o processador na faixa nova
     await this.processor?.restart({ track: nova, audioContext: this.ctx, kind: "audio" });
+    // ...e no fim emite `restarted`, tenha a reabertura vindo de nós ou dele
+    this.ouvintes.forEach((ouvinte) => ouvinte());
+  }
+  on(_evento: "restarted", ouvinte: () => void) {
+    this.ouvintes.add(ouvinte);
+    return this;
+  }
+  off(_evento: "restarted", ouvinte: () => void) {
+    this.ouvintes.delete(ouvinte);
+    return this;
+  }
+  /**
+   * O que o `LocalParticipant` faz sozinho quando a faixa do aparelho termina
+   * (fone Bluetooth trocando de perfil, microfone desconectado, padrão do
+   * sistema mudando): reabre a captura com `{ deviceId: "default" }` e **só**
+   * isso — sem eco, sem ruído, sem AGC, sem `voiceIsolation`.
+   */
+  async reaquisicaoDoSdk() {
+    await this.restartTrack({ deviceId: "default" });
   }
   async mute() {
     this.mudo = true;
@@ -209,7 +248,9 @@ const publicadas = new Set<FaixaFalsa>();
 
 function salaFalsa() {
   return {
-    criarFaixa: async () => {
+    criarFaixa: async (restricoes: RestricoesFalsas) => {
+      // `createLocalTracks` passa pelo mesmo `constraintsForOptions`
+      comoOSdkMuta(restricoes);
       const stream = (await navigator.mediaDevices.getUserMedia({
         audio: true,
       })) as unknown as StreamFalso;
@@ -487,6 +528,131 @@ describe("trocar preferência de áudio sem reabrir o microfone", () => {
     expect(faixa.reinicios).toBe(0);
     expect(faixa.aplicadas.at(-1)?.noiseSuppression).toBe(true);
     expect(cadeiasMontadas()).toBe(0);
+
+    await fecharMicrofone();
+  });
+});
+
+/**
+ * Quando o **SDK** reabre a captura por baixo de nós.
+ *
+ * O `LocalParticipant` do livekit-client 2.22.0 reage à faixa do microfone
+ * terminar com `track.restartTrack({ deviceId: "default" })` — o
+ * `getUserMedia` refeito vai sem `echoCancellation`, `noiseSuppression`,
+ * `autoGainControl` nem `voiceIsolation`, e o `restart()` ainda grava esse
+ * objeto pobre em `_constraints`. Ou seja: a captura volta ao padrão do
+ * navegador, as nossas preferências deixam de valer e **nada no app
+ * percebia**. No WebKit do macOS isso é audível — `echoCancellation` ligado é
+ * o que liga a VoiceProcessingIO, que abaixa o som dos outros aplicativos.
+ *
+ * O mesmo caminho passa pelo `constraintsForOptions`, que muta o objeto de
+ * restrições recebido: enquanto era o **nosso** objeto que ia para lá, o
+ * `deviceId` virava `{ ideal: "default" }` dentro das preferências guardadas e
+ * toda troca de nível seguinte reabria o microfone de novo.
+ */
+describe("o SDK reabre a captura por conta própria", () => {
+  beforeEach(() => {
+    faixas.length = 0;
+    contextos.length = 0;
+    publicadas.clear();
+    vi.stubGlobal("AudioContext", ContextoFalso);
+    vi.stubGlobal("MediaStream", class {
+      constructor(public faixas: unknown[]) {}
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: async () => new StreamFalso([new FaixaFalsaDeMidia()]),
+      },
+    });
+  });
+
+  /** a reaplicação entra na fila do dono da faixa; isto espera a fila escoar. */
+  const escoar = () => new Promise((pronto) => setTimeout(pronto, 0));
+
+  async function abrir(preferencias = prefs()) {
+    const mod = await import("@/lib/microfone");
+    await mod.abrirMicrofone(salaFalsa() as never, preferencias);
+    return { ...mod, faixa: mod.faixaDoMicrofone() as unknown as FaixaFalsa };
+  }
+
+  it("reaplica o processamento escolhido e deixa rastro no log", async () => {
+    const { fecharMicrofone, faixa } = await abrir(
+      prefs({ echoCancellation: false, noiseSuppression: true }),
+    );
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await faixa.reaquisicaoDoSdk();
+    await escoar();
+
+    expect(faixa.aplicadas.at(-1)).toEqual({
+      echoCancellation: false,
+      noiseSuppression: true,
+      autoGainControl: true,
+      voiceIsolation: false,
+    });
+    // a reaquisição é invisível para quem usa: o log é o único sinal dela
+    expect(aviso).toHaveBeenCalled();
+
+    aviso.mockRestore();
+    await fecharMicrofone();
+  });
+
+  it("reabertura nossa não é reaquisição: não reaplica nem avisa", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await atualizarMicrofone(prefs({ deviceId: "mic-2" }));
+    await escoar();
+
+    expect(faixa.reinicios).toBe(1);
+    expect(faixa.aplicadas).toEqual([]);
+    expect(aviso).not.toHaveBeenCalled();
+
+    aviso.mockRestore();
+    await fecharMicrofone();
+  });
+
+  it("a faixa fechada não é mais corrigida: o ouvinte sai com ela", async () => {
+    const { fecharMicrofone, faixa } = await abrir();
+    await fecharMicrofone();
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await faixa.reaquisicaoDoSdk();
+    await escoar();
+
+    expect(faixa.aplicadas).toEqual([]);
+    expect(aviso).not.toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+  it("o SDK só muta a cópia: as preferências guardadas ficam intactas", async () => {
+    const preferencias = prefs();
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir(preferencias);
+
+    // `criarFaixa` já passou pelo `constraintsForOptions` do dublê
+    expect(preferencias.restricoes.deviceId).toBeUndefined();
+
+    await atualizarMicrofone(prefs({ deviceId: "mic-2" }));
+    expect(faixa.recebidas.at(-1)).not.toBe(preferencias.restricoes);
+    expect(faixa.recebidas.at(-1)?.deviceId).toBe("mic-2");
+
+    await fecharMicrofone();
+  });
+
+  it("`deviceId` embrulhado pelo SDK é o mesmo aparelho: não reabre nada", async () => {
+    // é a forma em que o `constraintsForOptions` deixa o `deviceId`; o que
+    // vale para decidir a reabertura é o aparelho, não o embrulho
+    const embrulhado = prefs();
+    embrulhado.restricoes = {
+      ...embrulhado.restricoes,
+      deviceId: { ideal: "mic-1" } as unknown as string,
+    };
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir(embrulhado);
+
+    await atualizarMicrofone(prefs({ deviceId: "mic-1", echoCancellation: false }));
+
+    expect(faixa.reinicios).toBe(0);
+    expect(faixa.aplicadas.at(-1)?.echoCancellation).toBe(false);
 
     await fecharMicrofone();
   });

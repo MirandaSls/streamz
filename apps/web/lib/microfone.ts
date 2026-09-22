@@ -98,6 +98,16 @@ export interface FaixaDeMicrofone {
   mute(): Promise<unknown>;
   unmute(): Promise<unknown>;
   stop(): void;
+  /**
+   * `TrackEvent.Restarted` do LiveKit: a captura foi **reaberta**, por nós ou
+   * pelo próprio SDK.
+   *
+   * O nome do evento está em inglês pelo mesmo motivo de `applyConstraints`: é
+   * o do `LocalAudioTrack`, e assim a faixa do SDK satisfaz esta interface sem
+   * embrulho. Ver `reaplicarProcessamento` para o porquê de ouvirmos isto.
+   */
+  on(evento: "restarted", ouvinte: () => void): unknown;
+  off(evento: "restarted", ouvinte: () => void): unknown;
 }
 
 /** A sala em que a faixa é publicada. `stores/voice` monta a partir da `Room`. */
@@ -123,6 +133,10 @@ interface Vivo {
   faixa: FaixaDeMicrofone;
   cadeia: CadeiaDoMicrofone | null;
   prefs: PreferenciasDoMicrofone;
+  /** o ouvinte de `restarted` pendurado nesta faixa, para tirá-lo no descarte. */
+  ouvinteDeReaquisicao: (() => void) | null;
+  /** estamos dentro de um `restartTrack` **nosso**? Ver `reaplicarProcessamento`. */
+  reabrindo: boolean;
   /** a faixa está publicada na sala agora? O teste de microfone a tira de lá. */
   publicado: boolean;
   /** teste de microfone em curso: fora da sala, e aberta mesmo se mudo. */
@@ -208,6 +222,102 @@ function processamentoDe(r: RestricoesDeMicrofone): ProcessamentoDeCaptura {
 }
 
 /**
+ * O aparelho pedido, desembrulhado — e por que ele pode não ser uma string.
+ *
+ * `LocalAudioTrack.restartTrack` passa as opções por `constraintsForOptions`
+ * (livekit-client 2.22.0, `room/track/utils.ts`), que **muta o objeto
+ * recebido**: faz `constraints.audio = options.audio` e em seguida
+ * `constraints.audio.deviceId ??= { ideal: "default" }`. Enquanto
+ * entregávamos o nosso próprio objeto de restrições ao SDK, era o nosso
+ * `deviceId` que virava `{ ideal: "default" }` — e a comparação por
+ * identidade contra o `undefined` que `restricoesDeCaptura` devolve na
+ * escolha "Padrão do sistema" passava a dar **sempre diferente**, reabrindo o
+ * microfone a cada mudança de preferência. Hoje o SDK recebe cópia
+ * (`reabrirCaptura`, `abrirMicrofone`), e esta função é a segunda tranca:
+ * compara o que o `deviceId` *significa*, não a forma em que ele chegou.
+ */
+function idDeAparelho(valor: RestricoesDeMicrofone["deviceId"]): string | undefined {
+  // o tipo diz `string | undefined`, mas quem escreve aqui pode ter sido o SDK
+  const bruto: unknown = valor;
+  if (typeof bruto === "string") return bruto || undefined;
+  if (bruto && typeof bruto === "object") {
+    const { exact, ideal } = bruto as { exact?: unknown; ideal?: unknown };
+    const escolhido = exact ?? ideal;
+    if (typeof escolhido === "string") return escolhido || undefined;
+    if (Array.isArray(escolhido) && typeof escolhido[0] === "string") return escolhido[0];
+  }
+  return undefined;
+}
+
+/**
+ * Reabre a captura (outro `getUserMedia`) com as restrições dadas.
+ *
+ * Dois cuidados que não são detalhe. **A cópia**: o SDK muta o objeto que
+ * recebe (ver `idDeAparelho`), e o nosso é o mesmo que fica guardado em
+ * `estado.prefs.restricoes`. **A marca `reabrindo`**: o `restartTrack` emite
+ * `restarted`, e sem ela o nosso próprio ouvinte trataria esta reabertura como
+ * se fosse do SDK — avisando no log uma reaquisição que não houve.
+ */
+async function reabrirCaptura(estado: Vivo, restricoes: RestricoesDeMicrofone) {
+  estado.reabrindo = true;
+  try {
+    await estado.faixa.restartTrack({ ...restricoes });
+  } finally {
+    estado.reabrindo = false;
+  }
+}
+
+/**
+ * Repõe o nosso processamento depois de uma reabertura **do SDK**.
+ *
+ * Por que isto existe: quando a `MediaStreamTrack` do microfone termina (fone
+ * Bluetooth trocando de perfil, aparelho desconectado, padrão do sistema
+ * mudando), o `LocalParticipant` do livekit-client 2.22.0 reage com
+ * `track.restartTrack({ deviceId: "default" })` — literalmente só isso
+ * (`participant/LocalParticipant.ts`, no tratamento de faixa encerrada). O
+ * `getUserMedia` que ele refaz vai **sem** `echoCancellation`,
+ * `noiseSuppression`, `autoGainControl` e `voiceIsolation`, e o `restart()`
+ * ainda grava esse objeto pobre em `_constraints`: a captura fica no padrão do
+ * navegador e o nosso `estado.prefs.restricoes` passa a descrever algo que não
+ * existe mais. Nada no app percebia — e no WebKit do macOS o efeito é visível
+ * para quem está ouvindo música, porque `echoCancellation` volta ligado e é ele
+ * que liga a `kAudioUnitSubType_VoiceProcessingIO` (ver `SistemaDeAudio`).
+ *
+ * `audioCaptureDefaults` da `Room` **não** cobre este caminho: no SDK 2.22.0
+ * ele só é lido por `LocalParticipant.createTracks` e por
+ * `Room.switchActiveDevice`, não por `LocalAudioTrack.restartTrack`. Daí a
+ * correção ser aqui.
+ *
+ * O `console.warn` não é ruído: hoje a reaquisição é **invisível**, e este é o
+ * único sinal que restará do que aconteceu na máquina de quem relatou o
+ * problema. Não devolvemos o aparelho escolhido à força: ele acabou de
+ * terminar, e insistir nele é o caminho mais curto para ficar sem microfone
+ * nenhum.
+ */
+function reaplicarProcessamento(estado: Vivo) {
+  // reabertura nossa já nasce com as restrições certas
+  if (estado.reabrindo) return;
+  void emFila(async () => {
+    if (vivo !== estado) return;
+    const processamento = processamentoDe(estado.prefs.restricoes);
+    console.warn(
+      "[voz] o LiveKit reabriu a captura do microfone por conta própria " +
+        "(a faixa do aparelho terminou); reaplicando o processamento escolhido",
+      { processamento, aparelho: estado.faixa.mediaStreamTrack.getSettings?.()?.deviceId },
+    );
+    try {
+      await estado.faixa.applyConstraints(processamento);
+    } catch (e) {
+      console.warn(
+        "[voz] o navegador recusou repor o processamento depois da reabertura; " +
+          "a captura está com o padrão dele até a próxima troca de preferência",
+        e,
+      );
+    }
+  });
+}
+
+/**
  * Leva a faixa aberta das restrições `atuais` para as `novas` — reabrindo o
  * dispositivo **só** quando não há outro jeito.
  *
@@ -226,8 +336,8 @@ function processamentoDe(r: RestricoesDeMicrofone): ProcessamentoDeCaptura {
  */
 async function trocarRestricoes(estado: Vivo, novas: RestricoesDeMicrofone) {
   const atuais = estado.prefs.restricoes;
-  if (atuais.deviceId !== novas.deviceId) {
-    await estado.faixa.restartTrack(novas);
+  if (idDeAparelho(atuais.deviceId) !== idDeAparelho(novas.deviceId)) {
+    await reabrirCaptura(estado, novas);
     return;
   }
   if (mesmoProcessamento(atuais, novas)) return;
@@ -243,7 +353,7 @@ async function trocarRestricoes(estado: Vivo, novas: RestricoesDeMicrofone) {
         "reabrindo a captura para aplicar a preferência",
       e,
     );
-    await estado.faixa.restartTrack(novas);
+    await reabrirCaptura(estado, novas);
   }
 }
 
@@ -293,16 +403,22 @@ export function abrirMicrofone(
 ): Promise<void> {
   return emFila(async () => {
     await fechar();
-    const faixa = await sala.criarFaixa(prefs.restricoes);
+    // cópia: `constraintsForOptions` do SDK muta o objeto que recebe, e este é
+    // o mesmo que fica guardado em `estado.prefs` (ver `idDeAparelho`)
+    const faixa = await sala.criarFaixa({ ...prefs.restricoes });
     const estado: Vivo = {
       sala,
       faixa,
       cadeia: null,
       prefs,
+      ouvinteDeReaquisicao: null,
+      reabrindo: false,
       publicado: false,
       testando,
       mudo: false,
     };
+    estado.ouvinteDeReaquisicao = () => reaplicarProcessamento(estado);
+    faixa.on("restarted", estado.ouvinteDeReaquisicao);
     try {
       // a cadeia é um luxo; o microfone não. Se o wasm não baixar ou a
       // `AudioContext` não abrir, publica cru — ficar sem microfone porque a
@@ -421,6 +537,12 @@ async function fechar() {
 
 /** Desmonta tudo sem deixar cair a fila: falhar aqui não pode travar o próximo. */
 async function descartar(estado: Vivo) {
+  // primeiro o ouvinte: a faixa ainda vai ser parada aqui, e um `restarted`
+  // atrasado chegaria a um estado que já não é o `vivo`
+  if (estado.ouvinteDeReaquisicao) {
+    estado.faixa.off("restarted", estado.ouvinteDeReaquisicao);
+    estado.ouvinteDeReaquisicao = null;
+  }
   // despublicar primeiro: desmontar a cadeia com o `sender` ainda apontando
   // para ela mandaria silêncio para a sala antes de o "saiu" chegar
   if (estado.publicado) {
