@@ -46,7 +46,11 @@ PIN_DO_CERTIFICADO_SHA1="f924cd73c756dd80573a5db8d619b08c80e371fa"
 IDENTIFICADOR_DO_APP="dev.streamz.app"
 NOME_DO_APP="Streamz.app"
 API_PADRAO="https://api.streamz.chat"
-MACOS_MINIMO=12 # espelha `minimumSystemVersion` do tauri.macos.conf.json
+# Espelha `minimumSystemVersion` do tauri.macos.conf.json. O `.3` não é
+# capricho: o ScreenCaptureKit (compartilhamento de tela) só existe no disco
+# a partir do 12.3, e num 12.0 o dyld **recusa o app no launch**, antes do
+# `main()` — o usuário veria um app que não abre, sem mensagem.
+MACOS_MINIMO=12.3
 
 # Globais (e não `local`) porque o `trap` de saída roda depois que a função
 # principal já retornou — com `set -u`, uma variável local sumida derrubaria a
@@ -127,14 +131,24 @@ conferir_sistema() {
   [ "$(uname -s)" = Darwin ] || falha "este instalador é só para macOS."
   [ "$(id -u)" != 0 ] || falha "não rode como root (nem com sudo): o app é instalado para o seu usuário."
 
-  local versao maior
+  local versao maior menor min_maior min_menor
   versao=$(sw_vers -productVersion)
   maior=${versao%%.*}
-  case "$maior" in
+  menor=${versao#*.}
+  menor=${menor%%.*}
+  [ "$menor" = "$versao" ] && menor=0
+  case "$maior$menor" in
     '' | *[!0-9]*) falha "não consegui ler a versão do macOS ($versao)." ;;
   esac
-  [ "$maior" -ge "$MACOS_MINIMO" ] ||
+  # Comparar só o número maior aceitaria um 12.0, onde o app não abre. Por isso
+  # o par (maior, menor), na ordem — sem `sort -V`, que não está garantido aqui.
+  min_maior=${MACOS_MINIMO%%.*}
+  min_menor=${MACOS_MINIMO#*.}
+  [ "$min_menor" = "$MACOS_MINIMO" ] && min_menor=0
+  if [ "$maior" -lt "$min_maior" ] ||
+    { [ "$maior" -eq "$min_maior" ] && [ "$menor" -lt "$min_menor" ]; }; then
     falha "o Streamz precisa do macOS $MACOS_MINIMO ou mais novo (este é o $versao)."
+  fi
 }
 
 # Base da API e os protocolos que o curl pode usar com ela.
