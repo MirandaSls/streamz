@@ -909,9 +909,10 @@ export async function copiarImagemNativa(png: Uint8Array): Promise<boolean> {
  * usuário cancelou — cancelar não é erro.
  *
  * O escopo do `fs` em `capabilities/default.json` cobre as pastas onde se
- * salva imagem (Downloads, Imagens, Área de Trabalho, Documentos); é também
- * onde o diálogo abre. Salvar fora dali é recusado pela permissão, e quem
- * chamou mostra o erro.
+ * salva imagem (Downloads, Imagens, Área de Trabalho, Documentos). Salvar fora
+ * dali é recusado pela permissão, e quem chamou mostra o erro — por isso o
+ * diálogo **precisa** abrir dentro do escopo, o que é o papel de
+ * `caminhoSugerido`.
  */
 export async function salvarArquivoNativo(
   nomeSugerido: string,
@@ -919,12 +920,47 @@ export async function salvarArquivoNativo(
 ): Promise<string | null> {
   const { save } = await import("@tauri-apps/plugin-dialog");
   const { writeFile } = await import("@tauri-apps/plugin-fs");
-  const extensao = nomeSugerido.split(".").pop() ?? "png";
   const caminho = await save({
-    defaultPath: nomeSugerido,
-    filters: [{ name: "Imagem", extensions: [extensao] }],
+    defaultPath: await caminhoSugerido(nomeSugerido),
+    filters: [{ name: "Imagem", extensions: [extensaoDoNome(nomeSugerido)] }],
   });
   if (!caminho) return null;
   await writeFile(caminho, bytes);
   return caminho;
+}
+
+/**
+ * O caminho com que o "Salvar como" abre: **Downloads** mais o nome sugerido.
+ *
+ * Passar só o nome não basta. Um `defaultPath` sem pasta faz o diálogo abrir no
+ * diretório de trabalho do processo — no Windows instalado, `C:\Program
+ * Files\Streamz` —, que está **fora** do escopo do `fs` (`$DOWNLOAD`,
+ * `$PICTURE`, `$DESKTOP`, `$DOCUMENT` em `capabilities/default.json`). Quem
+ * apenas confirmasse o diálogo escolheria um caminho que a ACL recusa na hora
+ * de escrever: os bytes na mão, o diálogo aberto, e ainda assim "não foi
+ * possível salvar". Abrindo em Downloads o caminho padrão já é permitido, e é
+ * também onde o Discord põe a imagem.
+ *
+ * `downloadDir` vem do `core:path:default` (dentro de `core:default`), então
+ * não precisa de permissão nova. Se falhar, o nome cru ainda serve.
+ */
+async function caminhoSugerido(nome: string): Promise<string> {
+  try {
+    const { downloadDir, join } = await import("@tauri-apps/api/path");
+    return await join(await downloadDir(), nome);
+  } catch {
+    return nome;
+  }
+}
+
+/**
+ * A extensão do nome sugerido, em minúsculas, para o filtro do diálogo.
+ *
+ * `split(".").pop()` devolvia o **nome inteiro** quando não havia ponto, e aí o
+ * filtro do Windows virava `*.foto` — o arquivo saía com a extensão errada.
+ */
+function extensaoDoNome(nome: string): string {
+  const ponto = nome.lastIndexOf(".");
+  const extensao = ponto > 0 ? nome.slice(ponto + 1).toLowerCase() : "";
+  return /^[a-z0-9]{1,5}$/.test(extensao) ? extensao : "png";
 }

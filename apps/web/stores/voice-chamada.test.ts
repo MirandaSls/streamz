@@ -301,6 +301,32 @@ describe("ringback de quem liga", () => {
   });
 });
 
+describe("quem liga também entra na voz do gateway", () => {
+  /**
+   * O `POST /dms/:id/call` põe a conta no estado de voz, mas quem grava o
+   * `voiceChannelId` no socket é o gateway, no `voice.join`. Sem esse par de
+   * eventos quem liga fica com o socket sem canal de voz: mudo/câmera/tela não
+   * propagam, fechar a aba deixa um fantasma permanente do outro lado e o F5
+   * não retoma a chamada.
+   *
+   * O teste existe porque esse par é fácil de remover "para consertar o
+   * toque": o toque de quem recebe não depende mais da ordem entre este
+   * `voice.join` e o `POST` (ver `calls-toque-com-quem-liga-na-sala.spec.ts` na
+   * API — quem decide se o telefone toca é a presença de **outra** pessoa na
+   * sala), então apagar as duas linhas passaria despercebido até o próximo
+   * fantasma.
+   */
+  it("`startCall` emite `voice.join` e as flags reais logo em seguida", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const eventos = emitidos.map((e) => e.evento);
+    expect(eventos).toContain("voice.join");
+    expect(emitidos.find((e) => e.evento === "voice.join")?.dados).toEqual({ channelId: "dm1" });
+    // as flags depois do join: o join do REST entra com o padrão, e quem liga
+    // com o microfone fechado nasceria desmutado para os outros
+    expect(eventos.indexOf("voice.update")).toBeGreaterThan(eventos.indexOf("voice.join"));
+  });
+});
+
 describe("clique repetido no telefone", () => {
   it("dois cliques ligam uma vez só", async () => {
     const primeiro = useVoice.getState().startCall("dm1", false);

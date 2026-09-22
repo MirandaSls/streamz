@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   comoAbrir,
   ehHttp,
+  enderecosParaBaixar,
   extensaoDoTipo,
   nomeDeArquivoDaImagem,
   precisaConverterParaPng,
@@ -146,5 +147,55 @@ describe("ehHttp", () => {
     expect(ehHttp("https://ex.com/a")).toBe(true);
     expect(ehHttp("blob:https://ex.com/uuid")).toBe(false);
     expect(ehHttp("//ex.com/a")).toBe(false);
+  });
+});
+
+/**
+ * A ordem dos endereços é o conserto de "Copiar/Salvar imagem" numa aba aberta
+ * há mais de uma hora: a URL assinada do R2 já não vale, e o proxy da API —
+ * que só é alcançável pelo **id** do anexo — é quem ainda entrega os bytes.
+ */
+describe("enderecosParaBaixar", () => {
+  const API = "https://api.streamz.chat";
+
+  it("sem id do anexo, só a URL que veio", () => {
+    expect(enderecosParaBaixar(ASSINADA, { baseDaApi: API })).toEqual([ASSINADA]);
+    expect(enderecosParaBaixar("https://media.giphy.com/x.gif", { baseDaApi: API })).toEqual([
+      "https://media.giphy.com/x.gif",
+    ]);
+  });
+
+  it("com id, o bucket primeiro e o proxy da API depois", () => {
+    expect(enderecosParaBaixar(ASSINADA, { idDoAnexo: "abc123", baseDaApi: API })).toEqual([
+      ASSINADA,
+      "https://api.streamz.chat/api/uploads/file/abc123",
+    ]);
+  });
+
+  it("não repete o proxy quando a URL já é ele (a query não conta)", () => {
+    const proxy = `${API}/api/uploads/file/abc123?t=jwt-vencido`;
+    expect(enderecosParaBaixar(proxy, { idDoAnexo: "abc123", baseDaApi: API })).toEqual([proxy]);
+  });
+
+  it("id de outro anexo no mesmo proxy continua valendo como segundo endereço", () => {
+    const proxy = `${API}/api/uploads/file/outro?t=jwt`;
+    expect(enderecosParaBaixar(proxy, { idDoAnexo: "abc123", baseDaApi: API })).toEqual([
+      proxy,
+      "https://api.streamz.chat/api/uploads/file/abc123",
+    ]);
+  });
+
+  it("barra final na base não vira barra dupla, e o id é escapado", () => {
+    expect(enderecosParaBaixar(ASSINADA, { idDoAnexo: "a/b?c", baseDaApi: `${API}/` })).toEqual([
+      ASSINADA,
+      "https://api.streamz.chat/api/uploads/file/a%2Fb%3Fc",
+    ]);
+  });
+
+  it("id vazio, nulo ou só espaço não inventa endereço", () => {
+    for (const id of ["", "   ", null, undefined]) {
+      expect(enderecosParaBaixar(ASSINADA, { idDoAnexo: id, baseDaApi: API })).toEqual([ASSINADA]);
+    }
+    expect(enderecosParaBaixar(ASSINADA, { idDoAnexo: "abc", baseDaApi: "" })).toEqual([ASSINADA]);
   });
 });

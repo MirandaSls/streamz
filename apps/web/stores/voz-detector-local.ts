@@ -36,8 +36,14 @@ import {
  * o volume de entrada, que é um `GainNode` dentro da cadeia, passa a valer
  * também para o anel.
  *
- * A `AudioContext` é a única da aba (`usarContextoDeCaptura`): abrir uma por
- * detector era mais um caminho para o teto de contextos do Chromium.
+ * A `AudioContext` é a compartilhada da aba (`usarContextoDeCaptura`): abrir uma
+ * por detector era mais um caminho para o teto de contextos do Chromium. E é a
+ * da **taxa do aparelho**, não a de 48 kHz do RNNoise: medir nível não depende
+ * de taxa nenhuma, e este detector é armado em toda chamada, com qualquer
+ * preferência de supressão — era ele, e não o supressor, quem mantinha um
+ * contexto com `sampleRate` forçado aberto do começo ao fim de qualquer call
+ * (ver o cabeçalho de `lib/supressor-ruido.ts`). Quando a cadeia avançada está
+ * no ar, `usarContextoDeCaptura` devolve a dela e nada é aberto a mais.
  */
 
 /** Quantas leituras por segundo. `setInterval`, e não `requestAnimationFrame`: */
@@ -107,7 +113,7 @@ export function armarDetectorLocal(room: Room, aoMudar: (falando: boolean) => vo
     detector = { faixa, ctx, fonte, timer };
   } catch {
     // montar o grafo e falhar deixaria um dono a mais para sempre
-    liberarContextoDeCaptura();
+    liberarContextoDeCaptura(ctx);
   }
 }
 
@@ -116,8 +122,8 @@ export function desarmarDetectorLocal(aoMudar: (falando: boolean) => void) {
   if (detector) {
     clearInterval(detector.timer);
     detector.fonte.disconnect();
-    // o contexto é um por aba: devolve, não fecha
-    liberarContextoDeCaptura();
+    // devolve o MESMO contexto que tomou (são dois na aba), e não o fecha
+    liberarContextoDeCaptura(detector.ctx);
     detector = null;
   }
   if (estado.falando) aoMudar(false);

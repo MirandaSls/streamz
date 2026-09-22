@@ -157,11 +157,20 @@ const FORMATO_DATA_CABECALHO = new Intl.DateTimeFormat("pt-BR", {
 export default function ImageModal({
   urls,
   alts,
+  anexoIds,
   indice,
   messageId,
 }: {
   urls: string[];
   alts: string[];
+  /**
+   * ids dos `Attachment`, na mesma ordem de `urls` — o que permite copiar e
+   * salvar depois que a URL assinada do R2 vence (ver o cabeçalho de
+   * `lib/imagem-arquivo.ts`). Só quem abriu o visualizador a partir de anexos
+   * manda a lista; galeria de prévia de link, GIF do provedor e embed de bot
+   * sem anexo não têm id, e a posição vem `undefined`.
+   */
+  anexoIds?: (string | undefined)[];
   indice: number;
   /** mensagem dona da imagem, quando há uma: é o que habilita reagir. */
   messageId?: string;
@@ -199,6 +208,7 @@ export default function ImageModal({
   const total = urls.length;
   const url = urls[i];
   const alt = alts[i] ?? "Imagem";
+  const idDoAnexo = anexoIds?.[i];
   const reacoes = mensagem?.reactions ?? [];
 
   // "sem permissão": em canal de servidor, reagir exige ADD_REACTIONS — a
@@ -284,6 +294,7 @@ export default function ImageModal({
       itensDaImagem({
         url,
         alt,
+        idDoAnexo,
         onReagir: podeReagir ? () => setPicker(ancora) : undefined,
         indisponivel: estadoImagem === "erro",
       }),
@@ -367,6 +378,7 @@ export default function ImageModal({
               <BarraDeAcoes
                 url={url}
                 alt={alt}
+                idDoAnexo={idDoAnexo}
                 podeReagir={podeReagir}
                 comErro={estadoImagem === "erro"}
                 onReagir={abrirSeletor}
@@ -454,6 +466,7 @@ export default function ImageModal({
             <BarraDeAcoes
               url={url}
               alt={alt}
+              idDoAnexo={idDoAnexo}
               podeReagir={podeReagir}
               comErro={estadoImagem === "erro"}
               onReagir={abrirSeletor}
@@ -591,6 +604,7 @@ export default function ImageModal({
 function BarraDeAcoes({
   url,
   alt,
+  idDoAnexo,
   podeReagir,
   comErro,
   onReagir,
@@ -598,6 +612,8 @@ function BarraDeAcoes({
 }: {
   url: string;
   alt: string;
+  /** id do anexo desta foto, quando ela é um anexo nosso (ver as props do modal). */
+  idDoAnexo?: string;
   /** já resolvido pelo chamador: tem mensagem **e** ADD_REACTIONS no canal. */
   podeReagir: boolean;
   /** imagem em erro (ver "carregando, erro e vazio" no cabeçalho): desabilita
@@ -617,7 +633,7 @@ function BarraDeAcoes({
       <BotaoDaBarra
         label="Copiar imagem"
         tamanho={tamanho}
-        onClick={() => void copiarImagem(url)}
+        onClick={() => void copiarImagem(url, { idDoAnexo })}
         desabilitado={comErro}
         motivoDesabilitado="Esta imagem não carregou"
       >
@@ -626,7 +642,7 @@ function BarraDeAcoes({
       <BotaoDaBarra
         label="Salvar imagem"
         tamanho={tamanho}
-        onClick={() => void salvarImagem(url, alt)}
+        onClick={() => void salvarImagem(url, { alt, idDoAnexo })}
         desabilitado={comErro}
         motivoDesabilitado="Esta imagem não carregou"
       >

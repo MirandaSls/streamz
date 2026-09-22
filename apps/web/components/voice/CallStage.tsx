@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   AlertTriangle,
   AtSign,
@@ -96,6 +96,89 @@ export function seloDaTransmissao(altura?: number | null, fps?: number | null): 
   return partes.length > 0 ? partes.join(" ") : null;
 }
 
+/**
+ * As classes que dizem **como o palco ocupa espaço** — e são duas coisas
+ * diferentes. O resto (`flex flex-col bg-black`) não muda entre os modos.
+ *
+ * **Expandido**: `absolute inset-0` sobe até o `relative` da região de conteúdo
+ * (`app/app/page.tsx`, a `<div className="relative flex min-w-0 flex-1">` que
+ * embrulha o `DMView`) — nenhum invólucro do caminho é posicionado, e o
+ * `CallSplit` tira o `relative` do dele quando o modo está ligado, justamente
+ * para não prender o palco na faixa. O resultado é o pedido: o palco cobre
+ * cabeçalho, conversa e coluna da direita, e a barra lateral da esquerda, que é
+ * irmã da região, continua. `z-20` porque o cabeçalho da conversa (`HeaderBar`)
+ * flutua em `z-10` sobre a mesma região; o véu de modal é `z-50` e segue acima.
+ *
+ * **Na faixa**: item flexível da coluna do `CallSplit`, que tem altura
+ * explícita — e o `min-h-0` é o que faz essa altura valer. Sem ele o
+ * `min-height: auto` do item flexível vale o **min-content** do palco, que no
+ * modo foco é o destaque em 16:9 (tirado da *largura*) mais os 106 da tira de
+ * miniaturas e os 96 (`pb-24`) reservados aos controles flutuantes: ~890px numa
+ * janela larga, contra os 199 da faixa. O palco ignorava a faixa e transbordava
+ * por cima da conversa — o fundo preto por baixo do texto (nada na conversa é
+ * posicionado) e os tiles e os controles por cima dele (esses são), que é
+ * exatamente o que as prints `image.pbg` e `aaa.pbg` mostram. E a medida ainda
+ * se realimentava: o destaque é dimensionado a partir da área medida, que só
+ * era grande porque o palco havia crescido — o ponto fixo é o 16:9 da largura.
+ *
+ * Clipar o invólucro (`overflow-hidden` no `CallSplit`) **não** é a correção:
+ * esconderia o transbordo em vez de evitá-lo, e cortaria junto os popovers da
+ * barra de controles, que numa faixa de 199px sobem de propósito para fora do
+ * palco (o de "Ajustes de voz" mede até 60vh — ver `VoiceControls`).
+ */
+export function posicaoDoPalco(expandido: boolean): string {
+  return expandido ? "absolute inset-0 z-20" : "relative min-h-0 min-w-0 flex-1";
+}
+
+/**
+ * A folga **dentro** do palco: o que a área da grade cede ao rodapé.
+ *
+ * A pergunta não é "onde ficam os controles" — eles flutuam (`absolute
+ * bottom-5`, ver `VoiceControls`) e ainda se apagam sozinhos depois de três
+ * segundos de mouse parado (`useOcultarInativo`). A pergunta é **o que mora no
+ * rodapé da área**, e a resposta muda com o modo:
+ *
+ * - **Na faixa sobre a conversa, nada.** A grade é tudo o que há, e ela já se
+ *   centraliza na área (`justify-center`, `VoiceGrid`): a cápsula flutua por
+ *   cima da folga que a proporção 16:9 deixa. É o que a print
+ *   `2026-09-21 às 15.04.09` mostra numa DM (2×, escala fechada pelo rail —
+ *   144px ali, 72 reais): faixa de 372,5 reais, três tiles iguais de 344×193,5
+ *   numa fileira, ~86 de folga acima e ~93 abaixo. Reserva não há: com os 96 do
+ *   `pb-24` a fileira estaria 48px acima do centro, e ela está centrada — a
+ *   folga de baixo é a maior das duas, não a menor.
+ *
+ *   Reservar altura fixa ali **era o defeito**: numa faixa de 199 os 96 comiam
+ *   quase metade (103 de área útil, tiles de 103 de altura onde o Discord dá
+ *   193). É o mesmo argumento do `pt-14` que não existe no topo — não se paga
+ *   altura de transmissão, o tempo todo, por uma peça que nem sempre está na
+ *   tela.
+ * - **No palco cheio e no expandido, 96.** Lá a área é alta e o `VoiceGrid`
+ *   escolhe o foco (`palcoUsaFoco`): destaque em cima e a **tira de
+ *   miniaturas** encostada no fundo. Tira não flutua nem se esconde — coberta
+ *   pela cápsula, ela vira uma fileira de botões que não se clica. O Discord
+ *   reserva o mesmo: na print `2026-09-03 203909` (foco, escala 0,8075) a tira
+ *   acaba ~74 reais antes do fim da região, e é nesse vão que a barra fica. Os
+ *   96 daqui são os 68 que a cápsula ocupa (48 de altura a 20 do fundo) mais o
+ *   respiro.
+ *
+ * No celular a decisão é outra e mora no `PalcoMobile`, porque lá a folga de
+ * baixo depende da orientação — é o mesmo trecho que o `VoicePanel` tem.
+ */
+export function folgaDaGrade(ehMobile: boolean, faixa: boolean, expandido: boolean): string {
+  if (ehMobile) return "min-h-0 flex-1";
+  // `px-2` = `FOLGA_DO_PALCO` (8px, print 101857 x=1911–1918)
+  const base = "min-h-0 flex-1 px-2";
+  // `pb-24` só num dos ramos: a mesma propriedade nas duas metades da classe
+  // deixaria a vencedora por conta da ordem do CSS gerado, não desta conta
+  return faixa && !expandido ? base : `${base} pb-24`;
+}
+
+/**
+ * `useLayoutEffect` no cliente; no servidor o React avisa que não roda — é o
+ * mesmo par de `hooks/useEhMobile.ts`.
+ */
+const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 export default function CallStage({
   channelId,
   titulo,
@@ -174,7 +257,11 @@ export default function CallStage({
    * desligá-lo.
    */
   const podeExpandir = !ehMobile && !semChamada && (conectadoAqui || chamando);
-  useEffect(() => {
+  // Antes da pintura, e não num `useEffect`: o `CallSplit` esconde a conversa
+  // olhando só o `palcoExpandido`, então um quadro com o modo ainda ligado e o
+  // palco já recolhido é a conversa sumida sem botão nenhum para trazê-la de
+  // volta — o botão que desfaz o modo é o que acabou de sair da tela.
+  useEfeitoDeLeiaute(() => {
     if (!podeExpandir) definirExpandido(false);
   }, [podeExpandir, definirExpandido]);
 
@@ -189,7 +276,8 @@ export default function CallStage({
 
   // O palco saiu da tela (troquei de conversa, entrei num canal de voz, o
   // `DMView` o trocou de lugar na árvore): quem ligou o modo é quem o apaga.
-  useEffect(() => () => definirExpandido(false), [definirExpandido]);
+  // Pelo mesmo motivo do efeito acima, na fase de leiaute.
+  useEfeitoDeLeiaute(() => () => definirExpandido(false), [definirExpandido]);
 
   /**
    * Esc sai do modo **sem desligar a chamada**.
@@ -253,22 +341,12 @@ export default function CallStage({
       // elemento com `data-tela-cheia-emulada` (a regra está no `globals.css`).
       //
       // **Expandido é o contrário disso**: não há compositor nenhum, quem
-      // promove somos nós. O `absolute inset-0` sobe até o `relative` da região
-      // de conteúdo (`app/app/page.tsx`, a `<div className="relative flex
-      // min-w-0 flex-1">` que embrulha o `DMView`) — nenhum dos invólucros do
-      // caminho é posicionado, e o `CallSplit` tira o `relative` do dele quando
-      // o modo está ligado, justamente para não prender o palco na faixa. O
-      // resultado é o pedido: o palco cobre cabeçalho, conversa e coluna da
-      // direita, e a barra lateral da esquerda, que é irmã da região, continua.
-      // `z-20` porque o cabeçalho da conversa (`HeaderBar`) flutua em `z-10`
-      // sobre a mesma região; o véu de modal é `z-50` e continua por cima.
+      // promove somos nós — e é `posicaoDoPalco` quem diz como, nos dois modos.
       //
       // Fundo preto puro, que é o token `--black` do Discord (não o preto do
       // Tailwind): prints 1:1 `2026-08-31 160106` (pixels 600,250 e 1200,150) e
       // `101857` (1000,100 e todo o vão entre tiles) dão `#000000`.
-      className={`flex flex-col bg-black ${
-        expandido ? "absolute inset-0 z-20" : "relative min-w-0 flex-1"
-      }`}
+      className={`flex flex-col bg-black ${posicaoDoPalco(expandido)}`}
     >
       {erro && conectadoAqui && status === "error" && (
         <div
@@ -412,19 +490,10 @@ export default function CallStage({
 
       {/* Sem `pt-14`: o cabeçalho é flutuante (`absolute`) e se esconde sozinho
           quando o mouse para — reservar altura para ele custava 56px da
-          transmissão para proteger uma faixa que nem sempre está na tela. O
-          `pb-24` fica: os controles também flutuam, mas embaixo mora a tira de
-          miniaturas, que precisa continuar clicável. */}
-      <div
-        className={
-          // ver o mesmo trecho em `VoicePanel`: no celular as folgas são do
-          // `PalcoMobile`, porque a de baixo depende da orientação
-          ehMobile
-            ? "min-h-0 flex-1"
-            : // `px-2` = `FOLGA_DO_PALCO` (8px, print 101857 x=1911–1918)
-              "min-h-0 flex-1 px-2 pb-24"
-        }
-      >
+          transmissão para proteger uma faixa que nem sempre está na tela. A
+          folga de baixo segue o mesmo raciocínio, e por isso depende do modo:
+          quem decide (e por quê) é `folgaDaGrade`. */}
+      <div className={folgaDaGrade(ehMobile, faixa, expandido)}>
         {chamando ? (
           <Chamando nome={destinatario ? displayNameOf(destinatario) : titulo} usuario={destinatario} />
         ) : conectadoAqui ? (
@@ -437,6 +506,14 @@ export default function CallStage({
           <VoiceGrid
             channelId={channelId}
             nomeDoCanal={titulo}
+            // Na faixa a grade é obrigatória, por medida do Discord (print
+            // `2026-09-21 às 15.04.09`: três tiles iguais numa fileira, sem
+            // destaque nem tira, mesmo com transmissão ao vivo). A aritmética
+            // de `palcoUsaFoco` sozinha escolheria destaque aos ~372 de altura,
+            // e só o `CallStage` sabe que está na faixa — a altura medida não
+            // distingue (a mesma altura é faixa numa janela e palco cheio
+            // noutra).
+            faixa={faixa && !expandido}
             // só grupo aceita mais gente: numa conversa de duas pessoas o "+"
             // teria de criar um grupo novo, que é outra decisão e outra tela
             onAdicionar={

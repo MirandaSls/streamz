@@ -130,10 +130,27 @@ interface ProcessadorFalso {
   processedTrack?: unknown;
 }
 
+/** Só o que `applyConstraints` troca: as restrições sem o aparelho. */
+interface ProcessamentoFalso {
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
+  voiceIsolation: boolean;
+}
+
 class FaixaFalsa {
   processor: ProcessadorFalso | null = null;
   mudo = false;
   parada = false;
+  /** o que foi reconfigurado ao vivo, na ordem: é o que o `applyConstraints` recebeu. */
+  readonly aplicadas: ProcessamentoFalso[] = [];
+  /** quantas vezes o dispositivo foi fechado e reaberto. */
+  reinicios = 0;
+  /**
+   * O navegador recusa trocar ao vivo (é o `OverconstrainedError` de um driver
+   * que só aceita o processamento no `getUserMedia`).
+   */
+  recusarAplicacao = false;
   private ctx: AudioContext | undefined;
 
   constructor(public midia: FaixaFalsaDeMidia) {}
@@ -156,7 +173,17 @@ class FaixaFalsa {
     await this.processor?.destroy();
     this.processor = null;
   }
+  /** como o `LocalAudioTrack`: aplica na faixa de ENTRADA, sem `getUserMedia`. */
+  async applyConstraints(p: ProcessamentoFalso) {
+    if (this.recusarAplicacao) {
+      const e = new Error("Cannot satisfy constraints");
+      e.name = "OverconstrainedError";
+      throw e;
+    }
+    this.aplicadas.push(p);
+  }
   async restartTrack() {
+    this.reinicios += 1;
     const nova = new FaixaFalsaDeMidia();
     this.midia.stop();
     this.midia = nova;
@@ -195,13 +222,22 @@ function salaFalsa() {
 
 /* ---------------------------------------------------------------- */
 
-function prefs(patch: Partial<{ supressao: boolean; ganho: number; deviceId: string }> = {}) {
+function prefs(
+  patch: Partial<{
+    supressao: boolean;
+    ganho: number;
+    deviceId: string;
+    echoCancellation: boolean;
+    noiseSuppression: boolean;
+  }> = {},
+) {
   return {
     restricoes: {
       ...(patch.deviceId ? { deviceId: patch.deviceId } : {}),
-      echoCancellation: true,
-      noiseSuppression: false,
+      echoCancellation: patch.echoCancellation ?? true,
+      noiseSuppression: patch.noiseSuppression ?? false,
       autoGainControl: true,
+      voiceIsolation: false,
     },
     supressao: patch.supressao ?? false,
     ganho: patch.ganho ?? 1,
@@ -334,6 +370,123 @@ describe("dono da faixa de microfone", () => {
     // mas o volume sozinho já justifica a cadeia
     await atualizarMicrofone(prefs({ supressao: false, ganho: 0.5 }));
     expect(cadeiasMontadas()).toBe(1);
+
+    await fecharMicrofone();
+  });
+});
+
+/**
+ * Quando mudar de preferência reabre o dispositivo — e quando não reabre.
+ *
+ * O que esta suíte guarda: até aqui, **qualquer** mudança de eco, ruído nativo
+ * ou ganho automático caía num `restartTrack`, que é `stop()` + `getUserMedia`
+ * novo. Cada reabertura é uma renegociação com o áudio do sistema (num fone
+ * Bluetooth, de perfil e codec inteiros), e nada disso é preciso para trocar
+ * restrições da mesma captura: `applyConstraints` as troca com o dispositivo
+ * aberto. Element Call e LiveKit Meet, que usam este mesmo SDK no navegador,
+ * só usam `restartTrack` para trocar de **aparelho** — que é o único caso que
+ * continua reabrindo aqui.
+ *
+ * A recusa importa tanto quanto o caminho feliz: `applyConstraints` rejeita
+ * (`OverconstrainedError`) onde o driver não aceita a troca ao vivo, e aí a
+ * preferência **tem** de valer de qualquer jeito, pelo caminho caro.
+ */
+describe("trocar preferência de áudio sem reabrir o microfone", () => {
+  beforeEach(() => {
+    faixas.length = 0;
+    contextos.length = 0;
+    publicadas.clear();
+    vi.stubGlobal("AudioContext", ContextoFalso);
+    vi.stubGlobal("MediaStream", class {
+      constructor(public faixas: unknown[]) {}
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: async () => new StreamFalso([new FaixaFalsaDeMidia()]),
+      },
+    });
+  });
+
+  async function abrir(patch: Parameters<typeof prefs>[0] = {}) {
+    const mod = await import("@/lib/microfone");
+    await mod.abrirMicrofone(salaFalsa() as never, prefs(patch));
+    return { ...mod, faixa: mod.faixaDoMicrofone() as unknown as FaixaFalsa };
+  }
+
+  it("mesmo aparelho e só o processamento mudou: reconfigura a captura aberta", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
+    const midia = faixa.midia;
+
+    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
+
+    expect(faixa.reinicios).toBe(0);
+    // a faixa do dispositivo é a mesma: nada foi fechado e reaberto
+    expect(faixa.midia).toBe(midia);
+    expect(faixa.midia.readyState).toBe("live");
+    expect(faixa.aplicadas).toEqual([
+      {
+        echoCancellation: false,
+        noiseSuppression: true,
+        autoGainControl: true,
+        voiceIsolation: false,
+      },
+    ]);
+
+    // e preferência que não mudou nada não fala com o navegador
+    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
+    expect(faixa.aplicadas).toHaveLength(1);
+    expect(faixa.reinicios).toBe(0);
+
+    await fecharMicrofone();
+  });
+
+  it("o aparelho mudou: aí sim reabre a captura", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
+
+    await atualizarMicrofone(prefs({ deviceId: "mic-2" }));
+
+    expect(faixa.reinicios).toBe(1);
+    // trocar de aparelho é outro `getUserMedia`: não há `applyConstraints` que
+    // resolva, e por isso nenhum é tentado
+    expect(faixa.aplicadas).toEqual([]);
+
+    await fecharMicrofone();
+  });
+
+  it("o navegador recusou a troca ao vivo: recua para a reabertura e avisa", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
+    faixa.recusarAplicacao = true;
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await atualizarMicrofone(prefs({ noiseSuppression: true }));
+
+    // a preferência não pode ficar sem efeito em silêncio
+    expect(faixa.reinicios).toBe(1);
+    expect(aviso).toHaveBeenCalled();
+
+    aviso.mockRestore();
+    await fecharMicrofone();
+  });
+
+  it("trocar de nível de ruído também monta e desmonta a cadeia do RNNoise", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir({
+      noiseSuppression: true,
+    });
+    const { cadeiasMontadas } = await import("@/lib/supressor-ruido");
+    expect(cadeiasMontadas()).toBe(0);
+
+    // "Padrão" → "Avançada": a nativa sai pelas restrições, o RNNoise entra
+    // pelo nosso grafo. `applyConstraints` resolve só a primeira metade
+    await atualizarMicrofone(prefs({ supressao: true, noiseSuppression: false }));
+    expect(faixa.reinicios).toBe(0);
+    expect(faixa.aplicadas.at(-1)?.noiseSuppression).toBe(false);
+    expect(cadeiasMontadas()).toBe(1);
+
+    // e voltar desmonta a cadeia, ainda sem reabrir o dispositivo
+    await atualizarMicrofone(prefs({ supressao: false, noiseSuppression: true }));
+    expect(faixa.reinicios).toBe(0);
+    expect(faixa.aplicadas.at(-1)?.noiseSuppression).toBe(true);
+    expect(cadeiasMontadas()).toBe(0);
 
     await fecharMicrofone();
   });

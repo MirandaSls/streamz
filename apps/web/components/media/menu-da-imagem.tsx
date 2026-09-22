@@ -28,11 +28,19 @@ import type { MenuItem } from "@/stores/ui";
 export function itensDaImagem({
   url,
   alt,
+  idDoAnexo,
   onReagir,
   indisponivel,
 }: {
   url: string;
   alt?: string | null;
+  /**
+   * id do `Attachment` quando a imagem é um anexo nosso — é o que deixa
+   * "Copiar Imagem"/"Salvar Imagem" continuarem funcionando depois que a URL
+   * assinada do R2 vence (ver o cabeçalho de `lib/imagem-arquivo.ts`). Prévia
+   * de link, GIF do provedor e avatar não têm id e seguem só com a URL.
+   */
+  idDoAnexo?: string | null;
   onReagir?: () => void;
   /**
    * Estado "erro" do visualizador: a imagem não carregou, então não há bytes
@@ -52,13 +60,13 @@ export function itensDaImagem({
   itens.push({
     label: "Copiar Imagem",
     icon: <Copy size={18} />,
-    onSelect: () => void copiarImagem(url),
+    onSelect: () => void copiarImagem(url, { idDoAnexo }),
     disabled: indisponivel,
   });
   itens.push({
     label: "Salvar Imagem",
     icon: <Download size={18} />,
-    onSelect: () => void salvarImagem(url, alt),
+    onSelect: () => void salvarImagem(url, { alt, idDoAnexo }),
     disabled: indisponivel,
   });
   itens.push({ separator: true });

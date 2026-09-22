@@ -80,7 +80,19 @@ export class CallsService {
       await this.friends.assertNotBlocked(userId, alvos[0]);
     }
 
-    const jaEmChamada = (await this.voice.count(channelId)) > 0;
+    // "já estava rolando" é **outra pessoa** na sala, nunca eu mesmo. Contar a
+    // sala inteira (`count > 0`) fazia quem liga se auto-silenciar: bastava a
+    // própria conta já constar no estado de voz para a chamada nascer como
+    // "entrei numa que já estava rolando" e o outro lado nunca tocar. E ela
+    // consta por caminhos banais — o `voice.join` que o cliente emite junto com
+    // este `POST` (é ele quem grava o `voiceChannelId` no socket) pode ganhar a
+    // corrida contra o HTTP; uma tentativa anterior que morreu no LiveKit deixa
+    // a conta na sala até o relógio da solidão; a reconexão do socket e a
+    // carência de voz a mantêm lá de propósito. Com a pergunta certa a ordem
+    // entre HTTP e WebSocket deixa de importar — é a mesma conta que `expirar`
+    // já fazia para decidir se a chamada foi atendida.
+    const jaNaSala = await this.voice.membrosDaSala(channelId);
+    const jaEmChamada = jaNaSala.some((id) => id !== userId);
     await this.voice.join(userId, channelId);
 
     // entrar numa chamada em andamento **é** atender — só que pelo botão

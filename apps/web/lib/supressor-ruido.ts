@@ -16,7 +16,7 @@ import type { AudioProcessorOptions, TrackProcessor } from "livekit-client";
  * limpou. Por isso quem escolhe "Avançada" desliga a nativa (ver
  * `restricoesDeCaptura`, em `stores/voice`).
  *
- * ## Um contexto por aba, e ele é NOSSO
+ * ## O contexto de captura é NOSSO, e a taxa só é forçada para quem a exige
  *
  * A versão anterior usava a `AudioContext` que o LiveKit entrega em
  * `init({ audioContext })` sempre que ela já estivesse em 48 kHz, e abria uma
@@ -32,10 +32,29 @@ import type { AudioProcessorOptions, TrackProcessor } from "livekit-client";
  *    página): a partir daí `new AudioContext()` lança, a `init()` falha e a
  *    supressão "buga" até o F5.
  *
- * Agora há **um** contexto de captura por aba, criado sob demanda, em 48 kHz
- * (o modelo assume essa taxa; em 44,1 kHz o RNNoise devolveria a voz com a
- * altura errada) e suspenso quando ninguém o usa. O worklet é registrado uma
- * vez nele — `addModule` duas vezes no mesmo contexto é erro.
+ * Por isso o contexto é criado sob demanda, reaproveitado e apenas **suspenso**
+ * quando ninguém o usa — nunca fechado, e nunca é o do LiveKit. São no máximo
+ * dois por aba, e o que os separa é a taxa:
+ *
+ * - **48 kHz forçados** — o que o RNNoise exige (o modelo assume essa taxa; em
+ *   44,1 kHz devolveria a voz com a altura errada). Nasce só quando a cadeia
+ *   avançada vai ser montada — ou no pré-aquecimento, que já só roda para quem
+ *   escolheu "Avançada". O worklet é registrado uma vez nele: `addModule` duas
+ *   vezes no mesmo contexto é erro.
+ * - **taxa do aparelho** (sem `sampleRate`) — para quem só *ouve* o sinal (o
+ *   detector local de fala, o retorno do teste de microfone) e para a cadeia
+ *   sem RNNoise, que é um `GainNode` e mais nada. Nenhum deles depende da taxa.
+ *
+ * Por que a separação: quem mantinha um contexto de 48 kHz aberto do começo ao
+ * fim de **toda** chamada não era o supressor — era o detector local de fala,
+ * armado sempre, sem olhar preferência nenhuma. Isto é **eliminação de
+ * suspeito** no relato de que entrar numa call estraga o som dos outros
+ * aplicativos: não há prova de que um contexto com taxa forçada cause aquilo, e
+ * não há motivo para ele existir quando ninguém precisa da taxa.
+ *
+ * Quem não exige 48 kHz reaproveita o contexto forçado quando ele já está
+ * aberto: manter dois contextos vivos por gosto seria trocar um custo por
+ * outro.
  *
  * ## Ordem: supressor → ganho
  *
@@ -200,47 +219,85 @@ function carregarModelo(): Promise<Modelo> {
   return modelo;
 }
 
-/** O contexto de captura da aba, e o `addModule` que já rodou nele. */
-let ctx: AudioContext | null = null;
+/** Os dois contextos de captura da aba (ver o cabeçalho) — um de cada, no máximo. */
+let ctxDoModelo: AudioContext | null = null;
+let ctxNativo: AudioContext | null = null;
+/** O `addModule` que já rodou — sempre no `ctxDoModelo`, que é o único que usa worklet. */
 let worklet: Promise<void> | null = null;
 /** Quantas cadeias estão montadas — só o teste do ciclo pergunta. */
 let montadas = 0;
 /**
- * Quem está usando o contexto agora: as cadeias, o detector local de fala e o
- * retorno do teste de microfone. Com zero, o contexto é suspenso — e **só**
+ * Quem está usando cada contexto agora: as cadeias, o detector local de fala e
+ * o retorno do teste de microfone. Com zero, o contexto é suspenso — e **só**
  * com zero: suspendê-lo enquanto o detector mede deixaria o anel de fala
  * congelado, que foi como o defeito apareceria se o contador fosse só o das
  * cadeias.
+ *
+ * A conta é por contexto, e não uma só, porque os dois têm vidas independentes:
+ * o de 48 kHz costuma ficar suspenso a call inteira de quem não usa a
+ * supressão avançada.
  */
-let usuarios = 0;
+const usuarios = new Map<AudioContext, number>();
 
-/** Uma `AudioContext` de 48 kHz por aba — ver o cabeçalho. */
-export function contextoDeCaptura(): AudioContext {
-  if (!ctx || ctx.state === "closed") {
-    ctx = new AudioContext({ sampleRate: TAXA_EXIGIDA });
-    // contexto novo, worklet ainda não registrado nele
-    worklet = null;
+function aberto(c: AudioContext | null): c is AudioContext {
+  return !!c && c.state !== "closed";
+}
+
+function usuariosDe(c: AudioContext | null): number {
+  return (c && usuarios.get(c)) ?? 0;
+}
+
+/**
+ * O contexto de captura para este uso.
+ *
+ * `exigeTaxaDoModelo` é do RNNoise e de mais ninguém. Sem ele, a `AudioContext`
+ * nasce **sem `sampleRate`** — na taxa do próprio aparelho — e, se o contexto
+ * forçado já estiver de pé, é ele que volta: dois contextos abertos ao mesmo
+ * tempo só se justificam enquanto a cadeia avançada e um ouvinte antigo se
+ * cruzam (o ouvinte se rearma e o outro fica suspenso).
+ */
+export function contextoDeCaptura(exigeTaxaDoModelo = false): AudioContext {
+  if (exigeTaxaDoModelo) {
+    if (!aberto(ctxDoModelo)) {
+      ctxDoModelo = new AudioContext({ sampleRate: TAXA_EXIGIDA });
+      // contexto novo, worklet ainda não registrado nele
+      worklet = null;
+    }
+    return ctxDoModelo;
   }
-  return ctx;
+  if (aberto(ctxDoModelo)) return ctxDoModelo;
+  if (!aberto(ctxNativo)) ctxNativo = new AudioContext();
+  return ctxNativo;
 }
 
 /** Toma o contexto (e o acorda). Todo `usar` precisa de um `liberar`. */
-export function usarContextoDeCaptura(): AudioContext {
-  const c = contextoDeCaptura();
-  usuarios += 1;
+export function usarContextoDeCaptura(exigeTaxaDoModelo = false): AudioContext {
+  const c = contextoDeCaptura(exigeTaxaDoModelo);
+  usuarios.set(c, usuariosDe(c) + 1);
   if (c.state === "suspended") void c.resume().catch(() => {});
   return c;
 }
 
-/** Devolve o contexto; o último a sair o suspende (não o fecha: é um por aba). */
-export function liberarContextoDeCaptura() {
-  usuarios = Math.max(0, usuarios - 1);
-  if (usuarios === 0) void ctx?.suspend().catch(() => {});
+/**
+ * Devolve o contexto; o último a sair o suspende (não o fecha: recriá-lo a cada
+ * montagem é o vazamento descrito no cabeçalho).
+ *
+ * Passar o contexto que se tomou é o certo. Sem ele, devolve-se ao que tem dono
+ * — o nativo primeiro, porque quem não pediu taxa nenhuma foi parar nele — e
+ * nunca a um contexto zerado: um decremento errado suspenderia o contexto de
+ * quem ainda está usando.
+ */
+export function liberarContextoDeCaptura(contexto?: AudioContext) {
+  const c = contexto ?? (usuariosDe(ctxNativo) > 0 ? ctxNativo : ctxDoModelo);
+  if (!c) return;
+  const restantes = Math.max(0, usuariosDe(c) - 1);
+  usuarios.set(c, restantes);
+  if (restantes === 0) void c.suspend().catch(() => {});
 }
 
-/** Só para os testes: quantos donos o contexto tem agora. */
+/** Só para os testes: quantos donos os contextos têm agora. */
 export function usuariosDoContexto(): number {
-  return usuarios;
+  return usuariosDe(ctxDoModelo) + usuariosDe(ctxNativo);
 }
 
 async function garantirWorklet(c: AudioContext) {
@@ -271,10 +328,13 @@ export function cadeiasMontadas(): number {
  * o mouse passa pelo canal de voz), a entrada encontra tudo memoizado:
  * `carregarModelo` guarda a promessa e `garantirWorklet` também.
  *
- * A `AudioContext` nasce **suspensa** — criá-la sem gesto do usuário é
- * permitido, só não toca som —, e é a mesma que a cadeia vai usar depois
- * (`contextoDeCaptura` é um por aba). `addModule` funciona em contexto suspenso;
- * quem o acorda é `usarContextoDeCaptura`, no clique.
+ * A `AudioContext` de 48 kHz nasce **suspensa** — criá-la sem gesto do usuário
+ * é permitido, só não toca som —, e é a mesma que a cadeia avançada vai usar
+ * depois. Ela só aparece aqui porque quem pré-aquece já escolheu "Avançada"
+ * (`preaquecerCadeiaDeVoz`, em `stores/voice`); para os outros níveis este
+ * caminho não roda e nenhum contexto com taxa forçada chega a existir.
+ * `addModule` funciona em contexto suspenso; quem o acorda é
+ * `usarContextoDeCaptura`, no clique.
  *
  * Nunca rejeita: pré-aquecer é otimização. Se falhar, a entrada tenta de novo
  * pelo caminho normal e, aí sim, avisa a pessoa (`aoFalharASupressao`).
@@ -289,7 +349,7 @@ export async function preaquecerSupressor(): Promise<void> {
   }
   await Promise.all([
     carregarModelo().catch(() => {}),
-    garantirWorklet(contextoDeCaptura()).catch(() => {}),
+    garantirWorklet(contextoDeCaptura(true)).catch(() => {}),
   ]);
 }
 
@@ -316,6 +376,12 @@ export function cadeiaDoMicrofone(inicial: {
   let no: (AudioWorkletNode & { destroy(): void }) | null = null;
   let ganho: GainNode | null = null;
   let destino: MediaStreamAudioDestinationNode | null = null;
+  /**
+   * O contexto que ESTA cadeia tomou. Guardado porque agora existem dois: ler
+   * um global na hora de devolver (ou de mexer no ganho) devolveria o contexto
+   * do vizinho quando a supressão avançada tivesse acabado de entrar em cena.
+   */
+  let contexto: AudioContext | null = null;
   /** true entre a `destroy()` e uma `init()` nova: a cadeia não pode ressuscitar sozinha. */
   let montada = false;
   /**
@@ -348,8 +414,9 @@ export function cadeiaDoMicrofone(inicial: {
     ganho = null;
     destino = null;
     cadeia.processedTrack = undefined;
-    // o contexto fica de pé (é um por aba), mas suspenso não gasta CPU
-    liberarContextoDeCaptura();
+    // o contexto fica de pé (é compartilhado), mas suspenso não gasta CPU
+    liberarContextoDeCaptura(contexto ?? undefined);
+    contexto = null;
   }
 
   /**
@@ -386,7 +453,10 @@ export function cadeiaDoMicrofone(inicial: {
   }
 
   async function montar(track: MediaStreamTrack) {
-    const c = usarContextoDeCaptura();
+    // só o RNNoise exige 48 kHz; a cadeia de puro ganho roda na taxa do
+    // aparelho, como qualquer um que apenas ouve o sinal
+    const c = usarContextoDeCaptura(opcoes.supressao);
+    contexto = c;
     montada = true;
     montadas += 1;
     // O modelo é carregado ANTES de o grafo existir: publicar a faixa e só
@@ -444,8 +514,8 @@ export function cadeiaDoMicrofone(inicial: {
 
     setGanho: (valor) => {
       opcoes.ganho = valor;
-      if (!ganho || !ctx) return;
-      const agora = ctx.currentTime;
+      if (!ganho || !contexto) return;
+      const agora = contexto.currentTime;
       // segura o valor de agora antes de agendar o próximo: sem isto, mexer no
       // slider durante os 120 ms de subida deixaria a rampa antiga terminar por
       // cima e o volume voltaria sozinho para o anterior
