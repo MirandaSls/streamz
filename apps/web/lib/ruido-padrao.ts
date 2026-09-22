@@ -31,8 +31,8 @@
  * O defeito é pior por ser silencioso: quem o causa não o ouve, quem sofre são
  * os outros. A troca foi decidida pelo usuário, com conhecimento do sintoma, e
  * fica registrada aqui para quem vier depois não "consertar" de volta sem
- * saber o que estava sendo consertado. Quem usa alto-falante escolhe o preset
- * "Sistema" na aba de voz e recupera o cancelamento.
+ * saber o que estava sendo consertado. Quem usa alto-falante liga de volta o
+ * interruptor de cancelamento de eco na aba de voz e recupera o cancelamento.
  */
 export type NivelDeRuidoSalvo = "off" | "padrao" | "avancada";
 
@@ -75,8 +75,9 @@ export function migrarRuido(
  *
  * Sobra uma ambiguidade que o storage não resolve: quem escolheu "Sistema" de
  * propósito, e não mexeu em mais nada, gravou exatamente o padrão antigo e é
- * migrado junto. Esse caso volta ao que quer com um clique no preset — e, a
- * partir daí, a marca já gravada protege a escolha.
+ * migrado junto. Esse caso volta ao que quer ligando de novo o interruptor de
+ * cancelamento de eco na aba de voz — e, a partir daí, a marca já gravada
+ * protege a escolha.
  */
 export function migrarTratamento(
   processamento: ProcessamentoSalvo,
