@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -174,6 +175,40 @@ const PROPORCAO_PADRAO_MOBILE = 0.5;
 /** Área de pega do divisor no telefone: 1px de linha não se acerta com o dedo. */
 const PEGA_TOQUE = "border-y-[11px]";
 
+/**
+ * O invólucro do palco na divisão vertical, nos dois modos.
+ *
+ * **Na faixa** ele tem altura explícita, e o `maxHeight` em CSS cobre o quadro
+ * entre a coluna encolher e o observador reagir: sem ele a altura de uma tela
+ * grande engoliria o chat por um instante.
+ *
+ * **Expandido** o palco está fora do fluxo (ver o cabeçalho do arquivo): sem
+ * `relative` para não prendê-lo, e sem altura para este invólucro vazio não
+ * deixar uma faixa de 199px por baixo dele.
+ *
+ * **Sem `overflow-hidden` de propósito**, embora o transbordo do palco por cima
+ * da conversa tenha sido um defeito de verdade (prints `image.pbg` e
+ * `aaa.pbg`). Quem transbordava era o palco, que se media pelo próprio conteúdo
+ * — a correção está lá, em `posicaoDoPalco` (`CallStage`), e é o `min-h-0` que
+ * faz a altura daqui valer. Clipar seria esconder o sintoma e cortar junto os
+ * popovers da barra de controles, que numa faixa de 199px sobem de propósito
+ * para fora do palco (ver `VoiceControls`).
+ */
+export function involucroDoPalco(
+  expandido: boolean,
+  altura: number,
+  disponivel: number,
+): { className: string; style: CSSProperties | undefined } {
+  if (expandido) return { className: "flex min-h-0 flex-1 flex-col", style: undefined };
+  return {
+    className: "relative flex min-h-0 shrink-0 flex-col",
+    style: {
+      height: altura,
+      maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)`,
+    },
+  };
+}
+
 /** Conversa direta: faixa de chamada em cima, conversa embaixo. */
 function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNode }) {
   const raiz = useRef<HTMLDivElement>(null);
@@ -276,27 +311,8 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
 
   return (
     <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background-base-lower">
-      <div
-        // o `maxHeight` em CSS cobre o quadro entre a coluna encolher e o
-        // observador reagir: sem ele a altura de uma tela grande engoliria o
-        // chat por um instante
-        style={
-          expandido
-            ? undefined
-            : {
-                height: altura,
-                maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)`,
-              }
-        }
-        className={
-          // expandido o palco está fora do fluxo (ver o cabeçalho do arquivo):
-          // sem `relative` para não prendê-lo, e sem altura para este invólucro
-          // vazio não deixar uma faixa de 199px por baixo dele
-          expandido ? "flex min-h-0 flex-1 flex-col" : "relative flex min-h-0 shrink-0 flex-col"
-        }
-      >
-        {chamada}
-      </div>
+      {/* as duas medidas e o porquê de cada uma estão em `involucroDoPalco` */}
+      <div {...involucroDoPalco(expandido, altura, disponivel)}>{chamada}</div>
 
       <div
         role="separator"
