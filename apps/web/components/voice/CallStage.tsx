@@ -16,7 +16,6 @@ import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
-import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
 import { useTelaCheia } from "@/components/voice/fullscreen";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
@@ -52,9 +51,11 @@ import { participantesDe, telasDe, useVoice } from "@/stores/voice";
  *    se promove sobre a **região de conteúdo** — cabeçalho da conversa, chat e
  *    coluna da direita ficam atrás dele — e a **barra lateral da esquerda
  *    continua na tela**. É um modo nosso, dentro da janela, e sai no Esc.
- * 2. **Tela cheia** (`IconesDoCanto`, `fullscreen.ts`): a de verdade, do
- *    elemento ou da janela do app. Some com a barra lateral, com o navegador e
- *    com o sistema.
+ * 2. **Tela cheia** (`IconesDoCanto`, `fullscreen.ts`): a de verdade. No
+ *    navegador é a Fullscreen API; no app é emulada (janela em tela cheia mais
+ *    o elemento promovido por CSS nosso), porque o Tauri não habilita a tela
+ *    cheia de elemento — ver o cabeçalho de `fullscreen.ts`. Some com a barra
+ *    lateral, com o navegador e com o sistema.
  *
  * As duas continuam existindo porque respondem a pedidos diferentes ("quero a
  * chamada maior, sem perder a navegação" e "quero só a chamada"), e nenhum dos
@@ -247,9 +248,9 @@ export default function CallStage({
       {...doPalco}
       data-call-stage={channelId}
       aria-label={`Chamada em ${titulo}`}
-      // A tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é
-      // promovido pelo compositor, então não há classe de posicionamento a
-      // aplicar para ela aqui.
+      // A tela cheia não precisa de classe aqui: no navegador quem promove o
+      // elemento é o compositor, e no app o `fullscreen.ts` marca este mesmo
+      // elemento com `data-tela-cheia-emulada` (a regra está no `globals.css`).
       //
       // **Expandido é o contrário disso**: não há compositor nenhum, quem
       // promove somos nós. O `absolute inset-0` sobe até o `relative` da região
@@ -305,13 +306,15 @@ export default function CallStage({
       >
         {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
             que mantém o título de fato centralizado — os dois lados dividem a
-            sobra — sem espremer o selo "ao vivo", que precisa de ~230px e não
-            cabia nos 96. */}
-        {/* **Com uma transmissão no destaque o canto esquerdo vira trilha**, e
-            não mais o selo "Você está ao vivo": é o que a print `p5` mostra —
-            `@ Md · (avatar) Tela de Arthur`, dizendo de onde se está vendo e o
-            que se está vendo. O selo de transmitir volta assim que o destaque
-            sai (e o "Parar transmissão" dele continua na barra de controles).
+            sobra. */}
+        {/* **Com uma transmissão no destaque o canto esquerdo vira trilha**: é
+            o que a print `p5` mostra — `@ Md · (avatar) Tela de Arthur`,
+            dizendo de onde se está vendo e o que se está vendo. Sem destaque o
+            canto fica **vazio**: aqui já morou um selo "Você está ao vivo" com
+            um botão "Parar transmissão", e o Discord não tem nenhum dos dois em
+            cabeçalho de palco nenhum (`p2` e `p5`). Quem para a transmissão é o
+            botão de tela da barra de controles, que fica aceso enquanto ela
+            está no ar.
 
             Medido em `p5` (2874×1798, **2×** — a cápsula de desligar mede 100px
             ali para os ~48 de sempre, e o "AO VIVO" 32 para os 16 já medidos no
@@ -320,7 +323,7 @@ export default function CallStage({
             uma linha de ~26); avatar de 48px (**24**). O "@" sai em cinza
             (`#7a7b83`) e o resto em branco (`#dcdcdf`). */}
         <span className="flex min-w-0 flex-1 basis-0 items-center [&>*]:pointer-events-auto">
-          {donoDaTela ? (
+          {donoDaTela && (
             <span className="flex w-max items-center gap-2 text-sm font-semibold text-text-strong">
               <span className="flex items-center gap-1 text-text-muted">
                 <AtSign size={16} aria-hidden="true" />
@@ -334,8 +337,6 @@ export default function CallStage({
                 Tela de {displayNameOf(donoDaTela.user)}
               </span>
             </span>
-          ) : (
-            <AoVivoIndicador />
           )}
         </span>
 
