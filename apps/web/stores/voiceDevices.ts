@@ -149,6 +149,31 @@ function save(ids: Ids) {
   }
 }
 
+/**
+ * **A escolha da pessoa, que só ela muda** — separada do que está em uso agora.
+ *
+ * Os dois eram a mesma coisa, e isso apagava a preferência sozinho. Toda
+ * varredura comparava o id guardado com a lista do momento e, não achando,
+ * gravava `null`. Duas situações corriqueiras caem nessa peneira:
+ *
+ * - **Antes da permissão**, `enumerateDevices()` devolve entradas com
+ *   `deviceId` vazio (é assim que o navegador esconde o hardware de quem não
+ *   pediu acesso). A lista existe, o aparelho escolhido não está nela, e a
+ *   preferência morria — no carregamento do app, antes de a pessoa entrar em
+ *   qualquer chamada.
+ * - **Fone Bluetooth desligado** na hora de abrir: mesma conta, mesmo
+ *   resultado, e ligar o fone depois já não trazia a escolha de volta porque
+ *   ela não existia mais em lugar nenhum.
+ *
+ * Era isto que fazia "sempre ter que selecionar o microfone e o fone de novo".
+ *
+ * Agora `preferidos` é a fonte da verdade e **nunca** é apagada por varredura:
+ * só `setInput`/`setOutput`/`setCamera` a mudam. O que a varredura decide é o
+ * valor *efetivo* do estado — aparelho ausente vira "padrão do sistema" na
+ * hora, e volta a ser o escolhido assim que reaparece.
+ */
+let preferidos: Ids = load();
+
 /** `mediaDevices` não existe em contexto inseguro (http fora de localhost) nem no SSR. */
 function midia(): MediaDevices | null {
   if (typeof navigator === "undefined") return null;
@@ -319,19 +344,19 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   motivo: "ok",
 
   setInput: (id) => {
-    const next = { ...ids(get()), inputId: id };
-    save(next);
-    set(next);
+    preferidos = { ...preferidos, inputId: id };
+    save(preferidos);
+    set({ inputId: id });
   },
   setOutput: (id) => {
-    const next = { ...ids(get()), outputId: id };
-    save(next);
-    set(next);
+    preferidos = { ...preferidos, outputId: id };
+    save(preferidos);
+    set({ outputId: id });
   },
   setCamera: (id) => {
-    const next = { ...ids(get()), cameraId: id };
-    save(next);
-    set(next);
+    preferidos = { ...preferidos, cameraId: id };
+    save(preferidos);
+    set({ cameraId: id });
   },
 
   refresh: (forcar = false) => {
@@ -414,21 +439,23 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
         cameras,
       });
 
-      // dispositivo escolhido que foi desconectado volta a "padrão do sistema"
+      // Aparelho escolhido que não está na lista agora vira "padrão do
+      // sistema" **no estado**, e só nele: `preferidos` fica intacta, para que
+      // religar o fone devolva a escolha em vez de exigir que ela seja feita de
+      // novo. Nada de `save` aqui — ver o cabeçalho de `preferidos`.
       const atual = ids(get());
       const valido = (id: string | null, lista: MediaDeviceInfo[]) =>
         id === null || lista.some((d) => d.deviceId === id) ? id : null;
       const next: Ids = {
-        inputId: valido(atual.inputId, inputs),
-        outputId: valido(atual.outputId, outputs),
-        cameraId: valido(atual.cameraId, cameras),
+        inputId: valido(preferidos.inputId, inputs),
+        outputId: valido(preferidos.outputId, outputs),
+        cameraId: valido(preferidos.cameraId, cameras),
       };
       if (
         next.inputId !== atual.inputId ||
         next.outputId !== atual.outputId ||
         next.cameraId !== atual.cameraId
       ) {
-        save(next);
         set(next);
       }
     })();

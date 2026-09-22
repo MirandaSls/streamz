@@ -130,3 +130,38 @@ describe("explicarMidia", () => {
     expect(explicarMidia("ok")).toBeNull();
   });
 });
+
+describe("a escolha de aparelho sobrevive ao aparelho sumir", () => {
+  /*
+    O defeito que este teste tranca: a varredura comparava o id escolhido com a
+    lista do momento e, não achando, **gravava `null`** — apagando a preferência.
+    Bastava abrir o app com o fone Bluetooth desligado (ou antes de conceder a
+    permissão, quando o navegador devolve a lista sem ids) para a escolha morrer,
+    e religar o fone já não a trazia de volta porque ela não existia mais.
+    Era o "sempre ter que selecionar o microfone e o fone de novo".
+  */
+  function listar(devices: MediaDeviceInfo[]) {
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices: async () => devices } });
+  }
+  const comFone = [d("mic", "Microfone USB"), d("fone", "Fone Bluetooth", "audiooutput")];
+  const semFone = [d("mic", "Microfone USB")];
+
+  it("cai para o padrão do sistema enquanto ele falta, e volta sozinha quando ele volta", async () => {
+    vi.stubGlobal("HTMLMediaElement", { prototype: { setSinkId: async () => {} } });
+    listar(comFone);
+    await useVoiceDevicesStore.getState().refresh(true);
+    useVoiceDevicesStore.getState().setOutput("fone");
+    expect(useVoiceDevicesStore.getState().outputId).toBe("fone");
+
+    // fone desligado: o efetivo cede, porque insistir num aparelho ausente é
+    // ficar sem som
+    listar(semFone);
+    await useVoiceDevicesStore.getState().refresh(true);
+    expect(useVoiceDevicesStore.getState().outputId).toBeNull();
+
+    // e aqui está o conserto: a escolha não foi apagada, só suspensa
+    listar(comFone);
+    await useVoiceDevicesStore.getState().refresh(true);
+    expect(useVoiceDevicesStore.getState().outputId).toBe("fone");
+  });
+});
