@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, UserPlus, Volume2 } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
@@ -17,11 +17,14 @@ import {
   FAIXA_GAP,
   FAIXA_LARGURA,
   FOCO_GAP,
-  GAP,
+  TETO_DE_TILES_ANIMADOS,
+  TRANSICAO_DE_REFLOW,
   alturaDoDestaque,
-  distribuir,
+  estiloDoTile,
+  larguraDaTira,
   melhorArranjo,
   palcoUsaFoco,
+  posicionarGrade,
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -48,6 +51,14 @@ import {
  * A grade **não rola**: o arranjo linhas×colunas é calculado a partir do
  * tamanho real do palco (`grid-layout.ts`), como no Discord. Rolagem aqui seria
  * a admissão de que alguém na sala está fora do campo de visão.
+ *
+ * **Cada tile é absoluto, e quem anima a mudança de leiaute é o CSS.** O
+ * arranjo vira `top/left/width/height` em `posicionarGrade`, e a transição de
+ * `TRANSICAO_DE_REFLOW` interpola esses quatro números quando alguém entra,
+ * sai, sobe ao palco ou a janela muda de tamanho. É o desenho do Signal
+ * Desktop (levantamento de 2026-09-22), e é o único que funciona: `flex`/
+ * `grid` não interpolam *contagem* de filhos — entrar na chamada seria sempre
+ * um corte seco, que é o que havia aqui antes.
  *
  * **Cada pessoa tem um tile, e cada tela tem outro.** Quem transmite aparece
  * duas vezes — o avatar dela e a transmissão —, que é o que o Discord faz. E dá
@@ -167,6 +178,17 @@ export default function VoiceGrid({
   // ao destaque, e um `ref` não avisaria o observador de que voltou
   const [palco, setPalco] = useState<HTMLDivElement | null>(null);
   const tamanho = useTamanho(palco);
+  // **A transição só entra a partir do segundo quadro medido.** No primeiro o
+  // palco ainda vale 0×0 (o `ResizeObserver` não correu, e no SSR nunca corre),
+  // e uma transição ligada ali faria cada tile *inflar do nada* ao entrar na
+  // chamada — movimento que ninguém pediu e que a referência não tem. O tile de
+  // quem chega depois nasce direto no lugar certo pelo mesmo motivo: nó novo no
+  // DOM não tem estado anterior de onde partir; quem anima são os vizinhos, que
+  // abrem espaço.
+  const jaMedido = useRef(false);
+  useEffect(() => {
+    if (tamanho.largura > 0 && tamanho.altura > 0) jaMedido.current = true;
+  }, [tamanho.largura, tamanho.altura]);
 
   // Quem transmite pelo app de desktop tem **dois** participantes na sala: a
   // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram nos
@@ -332,6 +354,10 @@ export default function VoiceGrid({
       ? candidato
       : null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
+  // O teto do Element Call: acima dele o reflow volta a ser seco, porque
+  // `top/left/width/height` custam layout e pintura a cada quadro e isso soma
+  // ao custo de decodificar os vídeos (ver `TETO_DE_TILES_ANIMADOS`).
+  const animar = jaMedido.current && tiles.length <= TETO_DE_TILES_ANIMADOS;
 
   if (principal) {
     // O medido é a área **inteira** do palco (a raiz), e não o invólucro do
@@ -345,27 +371,53 @@ export default function VoiceGrid({
         style={{ gap: FOCO_GAP }}
       >
         {/* o destaque mantém 16:9 e fica centralizado nos dois eixos, como na
-            print: é `melhorArranjo` com uma vaga só */}
+            print: é `melhorArranjo` com uma vaga só. Aqui só o *tamanho* anima
+            — quem centraliza é o flexbox, que reposiciona sozinho a cada quadro
+            enquanto a caixa cresce ou encolhe. */}
         <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
-          <div style={{ width: foco.largura, height: foco.altura }}>
+          <div
+            style={{
+              width: foco.largura,
+              height: foco.altura,
+              ...(animar ? { transition: TRANSICAO_DE_REFLOW } : {}),
+            }}
+          >
             <VoiceTile tile={principal} {...acoes} grande />
           </div>
         </div>
 
         {resto.length > 0 && (
+          /* A tira também posiciona cada miniatura de forma absoluta: sem isso
+             quem entra empurra as outras num corte seco. O invólucro de largura
+             explícita é o que mantém o comportamento de antes — centralizada
+             enquanto cabe (`justify-center`) e rolável de lado quando não cabe
+             (`overflow-x-auto`), que é o que o Discord faz com dez miniaturas. */
           <div
             className="flex shrink-0 justify-center overflow-x-auto"
-            style={{ gap: FAIXA_GAP, height: FAIXA_ALTURA }}
+            style={{ height: FAIXA_ALTURA }}
           >
-            {resto.map((t) => (
-              <div
-                key={t.key}
-                className="shrink-0"
-                style={{ width: FAIXA_LARGURA, height: FAIXA_ALTURA }}
-              >
-                <VoiceTile tile={t} {...acoes} compacto />
-              </div>
-            ))}
+            <div
+              className="relative shrink-0"
+              style={{ width: larguraDaTira(resto.length), height: FAIXA_ALTURA }}
+            >
+              {resto.map((t, i) => (
+                <div
+                  key={t.key}
+                  className="absolute"
+                  style={estiloDoTile(
+                    {
+                      esquerda: i * (FAIXA_LARGURA + FAIXA_GAP),
+                      topo: 0,
+                      largura: FAIXA_LARGURA,
+                      altura: FAIXA_ALTURA,
+                    },
+                    animar,
+                  )}
+                >
+                  <VoiceTile tile={t} {...acoes} compacto />
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -382,35 +434,27 @@ export default function VoiceGrid({
   ];
 
   const arranjo = melhorArranjo(celulas.length, tamanho.largura, tamanho.altura);
-  const linhas = distribuir(celulas.length, arranjo.colunas);
-  let indice = 0;
+  // As linhas deixaram de ser elementos: cada célula recebe o retângulo pronto
+  // e fica solta sobre o palco. É o que dá identidade a um tile entre dois
+  // leiautes — o mesmo nó do DOM muda de coordenada, e o CSS interpola — em vez
+  // de o navegador redesenhar fileiras com um filho a mais ou a menos.
+  const vagas = posicionarGrade(celulas.length, arranjo, tamanho.largura, tamanho.altura);
 
   return (
-    <div
-      ref={setPalco}
-      className="flex h-full min-h-0 flex-col items-center justify-center overflow-hidden"
-      style={{ gap: GAP }}
-    >
-      {linhas.map((quantos, linha) => {
-        const fatia = celulas.slice(indice, indice + quantos);
-        indice += quantos;
-        return (
-          <div key={linha} className="flex shrink-0 justify-center" style={{ gap: GAP }}>
-            {fatia.map((c) => (
-              <div
-                key={c.tipo === "tile" ? c.t.key : "convite"}
-                style={{ width: arranjo.largura, height: arranjo.altura }}
-              >
-                {c.tipo === "tile" ? (
-                  <VoiceTile tile={c.t} {...acoes} />
-                ) : (
-                  <TileDeConvite guildId={guildId as string} />
-                )}
-              </div>
-            ))}
-          </div>
-        );
-      })}
+    <div ref={setPalco} className="relative h-full min-h-0 overflow-hidden">
+      {celulas.map((c, i) => (
+        <div
+          key={c.tipo === "tile" ? c.t.key : "convite"}
+          className="absolute"
+          style={estiloDoTile(vagas[i], animar)}
+        >
+          {c.tipo === "tile" ? (
+            <VoiceTile tile={c.t} {...acoes} />
+          ) : (
+            <TileDeConvite guildId={guildId as string} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }

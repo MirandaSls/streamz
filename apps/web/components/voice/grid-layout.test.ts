@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   FAIXA_ALTURA,
+  FAIXA_GAP,
+  FAIXA_LARGURA,
   FOCO_GAP,
   GAP,
+  TETO_DE_TILES_ANIMADOS,
+  TRANSICAO_DE_REFLOW,
   alturaDoDestaque,
   distribuir,
+  estiloDoTile,
+  larguraDaTira,
   melhorArranjo,
   palcoUsaFoco,
+  posicionarGrade,
 } from "./grid-layout";
 
 describe("vão da grade", () => {
@@ -165,5 +172,123 @@ describe("palcoUsaFoco", () => {
         }
       }
     }
+  });
+});
+
+/**
+ * O leiaute chega ao DOM como retângulo absoluto, e não como fileiras de
+ * flexbox — é o que permite a transição (ver `TRANSICAO_DE_REFLOW`). O que se
+ * afirma aqui é que **o desenho não mudou**: as coordenadas são as mesmas que
+ * o `items-center`/`justify-center` produzia.
+ */
+describe("posicionarGrade", () => {
+  it("repete a centralização do flexbox na fileira da print 123917", () => {
+    const arranjo = melhorArranjo(3, 889, 200);
+    const vagas = posicionarGrade(3, arranjo, 889, 200);
+
+    expect(vagas).toHaveLength(3);
+    // 3×291 + 2×8 = 889: a fileira ocupa a largura toda, sem folga lateral
+    expect(vagas.map((v) => v.esquerda)).toEqual([0, 291 + GAP, 2 * (291 + GAP)]);
+    // uma linha de 163 numa área de 200 → (200 − 163) / 2 em todas
+    expect(vagas.map((v) => v.topo)).toEqual([18.5, 18.5, 18.5]);
+    for (const v of vagas) {
+      expect(v.largura).toBe(291);
+      expect(v.altura).toBe(163);
+    }
+  });
+
+  it("centraliza a última linha incompleta, como `distribuir` promete", () => {
+    // arranjo à mão: o que se testa aqui é a conversão em coordenadas, não a
+    // escolha de colunas (essa é de `melhorArranjo`, testada acima)
+    const arranjo = { colunas: 3, linhas: 2, largura: 100, altura: 50 };
+    const vagas = posicionarGrade(5, arranjo, 1000, 500);
+
+    // 3 + 2: a primeira linha ocupa 3×100 + 2×8 = 316, a segunda 2×100 + 8 = 208
+    expect(vagas.slice(0, 3).map((v) => v.esquerda)).toEqual([342, 450, 558]);
+    expect(vagas.slice(3).map((v) => v.esquerda)).toEqual([396, 504]);
+    // duas linhas de 50 com o vão = 108 numa área de 500
+    expect(vagas.map((v) => v.topo)).toEqual([196, 196, 196, 254, 254]);
+  });
+
+  it("um tile só fica no meio do palco", () => {
+    const arranjo = { colunas: 1, linhas: 1, largura: 400, altura: 225 };
+    expect(posicionarGrade(1, arranjo, 1000, 625)).toEqual([
+      { esquerda: 300, topo: 200, largura: 400, altura: 225 },
+    ]);
+  });
+
+  it("dá uma vaga por célula e nenhuma sai da área", () => {
+    for (let n = 1; n <= 12; n++) {
+      const arranjo = melhorArranjo(n, 1200, 700);
+      const vagas = posicionarGrade(n, arranjo, 1200, 700);
+      expect(vagas).toHaveLength(n);
+      for (const v of vagas) {
+        expect(v.esquerda).toBeGreaterThanOrEqual(0);
+        expect(v.topo).toBeGreaterThanOrEqual(0);
+        expect(v.esquerda + v.largura).toBeLessThanOrEqual(1200);
+        expect(v.topo + v.altura).toBeLessThanOrEqual(700);
+      }
+    }
+  });
+
+  it("nada para posicionar dá lista vazia", () => {
+    expect(posicionarGrade(0, melhorArranjo(0, 800, 500), 800, 500)).toEqual([]);
+  });
+});
+
+describe("larguraDaTira", () => {
+  it("é a soma das miniaturas com os vãos", () => {
+    expect(larguraDaTira(1)).toBe(FAIXA_LARGURA);
+    expect(larguraDaTira(3)).toBe(3 * FAIXA_LARGURA + 2 * FAIXA_GAP);
+    expect(larguraDaTira(0)).toBe(0);
+  });
+});
+
+/**
+ * A transição que o Signal Desktop usa na mesma grade, e as duas coisas que
+ * ela **não** pode ter: duração literal (a regra central de
+ * `prefers-reduced-motion` no `globals.css` não a alcançaria) e curva de
+ * aceleração (numa interpolação de retângulo o tile pareceria escorregar).
+ */
+describe("TRANSICAO_DE_REFLOW", () => {
+  it("anima os quatro lados do retângulo, em linear", () => {
+    for (const lado of ["top", "left", "width", "height"]) {
+      expect(TRANSICAO_DE_REFLOW).toContain(`${lado} var(--mov-reflow) linear`);
+    }
+  });
+
+  it("sai do token de movimento, nunca de um literal em ms", () => {
+    expect(TRANSICAO_DE_REFLOW).toContain("var(--mov-reflow)");
+    expect(TRANSICAO_DE_REFLOW).not.toMatch(/\d+\s*m?s/);
+  });
+
+  it("não leva curva nenhuma", () => {
+    expect(TRANSICAO_DE_REFLOW).not.toContain("ease");
+    expect(TRANSICAO_DE_REFLOW).not.toContain("cubic-bezier");
+    expect(TRANSICAO_DE_REFLOW).not.toContain("var(--mov-curva");
+  });
+});
+
+describe("estiloDoTile", () => {
+  const vaga = { esquerda: 12, topo: 34, largura: 560, altura: 315 };
+
+  it("entrega o retângulo em top/left/width/height", () => {
+    expect(estiloDoTile(vaga, false)).toEqual({ left: 12, top: 34, width: 560, height: 315 });
+  });
+
+  it("acrescenta a transição quando a grade anima", () => {
+    expect(estiloDoTile(vaga, true).transition).toBe(TRANSICAO_DE_REFLOW);
+  });
+
+  it("sem animar não deixa transição nenhuma no estilo", () => {
+    // é o primeiro quadro (palco ainda sem medida) e o palco lotado: nos dois
+    // casos o tile tem de nascer parado, e não inflar
+    expect(estiloDoTile(vaga, false).transition).toBeUndefined();
+  });
+});
+
+describe("TETO_DE_TILES_ANIMADOS", () => {
+  it("é o teto do Element Call", () => {
+    expect(TETO_DE_TILES_ANIMADOS).toBe(50);
   });
 });
