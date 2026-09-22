@@ -121,7 +121,7 @@ import { ui, useUI } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
-import { useVoiceDevicesStore } from "@/stores/voiceDevices";
+import { explicarMidia, motivoDaFalha, useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 import { encerrarFaixas, ehFonteDeTela, inicioAindaVale } from "@/stores/parar-transmissao";
 
@@ -2043,6 +2043,19 @@ async function aplicarSaidaEscolhida(room: Room) {
 }
 
 /**
+ * A falha do `getUserMedia` foi "você recusou o microfone"?
+ *
+ * Só quem recusou tem conserto à mão, e o texto que aponta o conserto é outro
+ * — por isso a pergunta existe. O `name` é o sinal bom; a mensagem entra na
+ * conta porque ele nem sempre sobrevive ao caminho: na ponte do Tauri o erro
+ * chega serializado e do outro lado só resta o texto.
+ */
+function ehPermissaoNegada(e: unknown): boolean {
+  if ((e as { name?: unknown } | null | undefined)?.name === "NotAllowedError") return true;
+  return e instanceof Error && /NotAllowedError|permission denied/i.test(e.message);
+}
+
+/**
  * Abre o microfone e o publica na sala que já está de pé.
  *
  * O microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
@@ -2072,9 +2085,27 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
       useVoice.getState().testandoMicrofone,
     );
     crono.etapa("microfone aberto e publicado");
-  } catch {
+  } catch (e) {
     // ficar sem microfone não tira ninguém da sala: continua ouvindo
     crono.etapa("microfone falhou");
+    // O `crono` fala por `console.debug`, que não aparece no nível padrão do
+    // console: sem este aviso a falha não deixava rastro nenhum na máquina de
+    // quem relatou "entrei na call e o áudio não funciona". Mesmo prefixo dos
+    // avisos de `lib/microfone`, para o relato vir inteiro num filtro só.
+    console.warn("[voz] o microfone não subiu; a sala continua sem ele", e);
+    // Recusar a permissão não é "deu erro": tem causa e conserto, e quem sabe
+    // apontar o conserto certo (o cadeado, ou o https quando o endereço nem
+    // chega a pedir permissão) é o `explicarMidia` que as configurações de voz
+    // já usam — escrever texto novo aqui seria uma segunda versão da verdade.
+    const negado = ehPermissaoNegada(e) ? explicarMidia(motivoDaFalha()) : null;
+    ui.toast(
+      negado ??
+        errorMessage(
+          e,
+          "Não foi possível ligar o microfone. Escolha outro aparelho nas configurações de voz e entre de novo.",
+        ),
+      "error",
+    );
   }
   if (sala !== room) return;
   await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});

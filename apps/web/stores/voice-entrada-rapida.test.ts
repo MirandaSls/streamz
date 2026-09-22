@@ -137,6 +137,8 @@ vi.mock("@/stores/ui", () => ({
 
 import { CHAMADA_INICIAL } from "@/stores/call-machine";
 import { useAuth } from "@/stores/auth";
+import { ui } from "@/stores/ui";
+import { explicarMidia } from "@/stores/voiceDevices";
 import { useVoice } from "@/stores/voice";
 
 const EU = { id: "ana", username: "ana", displayName: null, avatarUrl: null } as never;
@@ -148,6 +150,7 @@ const drenar = () => new Promise((r) => setTimeout(r, 0));
 beforeEach(() => {
   SalaFalsa.zerar();
   emitidos.length = 0;
+  vi.mocked(ui.toast).mockClear();
   microfone.abrirMicrofone.mockReset();
   microfone.definirMicrofoneAberto.mockReset();
   microfone.definirMicrofoneAberto.mockResolvedValue(undefined);
@@ -231,6 +234,60 @@ describe("entrar na call não espera pelo microfone", () => {
     expect(useVoice.getState().status).toBe("connected");
     // a janela fecha mesmo assim: insistir em "Ativando microfone…" para sempre
     // seria pior do que mostrar o mudo que a pessoa de fato tem
+    expect(useVoice.getState().microfonePronto).toBe(true);
+  });
+});
+
+/**
+ * **A falha do microfone era invisível.** O `catch` descartava o erro (nem
+ * `binding` tinha) e o único rastro era um `console.debug` do cronômetro, que
+ * não aparece no nível padrão do console — daí o relato "às vezes entro na call
+ * e o áudio não funciona" nunca vir com passo de reprodução: a barra desenhava
+ * um microfone normal e ninguém tinha o que contar.
+ *
+ * Contar não é segurar: as asserções de sala continuam aqui de propósito, para
+ * que quem trocar o aviso por um `return` derrube o teste.
+ */
+describe("microfone que não sobe conta que não subiu", () => {
+  it("avisa no console e no toast, e mesmo assim deixa a pessoa na sala", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    microfone.abrirMicrofone.mockRejectedValueOnce(new Error("NotReadableError"));
+
+    await useVoice.getState().connect(CANAL);
+    await drenar();
+
+    // o rastro que faltava na máquina de quem relata
+    expect(
+      warn.mock.calls.some(([texto]) => String(texto).startsWith("[voz] o microfone não subiu")),
+    ).toBe(true);
+    // ...e o aviso na tela, no mesmo par (mensagem, "error") da câmera e da tela
+    expect(ui.toast).toHaveBeenCalledWith(
+      expect.stringContaining("configurações de voz"),
+      "error",
+    );
+    // contar é tudo o que esta correção faz: a sala segue de pé e a barra para
+    // de esperar por um microfone que não vem
+    expect(useVoice.getState().status).toBe("connected");
+    expect(useVoice.getState().microfonePronto).toBe(true);
+  });
+
+  it("permissão negada manda a pessoa ao cadeado, não um 'não foi possível'", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // com `mediaDevices` no lugar, `motivoDaFalha()` responde "negado" — é o
+    // navegador que tem a permissão trancada, não o endereço que é http
+    vi.stubGlobal("navigator", { mediaDevices: {} });
+    microfone.abrirMicrofone.mockRejectedValueOnce(
+      Object.assign(new Error("Permission denied"), { name: "NotAllowedError" }),
+    );
+
+    await useVoice.getState().connect(CANAL);
+    await drenar();
+
+    // o texto é o mesmo das configurações de voz, e diz o que fazer: o cadeado
+    const aviso = explicarMidia("negado") ?? "";
+    expect(aviso).toContain("cadeado");
+    expect(ui.toast).toHaveBeenCalledWith(aviso, "error");
+    expect(useVoice.getState().status).toBe("connected");
     expect(useVoice.getState().microfonePronto).toBe(true);
   });
 });
