@@ -4,6 +4,70 @@
 
 :root {
   color-scheme: dark;
+
+  /*
+   * Escala de movimento. Antes disto cada transição do app escolhia a própria
+   * duração no olho, e a grade da chamada não tinha transição nenhuma.
+   *
+   * Os números não são gosto: são o ponto em que quatro implementações
+   * independentes convergem (levantamento em
+   * `.claude/referencias-concorrentes/relatorios/`, 2026-09-22).
+   *
+   *   | fonte              | rápido | médio  | lento |
+   *   |--------------------|--------|--------|-------|
+   *   | Discord (CSS real) | .1s    | .2s    | —     |
+   *   | Revolt / Stoat     | .1s    | .2s    | —     |
+   *   | Nextcloud Talk     | 100ms  | —      | 300ms |
+   *   | Signal (grade)     | —      | 200ms  | —     |
+   *
+   * E, nas seis superfícies de vídeo do Discord em que a transição aparece,
+   * a curva é sempre uma das três do navegador — **nenhum `cubic-bezier`
+   * próprio**. Varredura das 44 curvas do acervo: todas moram em cartões de
+   * Quests e Clipes, nenhuma em tile, grade ou palco. Quem for "melhorar" isto
+   * com uma curva autoral está se afastando da referência, não chegando perto.
+   *
+   * `--mov-reflow` é o caso da grade de chamada, e vem do Signal Desktop
+   * (`stylesheets/_modules.scss`, com a constante espelhada em JS como
+   * `CONTAINER_TRANSITION_TIME = 200`): os tiles são posicionados de forma
+   * absoluta com medidas calculadas em JS, e quem anima a mudança de leiaute é
+   * o próprio CSS, em `top/left/width/height`. É `linear` de propósito — numa
+   * interpolação de retângulo, aceleração faz o tile parecer escorregar.
+   *
+   * Por que não `grid-template-columns`: ele não interpola *contagem* de
+   * trilhas. Alguém entrar na chamada é uma mudança discreta — corte seco, sem
+   * transição possível. Por isso Discord, Signal, Telegram, Element Call e
+   * Revolt posicionam tile por tile, e nenhum usa CSS grid para isso.
+   */
+  --mov-rapido: 100ms;
+  --mov-hover: 150ms;
+  --mov-medio: 200ms;
+  --mov-lento: 300ms;
+  --mov-reflow: 200ms;
+  --mov-curva-saida: ease-out;
+  --mov-curva-entrada: ease-in-out;
+  --mov-curva-hover: ease;
+}
+
+/*
+ * Quem pediu menos movimento recebe menos movimento — em **um** lugar.
+ *
+ * As regras pontuais de `prefers-reduced-motion` espalhadas neste arquivo
+ * continuam valendo para as animações nomeadas; esta zera a escala inteira, de
+ * modo que toda transição que a use morre junto, sem precisar ser lembrada uma
+ * a uma. Foi a falha que o levantamento encontrou em TODOS os concorrentes
+ * (Revolt atende em um componente só; Jitsi e Mattermost, em nenhum).
+ *
+ * `0.01ms` em vez de `0`: com duração zero o evento `transitionend` não
+ * dispara, e quem espera por ele para arrumar o estado trava.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mov-rapido: 0.01ms;
+    --mov-hover: 0.01ms;
+    --mov-medio: 0.01ms;
+    --mov-lento: 0.01ms;
+    --mov-reflow: 0.01ms;
+  }
 }
 
 html,
