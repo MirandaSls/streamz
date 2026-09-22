@@ -10,6 +10,7 @@
 #   paridade-postgres   127.0.0.1:55432   volume paridade-pgdata
 #   paridade-api        127.0.0.1:43333   (API em modo dev, THROTTLE_DISABLED=1)
 #   paridade-web        127.0.0.1:43000   (next build + next start)
+#   paridade-livekit    127.0.0.1:47880   (sinal) + 47882/udp (mídia) — ver abaixo
 #   rede docker         paridade-rede     (a captura usa --network host: ver abaixo)
 #
 # ── Do zero (o host não tem node; tudo roda em docker) ──────────────────────
@@ -43,6 +44,7 @@ REDE=paridade-rede
 C_PG=paridade-postgres
 C_API=paridade-api
 C_WEB=paridade-web
+C_LK=paridade-livekit
 V_PG=paridade-pgdata
 V_PW=paridade-pw
 V_COREPACK=paridade-corepack
@@ -50,9 +52,18 @@ V_COREPACK=paridade-corepack
 PORTA_PG=55432
 PORTA_API=43333
 PORTA_WEB=43000
+PORTA_LK=47880
+# uma porta só de mídia (mux UDP do LiveKit), em vez de faixa: é a que o
+# navegador da captura usa, e uma faixa publicada seria uma regra de firewall
+# por porta sem nada em troca numa bancada de uma sala só
+PORTA_LK_UDP=47882
+# reserva de ICE/TCP do LiveKit: não é publicada (o navegador chega pelo UDP,
+# ou pelo IP do contêiner), mas sem uma porta própria ela cairia na 7881 padrão
+PORTA_LK_TCP=47881
 
 IMG_NODE=node:22
 IMG_PG=postgres:16
+IMG_LK=livekit/livekit-server:latest
 IMG_PW=mcr.microsoft.com/playwright:v1.56.0-noble
 # a versão do playwright-core que casa com o Chromium da imagem (1.56.0)
 PW_VERSAO="${IMG_PW##*:v}"
@@ -143,9 +154,9 @@ DOWNLOAD_DIR=/w/.claude/paridade/downloads
 LOG_FORMAT=pretty
 LOG_LEVEL=info
 REDIS_URL=
-LIVEKIT_URL=
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
+LIVEKIT_URL=$LK_URL
+LIVEKIT_API_KEY=$LK_CHAVE
+LIVEKIT_API_SECRET=$LK_SEGREDO
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
@@ -153,6 +164,54 @@ SMTP_URL=
 GIPHY_API_KEY=
 PLATFORM_ADMIN_EMAILS=
 EOF
+}
+
+# ── LiveKit ──────────────────────────────────────────────────────────────────
+#
+# Sem servidor de mídia a bancada não fotografa transmissão de tela: o card de
+# tela da grade nasce de uma **publicação do LiveKit** (`VoiceGrid`, `telasDe`),
+# não da bandeira `screen` do estado de voz — essa só acende o "Ao vivo" ao lado
+# do nome na lista de canais. Por isso a bancada tem um LiveKit próprio.
+#
+# Chave e segredo são fixos e estão aqui à vista de propósito: valem só para
+# este contêiner, que não sai de 127.0.0.1. O segredo tem 40 caracteres porque o
+# LiveKit recusa segredo curto.
+LK_CHAVE=paridade
+LK_SEGREDO=paridade-livekit-de-desenvolvimento-0001
+# `localhost` e não `paridade-livekit`: quem abre a sala é o navegador da
+# captura, que roda com --network host. O `RoomServiceClient` da API (expulsar
+# da voz, mover de canal) não alcança este endereço de dentro do contêiner — o
+# passeio não fotografa nenhuma dessas ações, e um endereço só pode servir a um
+# dos dois.
+LK_URL="ws://localhost:$PORTA_LK"
+
+subir_livekit() {
+  if rodando "$C_LK"; then return 0; fi
+  docker rm -f "$C_LK" >/dev/null 2>&1 || true
+  porta_ocupada "$PORTA_LK" && erro "a porta $PORTA_LK já está em uso por outro processo"
+  log "subindo $C_LK (127.0.0.1:$PORTA_LK · mídia 127.0.0.1:$PORTA_LK_UDP/udp)"
+  # `use_external_ip: false` mantém o candidato ICE no IP da rede paridade-rede,
+  # que o host (e portanto o navegador da captura, em --network host) alcança
+  # direto pela ponte. Com ele ligado o LiveKit anunciaria o IP público do
+  # servidor, e a mídia sairia para a internet para voltar.
+  docker run -d --name "$C_LK" --network "$REDE" \
+    -p "127.0.0.1:$PORTA_LK:$PORTA_LK" -p "127.0.0.1:$PORTA_LK_UDP:$PORTA_LK_UDP/udp" \
+    --memory 512m \
+    -e LIVEKIT_CONFIG="port: $PORTA_LK
+log_level: warn
+rtc:
+  udp_port: $PORTA_LK_UDP
+  tcp_port: $PORTA_LK_TCP
+  use_external_ip: false
+room:
+  auto_create: true
+keys:
+  $LK_CHAVE: $LK_SEGREDO" \
+    "$IMG_LK" >/dev/null
+  if ! esperar_http "http://127.0.0.1:$PORTA_LK/" "LiveKit" 30; then
+    docker logs --tail 40 "$C_LK" >&2 || true
+    erro "o LiveKit da bancada não respondeu em 127.0.0.1:$PORTA_LK"
+  fi
 }
 
 # ── Postgres ─────────────────────────────────────────────────────────────────
@@ -322,6 +381,7 @@ cmd_subir() {
   garantir_rede
   garantir_segredos
   subir_postgres
+  subir_livekit
   if [ "$build" = 1 ]; then
     preparar "$com_web"
     [ "$com_web" = 1 ] || conferir_builds
@@ -447,6 +507,11 @@ cmd_status() {
     echo "API  $API_LOCAL  fora do ar"
   fi
   if curl -fsS --max-time 3 -o /dev/null "$WEB_LOCAL/login"; then echo "web  $WEB_LOCAL  ok"; else echo "web  $WEB_LOCAL  fora do ar"; fi
+  if curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$PORTA_LK/"; then
+    echo "voz  $LK_URL  ok"
+  else
+    echo "voz  $LK_URL  fora do ar (sem ele não há transmissão de tela)"
+  fi
   echo "── bancos"
   if rodando "$C_PG"; then
     psql_admin -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'paridade%' ORDER BY 1" | sed 's/^/  /'
@@ -480,7 +545,7 @@ cmd_descer() {
     esac
     shift
   done
-  for c in "$C_WEB" "$C_API" "$C_PG" paridade-preparar paridade-semente paridade-captura paridade-folha; do
+  for c in "$C_WEB" "$C_API" "$C_PG" "$C_LK" paridade-preparar paridade-semente paridade-captura paridade-folha; do
     docker rm -f "$c" >/dev/null 2>&1 || true
   done
   docker network rm "$REDE" >/dev/null 2>&1 || true

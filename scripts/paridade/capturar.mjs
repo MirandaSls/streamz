@@ -37,6 +37,14 @@
  *   (`/gateway`) com o token do Pixel e responde ao `INTERACTION_CREATE` com o
  *   que a semente guardou em `aplicativo.respostas` (callback 9 e 8). Só
  *   nessas telas: com a sessão aberta o Pixel fica online na lista de membros.
+ * - **Transmissão de tela**: o contêiner não tem monitor, e `getDisplayMedia` é
+ *   a única API que enumera fontes. O `scriptInicial` a troca por um canvas com
+ *   um padrão fixo, e daí para a frente o caminho é o de verdade — seletor,
+ *   store, LiveKit e grade. A bancada tem LiveKit próprio (`bancada.sh`,
+ *   `paridade-livekit`): sem servidor de mídia a grade não tem card de tela,
+ *   porque ele nasce de uma **publicação**, não da bandeira `screen` do estado
+ *   de voz. Assistir à transmissão de outra pessoa pede um segundo navegador
+ *   (`abrirAcompanhante`), pelo mesmo motivo.
  * - **Uma tela que falha não derruba as outras**: o erro vai para o resumo e a
  *   tela como estava vira `<id>.falha.png`, para depurar olhando.
  *
@@ -174,10 +182,11 @@ async function esperarShell(page) {
   await rede(page);
 }
 
-async function entrar(page) {
+/** `conta` é o dono por padrão; o acompanhante entra com outra (ver `abrirAcompanhante`). */
+async function entrar(page, conta = s.dono) {
   await ir(page, "/login");
-  await page.fill("#identificador", s.dono.username);
-  await page.fill("#password", s.dono.senha);
+  await page.fill("#identificador", conta.username);
+  await page.fill("#password", conta.senha);
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/(app|verify-email)(\/|\?|#|$)/, { timeout: 45_000 });
   if (page.url().includes("/verify-email")) {
@@ -342,6 +351,203 @@ async function entrarNaVoz(page) {
   await rede(page);
 }
 
+/**
+ * Traz de volta a moldura do palco — nome, controles e o botão de expandir.
+ *
+ * `useOcultarInativo` a apaga depois de 3 s de ponteiro parado, e apagada ela é
+ * `pointer-events-none`: clicar em "Compartilhar tela" sem isto dá tempo
+ * esgotado, não erro de seletor.
+ */
+async function acordarOPalco(page) {
+  await page
+    .locator("[data-voice-panel], [data-call-stage]")
+    .first()
+    .hover({ position: { x: 24, y: 24 } });
+}
+
+/**
+ * Espera a moldura do palco se apagar, com o ponteiro fora dela.
+ *
+ * Os 3 s do `useOcultarInativo` caem **dentro** do prazo da foto: sem esperá-los
+ * a mesma tela sai com a sobreposição numa rodada e sem ela na seguinte. Quem
+ * quer os controles na foto faz o contrário — prende o ponteiro sobre eles, e
+ * aí o `preso` do hook os mantém (ver `voz-controles-hover`).
+ */
+async function palcoSemMoldura(page) {
+  const v = page.viewportSize();
+  // Passar pela moldura **antes** de sair não é supérfluo: o `preso` do hook
+  // só se solta com um `pointerleave`, e o seletor de tela é um portal para o
+  // `body` — React conta o portal como filho de quem o renderizou (a cápsula
+  // de controles), então fechar o modal com o ponteiro em cima dele nunca
+  // gera esse `pointerleave` e a moldura fica acesa para sempre. Entrar no
+  // cabeçalho e sair dele devolve o hook ao estado normal.
+  await acordarOPalco(page);
+  // agora fora do palco, na faixa vazia da coluna de canais acima do painel do
+  // usuário: dentro, o próprio movimento reacenderia a moldura
+  const palco = await page.locator("[data-voice-panel], [data-call-stage]").first().boundingBox();
+  await page.mouse.move(Math.max(8, (palco?.x ?? 380) - 60), v.height - 200);
+  // o botão em que se clicou continua **focado**, e a dica dele nasce também do
+  // foco: sem isto a foto sai com um balão pendurado no canto da tela
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await dormir(3_500);
+}
+
+/**
+ * O botão de tela **da cápsula de controles do palco**.
+ *
+ * Há um segundo igual no painel "Voz conectada", no rodapé da coluna da
+ * esquerda (`ScreenShareButton variante="largo"`), e um `getByRole` solto pega
+ * aquele: a dica sairia pendurada no canto da tela e o hover não prenderia a
+ * moldura do palco, que é o que esta bancada precisa.
+ */
+const botaoDeTelaDoPalco = (page, rotulo) =>
+  page
+    .locator(
+      `[data-voice-panel] button[aria-label="${rotulo}"], [data-call-stage] button[aria-label="${rotulo}"]`,
+    )
+    .first();
+
+/**
+ * Espera um `<video>` do palco ter quadro de verdade.
+ *
+ * O elemento nasce **antes** da faixa: assinar a tela de alguém é uma ida e
+ * volta ao servidor de mídia, e esperar só o elemento aparecer fotografaria o
+ * retângulo preto de "carregando a transmissão".
+ */
+async function esperarQuadroDeVideo(page, seletor) {
+  await page.waitForFunction(
+    (sel) => {
+      const v = document.querySelector(sel);
+      return !!v && v.readyState >= 2 && v.videoWidth > 0;
+    },
+    seletor,
+    { timeout: 45_000 },
+  );
+}
+
+/** Abre o seletor de transmissão pelo botão da barra de controles. */
+async function abrirSeletorDeTela(page) {
+  await acordarOPalco(page);
+  await acionar(page, botaoDeTelaDoPalco(page, "Compartilhar tela"));
+  const modal = page.getByRole("dialog", { name: "Compartilhar sua tela" });
+  await modal.waitFor({ timeout: 20_000 });
+  // o modal entra animado; sem esta pausa a foto pega o meio do fade
+  await dormir(500);
+  return modal;
+}
+
+/**
+ * Vai ao ar pelo caminho do usuário: botão da barra → seletor → "Escolher
+ * janela" (que é quem chama o `getDisplayMedia` falsificado do `scriptInicial`)
+ * → clique na miniatura que voltou.
+ *
+ * Nada aqui é atalho: a store, o LiveKit e a grade recebem a mesma sequência
+ * que recebem de uma tela de verdade — só a fonte é um canvas.
+ */
+async function irAoVivoComATelaFalsa(page) {
+  const modal = await abrirSeletorDeTela(page);
+  await modal.getByRole("button", { name: /^Escolher (janela|tela)$/ }).click();
+  // a captura volta como a única miniatura da grade, e clicar nela é o "ir ao ar"
+  await modal.locator("button:has(video)").first().click({ timeout: 20_000 });
+  // o seletor só fecha depois de a transmissão subir de verdade (`screenOn`)
+  await modal.waitFor({ state: "detached", timeout: 30_000 });
+  await botaoDeTelaDoPalco(page, "Parar transmissão").waitFor({ timeout: 30_000 });
+  await esperarQuadroDeVideo(page, "[data-voice-panel] video, [data-call-stage] video");
+}
+
+// ── figurantes que fazem alguma coisa durante uma tela ──────────────────────
+
+/** Os sockets dos figurantes, por chave do manifesto (ver `subirFigurantes`). */
+const figurantes = new Map();
+
+/**
+ * O que desfazer quando a foto sair, na ordem inversa de quem pediu.
+ *
+ * Mesma razão do `voice.leave` do ajudante: a bancada restaura o banco uma vez
+ * por passeio, não por tela — um figurante que ficasse "ao vivo", ou um
+ * acompanhante que ficasse na sala, apareceria em todas as telas seguintes.
+ */
+const desfazer = [];
+
+function socketDoFigurante(chave) {
+  const sock = figurantes.get(chave);
+  if (!sock) throw new Error(`o figurante "${chave}" não está conectado (--sem-figurantes?)`);
+  return sock;
+}
+
+/**
+ * "Fulano atende" — o `call.accept` do figurante numa conversa direta.
+ *
+ * Sem alguém do outro lado a chamada passa 30 s em "Chamando…" e a foto seria a
+ * tela de espera, não a chamada.
+ */
+function atenderComoFigurante(chave, channelId) {
+  const sock = socketDoFigurante(chave);
+  sock.emit("call.accept", { channelId });
+  desfazer.push(async () => {
+    sock.emit("voice.leave");
+    await dormir(500);
+  });
+}
+
+/**
+ * Chamada de conversa direta **atendida**: eu ligo, o figurante atende.
+ *
+ * Sem o atendimento o palco fica em "Chamando…" — e é ele que traz o palco de
+ * verdade, com tile, grade e a barra de controles onde mora o botão de tela.
+ */
+async function abrirChamadaNaConversa(page, chave) {
+  await abrirConversa(page, chave);
+  await acionar(page, page.locator('button[aria-label="Iniciar chamada de voz"]').first());
+  await page.locator("[data-call-stage]").first().waitFor({ timeout: 20_000 });
+  // um `call.accept` antes de o `POST /dms/:id/call` voltar é recusado calado
+  await dormir(1_200);
+  atenderComoFigurante(chave, s.conversas[chave].id);
+  await page
+    .locator(`[data-call-stage] [aria-label="${esc(s.usuarios[chave].displayName)}"]`)
+    .first()
+    .waitFor({ timeout: 20_000 });
+}
+
+/**
+ * Um **segundo navegador**, logado como outra pessoa, na mesma sala de voz e
+ * transmitindo de verdade.
+ *
+ * É o único jeito de fotografar "assistindo": o card de tela da grade vem de
+ * uma publicação do LiveKit, não da bandeira `screen` do estado de voz — um
+ * socket figurante acende o "Ao vivo" da lista de canais e nada mais.
+ *
+ * A saída é pelo **botão de desconectar**, e não só fechando o contexto: a
+ * queda do socket apenas *agenda* a saída da voz (carência de reconexão do
+ * `chat.gateway.ts`), e a tela seguinte herdaria mais uma pessoa na sala.
+ */
+async function abrirAcompanhante(page, chave) {
+  const ctx = await page.context().browser().newContext(opcoesDoContexto("desktop"));
+  if (RELOGIO) await ctx.clock.setFixedTime(new Date(RELOGIO));
+  await ctx.addInitScript(scriptInicial);
+  const outra = await ctx.newPage();
+  outra.celular = false;
+  // o caminho é longo (login, servidor, voz, seletor, publicação) e roda dentro
+  // do teto da tela que o pediu; os 15 s padrão não bastam para cada passo
+  outra.setDefaultTimeout(30_000);
+  desfazer.push(async () => {
+    await outra
+      .locator('button[aria-label="Desconectar"]')
+      .first()
+      .click({ timeout: 5_000 })
+      .catch(() => {});
+    await dormir(800);
+    await ctx.close().catch(() => {});
+  });
+  await entrar(outra, s.usuarios[chave]);
+  await abrirServidor(outra);
+  await entrarNaVoz(outra);
+  await irAoVivoComATelaFalsa(outra);
+  return outra;
+}
+
 // ── bot figurante ───────────────────────────────────────────────────────────
 
 /** As respostas que a semente guardou para o Pixel (`RESPOSTAS_DO_BOT` do `semente.mjs`). */
@@ -473,6 +679,10 @@ async function subirBotFigurante() {
 // onde o passo o deixou (hover, tooltip). `voz: true` = o passo entrou em voz,
 // e a faxina tira o dono da sala antes da próxima tela. `bot: true` = o bot
 // figurante fica conectado durante a tela (ver o cabeçalho).
+//
+// O que o passo pede de fora da página — um figurante que atende a chamada, um
+// acompanhante que transmite — se registra em `desfazer`, e a faxina o desfaz
+// antes da tela seguinte.
 
 const PASSOS = {
   desktop: {
@@ -690,6 +900,84 @@ const PASSOS = {
         await dormir(800);
       },
     },
+    "voz-seletor-tela": {
+      voz: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await entrarNaVoz(page);
+        await abrirSeletorDeTela(page);
+      },
+    },
+    "voz-transmitindo": {
+      voz: true,
+      // o ponteiro fica onde `palcoSemMoldura` o deixou: mexer nele de novo na
+      // hora da foto acenderia a sobreposição que esta tela não quer
+      mouse: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await entrarNaVoz(page);
+        await irAoVivoComATelaFalsa(page);
+        // a minha tela é mais um card da grade, com o selo "Ao vivo" — ela não
+        // assume o palco (ver `telaQueAssumeOPalco`, em `VoiceGrid.tsx`)
+        await page.locator('[aria-label$="— tela compartilhada"]').first().waitFor({ timeout: 20_000 });
+        await esperarQuadroDeVideo(page, "[data-voice-panel] video");
+        await palcoSemMoldura(page);
+      },
+    },
+    "voz-assistindo": {
+      voz: true,
+      mouse: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await entrarNaVoz(page);
+        await abrirAcompanhante(page, "gabi");
+        const nome = s.usuarios.gabi.displayName;
+        const convite = page.locator(`button[aria-label="Assistir à transmissão de ${esc(nome)}"]`).first();
+        await convite.waitFor({ timeout: 30_000 });
+        await convite.click();
+        await esperarQuadroDeVideo(page, "[data-voice-panel] video");
+        await palcoSemMoldura(page);
+      },
+    },
+    "voz-palco-expandido": {
+      // O palco expandido é da **conversa direta**: lá ele nasce como faixa de
+      // 199px sobre a conversa e o botão o promove à área inteira
+      // (`ui.palcoExpandido`, em `CallStage`). Em canal de servidor não há o que
+      // expandir — o chat do canal nasce fechado (`CHAT_ABERTO_POR_PADRAO`) e o
+      // palco já ocupa a coluna toda, como mostra a `voz-transmitindo`.
+      voz: true,
+      mouse: true,
+      async fazer(page) {
+        await abrirChamadaNaConversa(page, "bia");
+        await irAoVivoComATelaFalsa(page);
+        await acordarOPalco(page);
+        await acionar(page, page.getByRole("button", { name: "Expandir o palco" }).first());
+        await palcoSemMoldura(page);
+      },
+    },
+    "voz-controles-hover": {
+      voz: true,
+      mouse: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await entrarNaVoz(page);
+        await irAoVivoComATelaFalsa(page);
+        // o ponteiro **sobre a cápsula** é o que prende a sobreposição no ar
+        // (`preso`, em `useOcultarInativo`): fora dela os 3 s correriam e a
+        // foto sairia limpa numa rodada e com os controles na outra
+        await botaoDeTelaDoPalco(page, "Parar transmissão").hover();
+        await dormir(800);
+      },
+    },
+    "dm-chamada": {
+      voz: true,
+      mouse: true,
+      async fazer(page) {
+        await abrirChamadaNaConversa(page, "bia");
+        await irAoVivoComATelaFalsa(page);
+        await palcoSemMoldura(page);
+      },
+    },
     "painel-usuario-voz": {
       voz: true,
       async fazer(page) {
@@ -757,7 +1045,10 @@ const PASSOS = {
         // insensível a caixa para não quebrar de novo numa troca dessas.
         const alvo = await centralizar(page, "resposta");
         await alvo.click({ button: "right", position: { x: 400, y: 30 } });
-        await page.getByRole("menuitem", { name: /apagar mensagem/i }).click();
+        // aceita os dois rótulos: o menu diz "Excluir mensagem" (MessageItem.tsx) e
+        // o passeio nasceu com "Apagar". Qual dos dois é o certo para a paridade
+        // ainda está em aberto — travar a captura nisso só escondia a tela.
+        await page.getByRole("menuitem", { name: /(apagar|excluir) mensagem/i }).click();
         await page.locator('[role="dialog"]').first().waitFor();
       },
     },
@@ -1080,8 +1371,9 @@ function opcoesDoContexto(plataforma) {
 
 /**
  * Antes de qualquer script da página: o aviso de instalação do PWA fica
- * dispensado (`lib/instalacao.ts`, `CHAVE_DE_DISPENSA`) e o cursor de texto
- * fica transparente — piscando, ele aparece em uma foto e não na outra.
+ * dispensado (`lib/instalacao.ts`, `CHAVE_DE_DISPENSA`), o cursor de texto fica
+ * transparente — piscando, ele aparece em uma foto e não na outra — e
+ * `getDisplayMedia` passa a devolver um canvas no lugar da tela do sistema.
  */
 function scriptInicial() {
   try {
@@ -1089,6 +1381,77 @@ function scriptInicial() {
   } catch {
     // storage bloqueado: o aviso pode aparecer, e a foto mostra
   }
+
+  /**
+   * Compartilhar tela **sem tela**.
+   *
+   * O contêiner da captura não tem monitor nenhum, e `getDisplayMedia` é a
+   * única API capaz de enumerar fontes: sem ela o seletor cai em "A captura de
+   * tela não está disponível neste sistema" e a área que mais precisa de régua
+   * fica sem nenhuma. Falsificar **só a fonte** mantém tudo o que interessa
+   * medindo o caminho de verdade — o seletor, a store, o `publishTrack` no
+   * LiveKit e a grade não sabem que do outro lado há um canvas.
+   *
+   * O padrão é sempre **o mesmo**: sem relógio, sem aleatório e sem animação,
+   * porque a foto tem de sair igual em toda rodada. Ele é redesenhado num
+   * intervalo, e isso não é enfeite: um canvas que ninguém suja só produz o
+   * primeiro quadro, e o `captureStream` seca logo depois — quem transmitia
+   * via o próprio quadro parado (a faixa é local), quem assistia recebia um
+   * keyframe e mais nada, com o SFU pedindo PLI para sempre. Redesenhar o
+   * idêntico mantém a faixa viva sem mexer um pixel.
+   */
+  const capturaFalsa = () => {
+    const tela = document.createElement("canvas");
+    tela.width = 1280;
+    tela.height = 720;
+    const p = tela.getContext("2d");
+    const desenhar = () => {
+      p.fillStyle = "#0f1116";
+      p.fillRect(0, 0, 1280, 720);
+      // "janela" com barra de título e três botões, para a miniatura ler como
+      // uma tela compartilhada e não como um retângulo colorido qualquer
+      p.fillStyle = "#1c1f27";
+      p.fillRect(80, 60, 1120, 600);
+      p.fillStyle = "#262a34";
+      p.fillRect(80, 60, 1120, 44);
+      const botoes = ["#e0656a", "#e3b341", "#5ec26a"];
+      for (let i = 0; i < 3; i++) {
+        p.beginPath();
+        p.arc(110 + i * 26, 82, 7, 0, Math.PI * 2);
+        p.fillStyle = botoes[i];
+        p.fill();
+      }
+      // "linhas de código": larguras e recuos fixos, nada de aleatório
+      const linhas = [520, 380, 640, 300, 720, 460, 240, 580, 340, 500];
+      for (let i = 0; i < linhas.length; i++) {
+        p.fillStyle = i % 3 === 0 ? "#7f8697" : i % 3 === 1 ? "#4f5563" : "#3a3f4b";
+        p.fillRect(120 + (i % 2) * 28, 150 + i * 34, linhas[i], 14);
+      }
+      p.fillStyle = "#c8ff4d";
+      p.font = "bold 56px sans-serif";
+      p.fillText("TELA DE TESTE", 120, 560);
+      p.fillStyle = "#7f8697";
+      p.font = "28px sans-serif";
+      p.fillText("bancada de paridade", 124, 606);
+      // faixa de cores do rodapé: dá ao olho (e à folha de comparação) uma
+      // referência de cor que não depende de fonte nem de antialiasing
+      const cores = ["#e0656a", "#e3b341", "#5ec26a", "#4d9fff", "#b07cff", "#f0f2f5"];
+      for (let i = 0; i < cores.length; i++) {
+        p.fillStyle = cores[i];
+        p.fillRect(80 + i * 186.66, 668, 176, 32);
+      }
+    };
+    desenhar();
+    setInterval(desenhar, 200);
+    return tela.captureStream(5);
+  };
+
+  // `mediaDevices` existe em contexto seguro, e `localhost` é um: se um dia não
+  // existir, o objeto mínimo abaixo mantém o seletor no caminho do navegador
+  if (!navigator.mediaDevices) {
+    Object.defineProperty(navigator, "mediaDevices", { value: {}, configurable: true });
+  }
+  navigator.mediaDevices.getDisplayMedia = async () => capturaFalsa();
   const aplicar = () => {
     const estilo = document.createElement("style");
     estilo.setAttribute("data-paridade", "");
@@ -1189,6 +1552,9 @@ async function subirFigurantes() {
     try {
       const sock = await conectarSocket(await loginRest(u), u.username);
       conexoes.push(sock);
+      // por chave também: é assim que um passo pede "fulano começa a
+      // transmitir" ou "fulano atende" (ver `transmitirComoFigurante`)
+      figurantes.set(chave, sock);
       if (u.voz) {
         // o gateway só conhece o usuário do socket depois de terminar o
         // `handleConnection` (assíncrono); um `voice.join` antes disso é
@@ -1361,6 +1727,11 @@ async function principal() {
         await page.screenshot({ path: falha, animations: "disabled" }).catch(() => {});
       } finally {
         await ctx.close().catch(() => {});
+        // o que os passos pediram durante a tela (figurante ao vivo, chamada
+        // atendida, acompanhante transmitindo) some antes da próxima
+        while (desfazer.length) {
+          await desfazer.pop()().catch((e) => console.warn(`! desfazer: ${e.message}`));
+        }
         bot?.fechar();
         // a queda do socket do navegador só agenda a saída da voz (carência de
         // reconexão); o `voice.leave` pelo socket auxiliar a efetiva agora, e a
@@ -1383,8 +1754,10 @@ async function principal() {
       );
     }
   } finally {
+    while (desfazer.length) await desfazer.pop()().catch(() => {});
     await browser.close().catch(() => {});
     for (const sock of conexoes) sock.close();
+    figurantes.clear();
     ajudante?.close();
   }
 
