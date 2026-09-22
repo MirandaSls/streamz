@@ -49,7 +49,10 @@ mod atenuacao;
 #[cfg(target_os = "linux")]
 mod permissoes_linux;
 
-use tauri::{Manager, RunEvent};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use tauri::{Emitter, Manager, RunEvent};
 
 // Bandeja e "fechar minimiza": desktop apenas. No celular o sistema é quem
 // tira o app da frente, e `tauri::tray` nem existe no alvo Android.
@@ -63,6 +66,15 @@ use tauri::{
 // encerra (ver `on_window_event` em `run`).
 #[cfg(all(desktop, not(target_os = "linux")))]
 use tauri::WindowEvent;
+
+/// O aviso de saída já foi dado? Ver `RunEvent::ExitRequested` em `run`.
+static JA_AVISOU: AtomicBool = AtomicBool::new(false);
+
+/// A janela terminou de se despedir (ou não tinha o que dizer): pode sair.
+#[tauri::command]
+fn pronto_para_sair(app: tauri::AppHandle) {
+    app.exit(0);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -137,6 +149,7 @@ pub fn run() {
         // `getDisplayMedia`.
         .manage(tela::Transmissao::default())
         .invoke_handler(tauri::generate_handler![
+            pronto_para_sair,
             tela::capacidades_de_tela,
             tela::fontes_de_tela,
             tela::miniaturas_de_tela,
@@ -328,6 +341,46 @@ pub fn run() {
         // sala antes de o processo morrer, em vez de deixar o LiveKit
         // descobrir pelo timeout e a tela "congelar" para os outros.
         .run(|app, event| match event {
+            /*
+              **Sair não pode ser só matar o processo.**
+
+              O servidor não distingue, no fio, "fechei o programa" de "a rede
+              caiu": nos dois casos o socket simplesmente some. Por isso ele
+              espera `VOICE_RECONNECT_GRACE_MS` (45 s) antes de tirar alguém da
+              voz — e quem clicava em "Sair" na bandeja ficava 45 s na sala,
+              para todos os outros, marcado como "reconectando", sem voltar.
+
+              O conserto é avisar antes de morrer: a janela recebe
+              `app:saindo`, manda o `voice.leave` e fecha o socket **de
+              propósito** (o que muda o motivo que o servidor lê — ver
+              `lib/socket.ts` e `modules/gateway/saida-de-voz.ts`), e então
+              chama `pronto_para_sair`.
+
+              O teto de meio segundo não é decoração: sem ele, uma janela
+              travada ou um socket já caído prenderiam o app aberto para
+              sempre. Meio segundo é muito mais do que o aviso precisa (ele é
+              um pacote num socket já aberto) e pouco o bastante para ninguém
+              reparar. `JA_AVISOU` evita o laço: o `app.exit` do fim volta a
+              cair aqui, e da segunda vez a saída passa direto.
+
+              O que isto **não** resolve, e não tem como: forçar o
+              encerramento pelo gerenciador de tarefas mata o processo sem
+              evento nenhum. Esse caso continua custando a carência — que é
+              exatamente para o que ela existe.
+            */
+            RunEvent::ExitRequested { api, .. } => {
+                if !JA_AVISOU.swap(true, Ordering::SeqCst) {
+                    if let Some(janela) = app.get_webview_window("main") {
+                        let _ = janela.emit("app:saindo", ());
+                        api.prevent_exit();
+                        let app = app.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(500));
+                            app.exit(0);
+                        });
+                    }
+                }
+            }
             RunEvent::Exit => {
                 app.state::<tela::Transmissao>().encerrar();
                 // sair pela bandeja no meio da call devolve o ducking do Windows

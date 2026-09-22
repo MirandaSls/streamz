@@ -637,6 +637,54 @@ export function ouvirTelaEncerrada(ouvinte: (motivo: MotivoDeEncerramento) => vo
   };
 }
 
+/**
+ * O app está encerrando e deu meio segundo para nos despedirmos.
+ *
+ * Existe porque sair sem avisar deixava a conta **45 segundos na sala** para
+ * todo mundo: o servidor não distingue, no fio, "fechei o programa" de "a rede
+ * caiu", e por isso espera a carência de reconexão antes de tirar alguém da
+ * voz (`VOICE_RECONNECT_GRACE_MS`). Quem clicou em "Sair" na bandeja não vai
+ * voltar, e ficava lá, marcado como "reconectando", até o relógio zerar.
+ *
+ * O `ouvinte` faz a despedida (mandar `voice.leave`, fechar o socket **de
+ * propósito**) e devolve; `pronto_para_sair` então libera o encerramento, que
+ * de outro modo só aconteceria no fim do meio segundo. O Rust encerra sozinho
+ * quando o tempo acaba, então falhar aqui atrasa a saída, não a impede.
+ *
+ * Fora do Tauri é no-op: no navegador quem faz esse papel é o `pagehide`
+ * (`lib/socket.ts`), e lá não há processo para segurar.
+ */
+export function ouvirSaidaDoApp(ouvinte: () => void): () => void {
+  if (!isTauri()) return () => {};
+  let parar: (() => void) | null = null;
+  let cancelado = false;
+  void (async () => {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const desligar = await listen("app:saindo", () => {
+        try {
+          ouvinte();
+        } finally {
+          // sai da fila de eventos: o `invoke` não pode atrasar a despedida
+          void import("@tauri-apps/api/core")
+            .then(({ invoke }) => invoke("pronto_para_sair"))
+            .catch(() => {
+              // app antigo sem o comando: o teto de meio segundo resolve
+            });
+        }
+      });
+      if (cancelado) desligar();
+      else parar = desligar;
+    } catch {
+      // sem o evento, a saída volta a custar a carência — degradado, não quebrado
+    }
+  })();
+  return () => {
+    cancelado = true;
+    parar?.();
+  };
+}
+
 // ── Atenuação de comunicação do Windows ────────────────────────────────────
 
 // ── Chamada em segundo plano (Android) ─────────────────────────────────────
