@@ -21,7 +21,13 @@ import {
 import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
-import { explicarMidia, motivoDaFalha, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
+import {
+  escolhaDeSaida,
+  explicarMidia,
+  motivoDaFalha,
+  opcoesDe,
+  useVoiceDevices,
+} from "@/stores/voiceDevices";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -221,6 +227,17 @@ export default function VozTab() {
     opcoesDe(lista, prefixo).map((o) => ({ value: o.id, label: o.nome }));
 
   /*
+    A saída é a única lista que pode não valer nada: sem `setSinkId` o
+    `aplicarSaida` volta em silêncio e o som fica onde estava — era isso que o
+    usuário de macOS via como "não consigo alterar o dispositivo de saída".
+    A mesma regra do menu da setinha do fone decide aqui (`escolhaDeSaida`), e
+    o `motivoFixo` vai para o `hint` do seletor: um campo desabilitado sem
+    explicação seria só a versão silenciosa do mesmo defeito. Onde a escolha
+    funciona (Chrome, Edge, Firefox 116+, Safari 18.4+) nada muda.
+  */
+  const saida = escolhaDeSaida(devices, sistema, t("voz.saida"));
+
+  /*
     O microfone escolhido é o de um fone Bluetooth?
 
     É a causa mais comum de "entrei na call e o som dos outros apps ficou
@@ -258,11 +275,12 @@ export default function VozTab() {
           <Select
             semDivisoria
             label={t("voz.saida")}
-            value={devices.outputId ?? ""}
-            options={opcoes(devices.outputs, t("voz.saida"))}
+            value={saida.escolhido ?? ""}
+            options={saida.opcoes.map((o) => ({ value: o.id, label: o.nome }))}
             onChange={(id) => devices.setOutput(id || null)}
             emptyLabel={t("voz.padraoSistema")}
-            disabled={devices.outputs.length === 0}
+            disabled={saida.opcoes.length === 0}
+            hint={saida.motivoFixo}
           />
           <Slider
             label={t("voz.volumeEntrada")}

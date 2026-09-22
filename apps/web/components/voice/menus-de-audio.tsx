@@ -13,9 +13,16 @@ import { Check, ChevronRight, Settings } from "@/components/ui/icones";
 import { SUBMENU_DELAY } from "@/components/ui/ContextMenu";
 import { Popout } from "@/components/ui/primitivos/Popout";
 import { SliderDeVolume } from "@/components/voice/pecas-de-voz";
+import { useSistemaDeAudio } from "@/lib/microfone";
 import { ui } from "@/stores/ui";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
-import { explicarMidia, nomeEscolhido, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
+import {
+  escolhaDeSaida,
+  explicarMidia,
+  nomeEscolhido,
+  opcoesDe,
+  useVoiceDevices,
+} from "@/stores/voiceDevices";
 
 /**
  * O que a setinha do microfone e a do fone abrem, no painel do usuário.
@@ -500,23 +507,25 @@ export function MenuDeSaida() {
   const ctrl = useSubmenus();
   const saida = useVoice((s) => s.audio.saida);
   const setAudioPref = useVoice((s) => s.setAudioPref);
-  const aviso = devices.saidaSelecionavel
-    ? explicarMidia(devices.motivo)
-    : // Firefox antigo e Safari não têm `setSinkId`: a lista existiria só para
-      // desobedecer. Dizer isso é melhor que uma escolha que não sai do lugar.
-      "Este navegador não deixa escolher a saída de áudio: o som vai sempre para o aparelho padrão do sistema.";
+  const sistema = useSistemaDeAudio();
+  // sem `setSinkId` a lista existiria só para desobedecer; o recado (com o
+  // caminho do sistema onde a saída se troca de verdade) e o corte da lista
+  // saem os dois de `escolhaDeSaida`, a mesma regra da aba "Voz e vídeo" e do
+  // painel de dentro da chamada — antes só este menu a respeitava
+  const escolha = escolhaDeSaida(devices, sistema, "Saída");
+  const aviso = escolha.motivoFixo ?? explicarMidia(devices.motivo);
 
   return (
     <>
       <LinhaComSubmenu
         chave="aparelho"
         titulo="Dispositivo de saída"
-        valor={nomeEscolhido(devices.outputs, devices.outputId, "Saída")}
+        valor={nomeEscolhido(devices.outputs, escolha.escolhido, "Saída")}
         ctrl={ctrl}
       >
         <ListaDeAparelhos
-          opcoes={devices.saidaSelecionavel ? opcoesDe(devices.outputs, "Saída") : []}
-          atual={devices.outputId}
+          opcoes={escolha.opcoes}
+          atual={escolha.escolhido}
           onEscolher={devices.setOutput}
           aviso={aviso}
         />

@@ -1897,6 +1897,15 @@ async function entrarNaSala(
     videoCaptureDefaults: {
       resolution: capturaDaCamera(get().cameraFps),
     },
+    // O microfone é aberto por nós (`salaDoMicrofone`), mas o SDK reabre a
+    // captura sozinho em alguns caminhos — `Room.switchActiveDevice` e
+    // `LocalParticipant.createTracks` — e sem isto ele a reabriria com os
+    // `audioDefaults` dele (que mandam, entre outras coisas, `voiceIsolation:
+    // true`) em vez do que a pessoa escolheu. Não cobre o caminho da faixa que
+    // *termina*: lá o SDK chama `restartTrack({ deviceId: "default" })` direto,
+    // sem olhar para estes padrões — quem repara aquilo é o ouvinte de
+    // `restarted` em `lib/microfone.ts`.
+    audioCaptureDefaults: restricoesDeCaptura(get().audio),
     // Câmera e microfone publicam com os tetos do contrato, não com o padrão do
     // SDK (calibrado para sala grande em rede ruim). `dtx: false` mantém o
     // fluxo de áudio contínuo: com DTX o encoder corta o silêncio e a primeira
@@ -2096,6 +2105,43 @@ function rearmarDetectorLocal() {
 }
 
 /**
+ * O aparelho de entrada a pedir ao navegador — com `"default"` **resolvido**.
+ *
+ * O `"default"` do Chromium não é um microfone: é um ponteiro para o que o
+ * sistema chamar de padrão agora, e a mesma lista traz o aparelho de verdade
+ * numa segunda entrada, com o mesmo `groupId` (é o que o Jitsi usa desde o bug
+ * 997689 do Chrome, e o que o Element Call faz antes de capturar). Resolver
+ * tem duas consequências boas aqui: a captura passa a apontar para um aparelho
+ * concreto — e não para um alias que o sistema pode remapear no meio da
+ * chamada, encerrando a faixa — e o `deviceId` vai **sempre explícito**, o que
+ * importa porque `LocalTrack.restart` do livekit-client monta
+ * `audio: deviceId ? { deviceId, ...resto } : true`: sem `deviceId`, uma
+ * reabertura do SDK jogaria fora o processamento inteiro.
+ *
+ * Quando não dá para resolver (Firefox e Safari não publicam a entrada
+ * `"default"`; lista ainda anônima, sem permissão) devolvemos `undefined` e o
+ * comportamento é o de antes. Não inventamos "o primeiro da lista": aí sim
+ * seria escolher um microfone no lugar da pessoa.
+ */
+function aparelhoDeEntrada(): string | undefined {
+  const { inputId, inputs } = useVoiceDevicesStore.getState();
+  // escolha explícita de um aparelho concreto: nada a resolver
+  if (inputId && inputId !== "default") return inputId;
+  const padrao = inputs.find((d) => d.deviceId === "default");
+  if (!padrao?.groupId) return undefined;
+  const fisico = inputs.find(
+    (d) =>
+      d.groupId === padrao.groupId &&
+      d.deviceId !== "default" &&
+      // `communications` é o outro alias do Chromium (o "dispositivo de
+      // comunicação" do Windows), e tem o mesmo problema do `default`
+      d.deviceId !== "communications" &&
+      d.deviceId !== "",
+  );
+  return fisico?.deviceId;
+}
+
+/**
  * Restrições de captura do microfone.
  *
  * A supressão nativa e a avançada são **excludentes**: encadeadas, a nativa
@@ -2107,7 +2153,7 @@ function rearmarDetectorLocal() {
  */
 export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
   const nivel = audio.processamento.ruido;
-  const deviceId = useVoiceDevicesStore.getState().inputId;
+  const deviceId = aparelhoDeEntrada();
   // quem escolheu "Avançada" e não pode tê-la (CSP, navegador sem WebAssembly,
   // `/supressor/` fora do ar) fica com a do navegador em vez de **nenhuma**:
   // desligar as duas deixaria a pessoa pior do que antes de escolher

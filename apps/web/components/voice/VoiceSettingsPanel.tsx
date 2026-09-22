@@ -19,7 +19,7 @@ import {
   type SistemaDeAudio,
 } from "@/lib/microfone";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
-import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
+import { escolhaDeSaida, explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
@@ -135,6 +135,16 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   // qual explicação de "e o som dos outros aplicativos?" vale nesta máquina
   const sistema = useSistemaDeAudio();
 
+  /*
+    Lista de saída só onde escolher muda alguma coisa — a mesma regra do menu
+    da setinha do fone e da aba cheia (`escolhaDeSaida`). Sem `setSinkId` (o
+    WKWebView do Mac antes do macOS 15.4, por exemplo) o `aplicarSaida` volta
+    em silêncio: o seletor obedecia à store e o som ficava no mesmo aparelho.
+    O `motivoFixo` vira o `hint` do campo, porque desabilitar sem dizer por quê
+    só troca um defeito mudo por outro.
+  */
+  const saida = escolhaDeSaida(devices, sistema, "saída");
+
   return (
     <div className="space-y-5 text-sm text-text-default">
       <section className="space-y-3">
@@ -150,11 +160,14 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         <Select
           semDivisoria
           label="Dispositivo de saída"
-          value={devices.outputId ?? ""}
-          options={opcoes(devices.outputs, "saída")}
+          value={saida.escolhido ?? ""}
+          options={saida.opcoes.map((o) => ({ value: o.id, label: o.nome }))}
           onChange={(id) => devices.setOutput(id || null)}
-          emptyLabel="Nenhuma saída encontrada"
-          disabled={devices.outputs.length === 0}
+          // sem escolha possível a linha única é a saída do sistema, e é isso
+          // que ela tem de dizer — "Nenhuma saída encontrada" seria falso
+          emptyLabel={saida.motivoFixo ? "Padrão do sistema" : "Nenhuma saída encontrada"}
+          disabled={saida.opcoes.length === 0}
+          hint={saida.motivoFixo}
         />
         {fone && (
           // mesma moldura do aviso da aba cheia (`AvisoDeFoneBluetooth` em
