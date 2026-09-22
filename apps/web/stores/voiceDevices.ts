@@ -3,6 +3,10 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { restaurarAtenuacaoDoWindows, suspenderAtenuacaoDoWindows } from "@/lib/desktop";
+// só o tipo: importar `sistemaDeAudio` de verdade arrastaria `lib/microfone`
+// (e o supressor, com AudioWorklet) para dentro desta store, que hoje é leve e
+// é montada por qualquer tela que mostre uma lista de aparelhos
+import type { SistemaDeAudio } from "@/lib/microfone";
 
 /**
  * Microfone, saída de áudio e câmera escolhidos pelo usuário.
@@ -70,9 +74,17 @@ export interface VoiceDevicesState {
   /** true quando os rótulos vieram (permissão concedida de verdade). */
   autorizado: boolean;
   /**
-   * O navegador deixa escolher a saída? `setSinkId` é do Chromium; no Firefox
-   * antigo e no Safari um `<audio>` toca sempre na saída do sistema, e oferecer
-   * uma lista que não muda nada é pior que não oferecer.
+   * O navegador deixa escolher a saída?
+   *
+   * `HTMLMediaElement.setSinkId` é o que faz a escolha valer: sem ele o
+   * `<audio>` toca sempre na saída do sistema, e oferecer uma lista que não
+   * muda nada é pior que não oferecer. Onde ele existe (compat do MDN, set.
+   * 2026): Chrome 49+, Edge 17+, Firefox 116+ e — só agora — **Safari 18.4**,
+   * que é macOS 15.4; antes disso o WebKit nem sequer enumerava as saídas. O
+   * WKWebView do app de macOS é o WebKit do sistema, então ali a resposta é a
+   * versão do macOS da máquina, e é justamente por isso que esta flag é
+   * **detecção**, não tabela de navegador. Em Android (Chrome e Firefox) não
+   * existe em nenhuma versão.
    */
   saidaSelecionavel: boolean;
   motivo: MotivoDeMidia;
@@ -143,7 +155,11 @@ function midia(): MediaDevices | null {
   return navigator.mediaDevices ?? null;
 }
 
-/** `setSinkId` é o que faz a escolha de saída valer alguma coisa. */
+/**
+ * `setSinkId` é o que faz a escolha de saída valer alguma coisa (as versões
+ * por navegador estão em `saidaSelecionavel`). Detecção no protótipo, e não
+ * lista de user agents: no app de macOS quem responde é a versão do sistema.
+ */
 function temSetSinkId(): boolean {
   return (
     typeof HTMLMediaElement !== "undefined" &&
@@ -183,6 +199,60 @@ export function nomeEscolhido(
 ): string {
   if (id === null) return "Padrão do sistema";
   return opcoesDe(lista, prefixo).find((o) => o.id === id)?.nome ?? "Padrão do sistema";
+}
+
+/**
+ * Onde a pessoa troca a saída quando não é aqui dentro.
+ *
+ * Mandar "use as configurações do sistema" sem dizer quais é quase o mesmo que
+ * não dizer nada — e o caminho tem nome diferente em cada sistema. `outro`
+ * cobre também o "ainda não sei" de `useSistemaDeAudio` (o `null` antes de
+ * montar), porque uma frase genérica e certa é melhor que um caminho inventado.
+ */
+const SAIDA_FIXA: Record<SistemaDeAudio, string> = {
+  windows:
+    "Este navegador não troca a saída de áudio: o som vai sempre para o aparelho padrão do Windows. Para trocar, use Configurações ▸ Sistema ▸ Som, ou o ícone de volume na barra de tarefas.",
+  "macos-webkit":
+    "Aqui a saída de áudio é sempre a do sistema: escolher o aparelho por dentro do app só passou a existir no WebKit com o Safari 18.4 (macOS 15.4). Para trocar, use Ajustes do Sistema ▸ Som ▸ Saída (Preferências do Sistema, no macOS antigo) ou o ícone de som na barra de menus.",
+  "macos-chromium":
+    "Este navegador não troca a saída de áudio: o som vai sempre para o aparelho padrão do Mac. Para trocar, use Ajustes do Sistema ▸ Som ▸ Saída, ou o ícone de som na barra de menus.",
+  outro:
+    "Este navegador não troca a saída de áudio: o som vai sempre para o aparelho padrão do sistema. Para trocar, use as configurações de som do sistema.",
+};
+
+/** O que a tela faz com a lista de saída neste navegador. */
+export interface EscolhaDeSaida {
+  /** Aparelhos a oferecer — **vazio** quando escolher não mudaria nada. */
+  opcoes: OpcaoDeDispositivo[];
+  /** O id a exibir como escolhido; `null` é "padrão do sistema". */
+  escolhido: string | null;
+  /** Por que não dá para escolher (e onde trocar), ou `null` quando dá. */
+  motivoFixo: string | null;
+}
+
+/**
+ * A única regra de "oferecer ou não a lista de saída", para os três lugares
+ * que a mostram: o menu da setinha do fone, a aba "Voz e vídeo" e o painel de
+ * dentro da chamada.
+ *
+ * Ela nasceu sozinha no menu da setinha, e os outros dois desenhavam o seletor
+ * sem olhar a flag — no macOS (WKWebView sem `setSinkId`) a pessoa escolhia, o
+ * `aplicarSaida` voltava em silêncio e o som continuava no mesmo aparelho: é o
+ * relato "não consigo alterar o dispositivo de saída". Esconder a lista sem
+ * dizer nada seria a outra metade do mesmo defeito, por isso o `motivoFixo`
+ * acompanha o corte — e por isso ele diz **onde** trocar, já que no app não dá.
+ */
+export function escolhaDeSaida(
+  estado: Pick<VoiceDevicesState, "outputs" | "outputId" | "saidaSelecionavel">,
+  sistema: SistemaDeAudio | null,
+  prefixo = "Saída",
+): EscolhaDeSaida {
+  if (!estado.saidaSelecionavel) {
+    // o id guardado continua no storage (o navegador pode ganhar a API numa
+    // atualização do sistema), mas na tela ele seria uma escolha mentirosa
+    return { opcoes: [], escolhido: null, motivoFixo: SAIDA_FIXA[sistema ?? "outro"] };
+  }
+  return { opcoes: opcoesDe(estado.outputs, prefixo), escolhido: estado.outputId, motivoFixo: null };
 }
 
 /** true quando pelo menos um aparelho veio com nome — a prova de que há permissão. */
@@ -274,6 +344,11 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
         const seguro = typeof window !== "undefined" && window.isSecureContext;
         set({
           autorizado: false,
+          // também aqui: o valor inicial é `true` (o servidor não tem
+          // `HTMLMediaElement`, e chutar `false` na renderização do servidor
+          // trocaria o texto na frente da pessoa na hidratação), então sem esta
+          // linha o caminho sem `mediaDevices` ficaria com a flag por medir
+          saidaSelecionavel: temSetSinkId(),
           motivo: seguro ? "indisponivel" : "inseguro",
           inputs: [],
           outputs: [],
@@ -406,9 +481,11 @@ export function useVoiceDevices(): VoiceDevicesState {
 }
 
 /**
- * Aponta um `<audio>` para a saída escolhida. `setSinkId` só existe no Chrome/
- * Edge — nos outros o elemento continua na saída padrão, que é o comportamento
- * aceitável (falhar aqui não pode calar o áudio).
+ * Aponta um `<audio>` para a saída escolhida. Onde `setSinkId` não existe (ver
+ * `saidaSelecionavel`) o elemento continua na saída padrão, que é o
+ * comportamento aceitável — falhar aqui não pode calar o áudio. O que **não**
+ * pode é a tela oferecer a escolha assim mesmo: é `escolhaDeSaida` quem
+ * impede, e este retorno silencioso é a prova de que ela precisa existir.
  */
 export async function aplicarSaida(el: HTMLMediaElement, outputId: string | null) {
   const alvo = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };

@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { aparelhosReais, explicarMidia, nomeEscolhido, opcoesDe } from "./voiceDevices";
+import { describe, expect, it, vi } from "vitest";
+import {
+  aparelhosReais,
+  escolhaDeSaida,
+  explicarMidia,
+  nomeEscolhido,
+  opcoesDe,
+  useVoiceDevicesStore,
+} from "./voiceDevices";
 
 const d = (deviceId: string, label: string, kind: MediaDeviceKind = "audioinput") =>
   ({ deviceId, label, kind, groupId: "g", toJSON: () => ({}) }) as MediaDeviceInfo;
@@ -44,6 +51,71 @@ describe("aparelhosReais", () => {
       d("abc", "Fone (Realtek)"),
     ];
     expect(aparelhosReais(lista).map((x) => x.deviceId)).toEqual(["abc"]);
+  });
+});
+
+describe("escolhaDeSaida", () => {
+  const outputs = [d("fone", "Fone (Realtek)", "audiooutput"), d("hdmi", "Monitor", "audiooutput")];
+
+  it("com setSinkId a lista é oferecida inteira, e sem recado nenhum", () => {
+    const escolha = escolhaDeSaida(
+      { outputs, outputId: "hdmi", saidaSelecionavel: true },
+      "macos-chromium",
+    );
+    expect(escolha.opcoes).toEqual([
+      { id: "fone", nome: "Fone (Realtek)" },
+      { id: "hdmi", nome: "Monitor" },
+    ]);
+    expect(escolha.escolhido).toBe("hdmi");
+    expect(escolha.motivoFixo).toBeNull();
+  });
+
+  it("sem setSinkId não oferece lista e diz onde trocar — o caso do Mac", () => {
+    // é o relato "não consigo alterar o dispositivo de saída": escolher aqui
+    // não mexia no som, porque `aplicarSaida` volta em silêncio sem a API
+    const escolha = escolhaDeSaida(
+      { outputs, outputId: "hdmi", saidaSelecionavel: false },
+      "macos-webkit",
+    );
+    expect(escolha.opcoes).toEqual([]);
+    // nada de escolha mentirosa: o que vale é a saída do sistema
+    expect(escolha.escolhido).toBeNull();
+    expect(escolha.motivoFixo).toMatch(/Ajustes do Sistema ▸ Som/);
+  });
+
+  it("some com a lista, mas nunca em silêncio — em qualquer sistema", () => {
+    for (const sistema of ["windows", "macos-webkit", "macos-chromium", "outro", null] as const) {
+      const escolha = escolhaDeSaida({ outputs, outputId: null, saidaSelecionavel: false }, sistema);
+      expect(escolha.motivoFixo, `sistema ${sistema}`).toBeTruthy();
+    }
+  });
+});
+
+describe("detecção de setSinkId no refresh", () => {
+  /** Lista pronta e com rótulo: o caminho que não pede permissão nenhuma. */
+  function listar(devices: MediaDeviceInfo[]) {
+    vi.stubGlobal("navigator", { mediaDevices: { enumerateDevices: async () => devices } });
+  }
+
+  const lista = [d("mic", "Microfone USB"), d("fone", "Fone (Realtek)", "audiooutput")];
+
+  it("navegador sem a API: a saída deixa de ser selecionável", async () => {
+    listar(lista);
+    // o dublê só precisa do protótipo: é nele que a detecção olha
+    vi.stubGlobal("HTMLMediaElement", { prototype: {} });
+    await useVoiceDevicesStore.getState().refresh(true);
+    expect(useVoiceDevicesStore.getState().saidaSelecionavel).toBe(false);
+    // e a lista de entrada continua inteira: `getUserMedia({deviceId})` não
+    // depende de `setSinkId` e funciona em todo navegador
+    expect(useVoiceDevicesStore.getState().inputs).toHaveLength(1);
+  });
+
+  it("navegador com a API: volta a ser selecionável", async () => {
+    listar(lista);
+    vi.stubGlobal("HTMLMediaElement", { prototype: { setSinkId: async () => {} } });
+    await useVoiceDevicesStore.getState().refresh(true);
+    expect(useVoiceDevicesStore.getState().saidaSelecionavel).toBe(true);
+    expect(useVoiceDevicesStore.getState().outputs).toHaveLength(1);
   });
 });
 
