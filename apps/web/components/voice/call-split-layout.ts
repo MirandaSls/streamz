@@ -64,10 +64,17 @@ export const ALTURA_PADRAO = 199;
  *
  * O piso era 200 — um número redondo escolhido a olho, e **acima** da faixa que
  * o Discord de fato desenha, o que tornava a medida inalcançável (o `limitar`
- * empurrava 199 para 200). Agora o piso é a própria faixa: abaixo dela os 96px
- * que o `CallStage` reserva aos controles flutuantes começam a comer o avatar
- * de 80 (199 − 96 = 103 de área útil, com 11 de folga). Para cima o divisor
- * continua livre.
+ * empurrava 199 para 200). Agora o piso é a própria faixa, e 199 é onde a conta
+ * da grade ainda fecha: numa área de 1042 de largura (1058 menos os 8+8 de
+ * `FOLGA_DO_PALCO`) três tiles numa fileira pedem 192 de altura em 16:9, e eles
+ * cabem nos 199. Abaixo disso quem manda passa a ser a altura, e os tiles
+ * encolhem por baixo do que o Discord desenha. Para cima o divisor continua
+ * livre.
+ *
+ * A faixa **não reserva** altura para os controles — a cápsula flutua por cima
+ * da folga da própria grade (print `2026-09-21 às 15.04.09`, e `folgaDaGrade`
+ * em `CallStage`). O piso já foi justificado pelos 96px daquela reserva, que
+ * não existe mais neste modo.
  */
 export const ALTURA_MIN = ALTURA_PADRAO;
 

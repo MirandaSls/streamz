@@ -18,8 +18,10 @@ import {
   FAIXA_LARGURA,
   FOCO_GAP,
   GAP,
+  alturaDoDestaque,
   distribuir,
   melhorArranjo,
+  palcoUsaFoco,
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -60,6 +62,15 @@ import {
  * destaque de 1458×823 px = **16:9 exato**, centralizado, com 229px de folga de
  * cada lado; vão de 6px (**8**) até a faixa; tile da faixa de 150×86 px
  * (**188×106**), também centralizado.
+ *
+ * **E esse leiaute não vale em qualquer lugar.** Na faixa de chamada sobre a
+ * conversa o Discord desenha **grade, sempre** — print `2026-09-21 às 15.04.09`:
+ * três tiles iguais numa fileira de 344×193,5 numa faixa de 372, transmissão ao
+ * vivo junto, sem destaque e sem tira separada. Fora da faixa (palco cheio,
+ * expandido, canal de voz) a decisão é aritmética: foco só quando o destaque sai
+ * **maior do que a grade daria ao mesmo tile**. As duas regras moram em
+ * `palcoUsaFoco`, e quem diz em qual dos dois lugares o palco está é a prop
+ * `faixa`.
  *
  * **Há dois palcos, não um.** Numa conversa direta em que ninguém publicou
  * vídeo nem tela, o Discord não desenha tile nenhum: os avatares ficam soltos
@@ -108,12 +119,24 @@ export default function VoiceGrid({
   channelId,
   nomeDoCanal,
   guildId = null,
+  faixa = false,
   onAdicionar,
 }: {
   channelId: string;
   nomeDoCanal?: string;
   /** ação de convidar do estado vazio — e o que distingue servidor de conversa. */
   guildId?: string | null;
+  /**
+   * O palco é a **faixa de chamada sobre a conversa** (ver `CallSplit`), e não
+   * o palco cheio nem o expandido.
+   *
+   * Muda uma coisa só, e por medida: na faixa o arranjo é sempre a grade (ver
+   * `palcoUsaFoco`). Vem de fora porque quem sabe disso é o dono do palco — a
+   * faixa é uma escolha do `CallSplit`/`CallStage`, não algo que se deduza do
+   * tamanho medido aqui: a mesma altura pode ser faixa numa janela e palco
+   * cheio noutra.
+   */
+  faixa?: boolean;
   /**
    * Chamar mais gente para a chamada, no palco de avatares. Vem de fora porque
    * quem sabe se a conversa aceita mais alguém é o host (grupo aceita, conversa
@@ -294,22 +317,36 @@ export default function VoiceGrid({
   // tile (`userId` ou `userId:sid`), não o id da pessoa — quem assiste a duas
   // telas tem dois tiles do mesmo dono; o casamento por id fica como reserva
   // para quem tenha guardado só a pessoa.
-  const principal =
+  const candidato =
     (focado ? tiles.find((t) => t.key === focado) : null) ??
     (focado ? tiles.find((t) => t.state.user.id === focado) : null) ??
     null;
+  // ...mas só onde o destaque compensa. Na faixa sobre a conversa nunca
+  // compensa (o Discord desenha grade ali mesmo com transmissão ao vivo); fora
+  // dela vale a comparação com o tile que a grade daria. As duas regras, e as
+  // prints que as sustentam, estão em `palcoUsaFoco`; aqui só se descarta o
+  // candidato, e aí ele volta a ser um tile da grade como qualquer outro —
+  // **sem sair de `resto`**, que é o que impedia a transmissão de sumir.
+  const principal =
+    candidato && palcoUsaFoco(tiles.length - 1, tamanho.largura, tamanho.altura, faixa)
+      ? candidato
+      : null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
 
   if (principal) {
-    const foco = melhorArranjo(1, tamanho.largura, tamanho.altura);
+    // O medido é a área **inteira** do palco (a raiz), e não o invólucro do
+    // destaque: a decisão entre foco e grade precisa de uma medida que não
+    // dependa do leiaute escolhido, ou os dois modos se mediriam um ao outro.
+    const foco = melhorArranjo(1, tamanho.largura, alturaDoDestaque(tamanho.altura, resto.length));
     return (
-      <div className="flex h-full min-h-0 flex-col items-center" style={{ gap: FOCO_GAP }}>
+      <div
+        ref={setPalco}
+        className="flex h-full min-h-0 flex-col items-center"
+        style={{ gap: FOCO_GAP }}
+      >
         {/* o destaque mantém 16:9 e fica centralizado nos dois eixos, como na
             print: é `melhorArranjo` com uma vaga só */}
-        <div
-          ref={setPalco}
-          className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden"
-        >
+        <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
           <div style={{ width: foco.largura, height: foco.altura }}>
             <VoiceTile tile={principal} {...acoes} grande />
           </div>

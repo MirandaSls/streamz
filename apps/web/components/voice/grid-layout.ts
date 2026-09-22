@@ -69,6 +69,72 @@ export const FAIXA_LARGURA = 188;
  */
 export const FAIXA_GAP = 8;
 
+/**
+ * Altura que sobra ao destaque depois de descontada a tira de miniaturas.
+ *
+ * `naTira` é quanta gente vai para a tira — com zero não há tira, e o
+ * destaque fica com a área inteira. (O nome não é `naFaixa` porque "faixa",
+ * neste arquivo, passou a querer dizer a faixa de chamada sobre a conversa;
+ * a tira é a fileira de miniaturas do modo foco.)
+ */
+export function alturaDoDestaque(altura: number, naTira: number): number {
+  return naTira > 0 ? altura - FAIXA_ALTURA - FOCO_GAP : altura;
+}
+
+/**
+ * Se "destaque + tira" ainda vale a pena nesta área, ou se é hora de cair para
+ * a grade.
+ *
+ * **São duas regras, porque são dois lugares.**
+ *
+ * 1. **Na faixa de chamada sobre a conversa é sempre grade** — por medida, não
+ *    por conta. Na print
+ *    `docs/Reference/Captura de Tela 2026-09-21 às 15.04.09.png` (2866×1546,
+ *    2×: o rail mede 144px = 72 reais) a chamada está numa faixa sobre a
+ *    conversa de uma DM com **três tiles iguais numa fileira** — transmissão ao
+ *    vivo, e duas pessoas —, de 688×387 px = **344×193,5 reais (16:9)**, vão de
+ *    16 = **8**, ocupando a largura toda dos 1058 reais da área. **Não há tira
+ *    de miniaturas separada e não há destaque**: mesmo ao vivo, a transmissão é
+ *    só mais uma célula. A fileira fica centralizada na faixa de 745px =
+ *    **372,5 reais**, com ~86 acima e ~93 abaixo, e a cápsula de controles
+ *    flutua por cima dessa folga (a faixa não reserva altura para ela — ver
+ *    `folgaDaGrade`, em `CallStage`).
+ *
+ *    Sem a regra própria a aritmética do item 2 escolheria o foco nessa faixa:
+ *    com 372 de altura o destaque sai com 258 contra os ~192 do tile da grade.
+ *    A aritmética não está errada — ela só não sabe que ali o destaque custa a
+ *    conversa inteira logo abaixo, e o Discord decidiu que não vale.
+ *
+ * 2. **Fora dela o critério é uma comparação**, não um limiar de altura. O
+ *    destaque só merece a tira quando fica **maior do que a grade daria ao
+ *    mesmo tile**; se não fica, o foco é prejuízo puro — vista principal menor
+ *    *e* uma tira roubando altura. Como os dois lados são 16:9, comparar altura
+ *    é comparar área. É o que sustenta o foco do canal de voz da print
+ *    `2026-09-03 203909`, e é o que devolve a grade quando a área não comporta
+ *    o destaque.
+ *
+ * Sem medida (primeiro quadro, SSR) a resposta é a grade: no foco a tira tem
+ * altura fixa e apareceria **sozinha**, com o destaque em 0×0 — exatamente o
+ * defeito que esta função existe para evitar.
+ */
+export function palcoUsaFoco(
+  naTira: number,
+  largura: number,
+  altura: number,
+  faixaDeChamada = false,
+): boolean {
+  // Sem ninguém na tira não há troca a fazer: o foco é um tile na área inteira.
+  // Vem antes da faixa de propósito — sem tira não existe o arranjo que a regra
+  // da faixa recusa, e o ramo de foco é o mesmo tile ocupando a mesma área.
+  if (naTira <= 0) return true;
+  // a faixa decide antes da aritmética: lá a medida diz grade em qualquer altura
+  if (faixaDeChamada) return false;
+  if (largura <= 0 || altura <= 0) return false;
+  const destaque = melhorArranjo(1, largura, alturaDoDestaque(altura, naTira));
+  const grade = melhorArranjo(naTira + 1, largura, altura);
+  return destaque.altura > grade.altura;
+}
+
 export function melhorArranjo(
   quantidade: number,
   largura: number,

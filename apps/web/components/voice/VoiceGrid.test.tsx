@@ -247,3 +247,46 @@ describe("telaQueAssumeOPalco", () => {
     expect(telaQueAssumeOPalco(tiles, "ana")).toBeNull();
   });
 });
+
+/**
+ * A faixa de chamada sobre a conversa não comporta destaque + tira.
+ *
+ * O palco aqui nunca é medido (`renderToStaticMarkup` não roda efeito, e não há
+ * `ResizeObserver`), que é o mesmo caso de "área ainda não medida" de
+ * `palcoUsaFoco`: a resposta é a grade. O que se afirma é o que o defeito
+ * mostrava — com o foco ligado, a tira de 106px aparecia **sozinha** e a
+ * transmissão sumia.
+ *
+ * A tabela-verdade de quando cada arranjo vale (faixa × área medida) é do
+ * `grid-layout.test.ts`, que testa a decisão sem depender de medida nenhuma.
+ */
+describe("o palco cai para a grade quando o foco não cabe", () => {
+  it("não desenha a tira de miniaturas", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    falsas.sala.participantes = [
+      participante("ana", [telaPublicada("sid1")]),
+      participante("bia", []),
+    ];
+    falsas.voz.focado = "bia";
+
+    const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" />);
+
+    expect(html).not.toContain("height:106px");
+  });
+
+  it("não perde o tile que estava no palco", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    falsas.sala.participantes = [
+      participante("ana", [telaPublicada("sid1")]),
+      participante("bia", []),
+    ];
+    falsas.voz.focado = "bia";
+
+    const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" />);
+
+    // os três continuam na grade: a pessoa focada, a outra e a transmissão
+    for (const chave of ["ana", "bia", "ana:sid1"]) {
+      expect(html).toContain(`data-voice-tile="${chave}"`);
+    }
+  });
+});
