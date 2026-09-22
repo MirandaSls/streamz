@@ -316,8 +316,10 @@ export async function focarJanela(): Promise<void> {
  * chamar daqui para ampliar um elemento qualquer é trocar a ação do usuário
  * por outra — foi assim que a 1.3.0 saiu com o botão de tela cheia da tela
  * compartilhada pondo o *aplicativo* em tela cheia em vez da transmissão. Quem
- * escolhe entre as duas é `components/voice/fullscreen.ts`, e lá a escolha é
- * explícita (`recuarParaAJanela`). Chamador novo passa por lá.
+ * escolhe é `components/voice/fullscreen.ts`: dentro do app a tela cheia é
+ * **as duas juntas** — esta janela mais o elemento promovido por CSS nosso —,
+ * porque a Fullscreen API do DOM não cobre a tela no Tauri. Chamador novo
+ * passa por lá, nunca chama esta função sozinha.
  *
  * As permissões são `core:window:allow-set-fullscreen` e
  * `core:window:allow-is-fullscreen`, em `capabilities/default.json` — sem a

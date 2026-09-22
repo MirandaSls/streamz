@@ -211,6 +211,53 @@ textarea:focus-visible:not([data-sem-anel]),
 }
 
 /*
+ * TELA CHEIA EMULADA — o app desktop, e só ele (`components/voice/fullscreen.ts`).
+ *
+ * No navegador quem promove o elemento é o compositor, pela Fullscreen API, e
+ * esta regra nunca entra em cena. Dentro do Tauri ela é a tela cheia: o `wry`
+ * não trata tela cheia de elemento no Windows e, no macOS, pede o WebView com a
+ * feature `fullscreen` desligada — `requestFullscreen` simplesmente não
+ * funciona lá. Sem isto, tudo o que o botão do palco conseguia era pôr a
+ * **janela** em tela cheia, com o leiaute normal dentro: a queixa que este
+ * arquivo existe para encerrar.
+ *
+ * É um **atributo**, e não uma classe, porque o `className` do palco e do tile
+ * é do React (muda ao expandir, ao passar o mouse, ao falar) e a renderização
+ * seguinte apagaria uma classe acrescentada por JavaScript. Um `data-*` que
+ * ninguém renderiza no JSX o React não toca.
+ *
+ * `!important` porque o alvo já carrega utilitários do Tailwind que disputam
+ * estas mesmas propriedades — o palco expandido é `absolute inset-0 z-20`, e
+ * empatar em especificidade e depender da ordem do arquivo seria frágil demais
+ * para o que acontece quando se perde: a janela sem moldura e o leiaute antigo
+ * dentro dela.
+ *
+ * `z-index` folgado: o mais alto em uso no app é 100 (a dica de reação e o
+ * `Tooltip`), e a barra de título do desktop é 40. Tela cheia fica acima de
+ * tudo, como a camada de topo do navegador ficaria.
+ *
+ * `inset: 0` com `width`/`height` automáticos: é o que mede a **janela**, sem
+ * herdar o `padding-top` da barra de título (elemento fixo não se importa com o
+ * `body`) e sem qualquer `h-full`/`w-full` que o alvo já traga. O vídeo de
+ * dentro é `h-full w-full object-contain` e passa a preencher a tela sem
+ * distorcer, sozinho.
+ */
+[data-tela-cheia-emulada] {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483000 !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  /* o mesmo preto do palco (`--black` do Discord), para as bordas do
+     `object-contain` não mostrarem o app por baixo */
+  background: #000000 !important;
+}
+
+/*
  * Entrada de modal, tela de configurações, menu e tooltip.
  *
  * O Discord anima tudo que aparece por cima da interface, e a curva é a mesma em

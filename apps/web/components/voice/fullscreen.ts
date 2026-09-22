@@ -5,82 +5,83 @@ import { definirTelaCheiaDaJanela, isTauri, janelaEmTelaCheia } from "@/lib/desk
 import { useVoice } from "@/stores/voice";
 
 /**
- * Tela cheia de verdade, não um `position: fixed`.
- *
- * A diferença não é cosmética: só a tela cheia de verdade esconde a barra do
- * navegador e a do sistema e devolve o Esc como saída — um `fixed inset-0`
- * continua dentro da janela, com a aba à vista.
+ * Tela cheia de um elemento — por dois caminhos, escolhidos pelo ambiente.
  *
  * O estado observável continua sendo o `telaCheia` da store; este módulo é
- * quem o mantém honesto quando o usuário sai pelo Esc ou pelo botão do sistema.
+ * quem o mantém honesto, venha a saída do Esc, do botão, do gesto ou do
+ * semáforo verde do sistema.
  *
- * ## No app desktop, "tela cheia" são DUAS coisas, e sozinha cada uma mente
+ * ## No navegador: a Fullscreen API do DOM, que é melhor
  *
- * No navegador a Fullscreen API do DOM basta: o elemento promovido cobre a
- * tela e ponto. No app (Tauri + WebView2) não — e a razão está nas fontes do
- * `wry 0.55.1`, que **não têm tratamento nenhum de tela cheia no Windows**:
- * `fullscreen` só aparece em código de macOS/iOS, e não existe nada ligado ao
- * `ContainsFullScreenElementChanged` do WebView2. Consequência prática:
+ * Fora do app desktop nada aqui é emulado. A tela cheia de verdade esconde a
+ * barra do navegador **e** a do sistema, o compositor promove o elemento para a
+ * camada de cima sem depender de `z-index` nenhum, e o Esc volta de graça. Onde
+ * ela existe, é ela que usamos.
  *
- *   - `requestFullscreen()` faz o elemento preencher **a área do controle
- *     WebView2**, isto é, o interior da janela. A janela não cresce, e o
- *     resultado é um tile grande dentro de um app do mesmo tamanho de antes;
- *   - `setFullscreen(true)` na janela faz o contrário: o app cobre a tela com
- *     o **leiaute normal** dentro dele, ninguém promove elemento nenhum. Foi
- *     essa a queixa contra a 1.3.0 — "o botão não põe a transmissão em tela
- *     cheia, põe o aplicativo".
+ * ## No app desktop: emulação, porque a API do DOM **não funciona lá**
  *
- * Então, dentro do Tauri, entrar em tela cheia é **as duas ao mesmo tempo**:
- * promove o elemento *e* põe a janela em tela cheia. Fora do Tauri nada disso
- * existe e segue valendo só a API do DOM.
+ * Isto não é preferência, é o que as fontes do `wry 0.55.1` dizem:
  *
- * ## No macOS o elemento simplesmente não é promovível, e não é escolha nossa
+ *   - **Windows**: não há tratamento nenhum de tela cheia — `fullscreen` só
+ *     aparece em código de macOS/iOS e nada escuta o
+ *     `ContainsFullScreenElementChanged` do WebView2. `requestFullscreen()`
+ *     promove o elemento dentro do **controle WebView2**, isto é, o interior da
+ *     janela: o tile fica grande dentro de um app do mesmo tamanho de antes.
+ *   - **macOS**: pior ainda. O WKWebView só habilita tela cheia de elemento com
+ *     a chave privada `fullScreenEnabled`, que o `wry` liga atrás da feature
+ *     `fullscreen` (`wry-0.55.1/Cargo.toml:56`, `wkwebview/mod.rs:386-388`) — e
+ *     o `tauri-runtime-wry` pede o `wry` com `default-features = false` e só
+ *     `["protocol", "os-webview", "linux-body"]`. A feature fica **desligada**:
+ *     `requestFullscreen` não funciona no app de macOS, ponto. Consertar isso
+ *     exigiria mexer nas dependências do Tauri.
  *
- * O WKWebView só habilita tela cheia de elemento quando alguém liga o
- * `fullScreenEnabled` — uma chave privada do `WKPreferences`. O `wry` faz isso,
- * mas atrás da feature `fullscreen` (`wry-0.55.1/Cargo.toml:56`,
- * `wkwebview/mod.rs:386-388`), e o `tauri-runtime-wry` pede o `wry` com
- * `default-features = false` e só `["protocol", "os-webview", "linux-body"]`.
- * Ou seja: **a feature fica desligada**, e nenhum `requestFullscreen` funciona
- * no app de macOS. Não adianta procurar o erro no nosso código — para mudar
- * isso seria preciso alterar as dependências do Tauri.
+ * Foi essa a queixa, três vezes no mesmo botão: "a tela cheia do palco põe o
+ * **aplicativo** em tela cheia, não a tela". O código anterior, no macOS, só
+ * tinha a tela cheia da **janela** para oferecer — e janela em tela cheia com o
+ * leiaute normal dentro é exatamente a queixa.
  *
- * É por isso que ali o palco ainda recorre à tela cheia da **janela** (que
- * funciona) e o tile esconde o botão em vez de oferecer um clique inerte.
+ * Então, dentro do Tauri, "tela cheia deste elemento" passa a ser nossa:
  *
- * ## A ordem importa, e ela não é livre
+ *   1. a **janela** vai a tela cheia (`definirTelaCheiaDaJanela`), e
+ *   2. o **elemento** é promovido por CSS nosso — `position: fixed; inset: 0`
+ *      com `z-index` acima de tudo e fundo preto (`app/globals.css`, a regra do
+ *      atributo `data-tela-cheia-emulada`).
  *
- * `requestFullscreen` exige gesto do usuário, e **qualquer** `await` antes dele
- * já basta para o navegador considerar o clique gasto. Por isso o pedido ao
- * elemento é a primeira coisa que acontece, sempre síncrono; a janela só entra
- * depois, no `await` da promessa. Inverter isto não é detalhe de estilo: é o
- * botão parar de funcionar.
+ * Juntas, as duas dão o que o olho chama de tela cheia: a transmissão ocupando
+ * o monitor inteiro. E funcionam em qualquer ambiente, inclusive onde a API do
+ * DOM não existe — não há o que o WebView possa recusar.
  *
- * E a janela só vai junto **se o elemento tiver sido promovido**. Se o pedido
- * do DOM for recusado, pôr a janela em tela cheia sozinha seria justamente
- * reproduzir o defeito de origem — o app sem moldura e a transmissão do mesmo
- * tamanho. Nesse caso o clique falha com aviso no console (ver `aceitaRecuo`
- * para a única exceção, que é de quem pediu o **palco**).
+ * ### Por que um **atributo**, e não uma classe
+ *
+ * Porque o `className` desses elementos é do React. O palco troca de classe ao
+ * expandir, o tile troca a cada hover/fala — e a próxima renderização
+ * reescreveria o atributo inteiro, levando junto a classe que tivéssemos
+ * acrescentado por `classList`. O resultado seria o pior defeito possível: a
+ * janela sem moldura e o leiaute normal de volta dentro dela, sem nada dizendo
+ * como sair. Um atributo `data-*` que ninguém renderiza no JSX o React não
+ * toca, e ele sobrevive às renderizações.
  *
  * ## Desfazer tem de valer por qualquer lado
  *
- * São quatro saídas e nenhuma pode deixar a outra metade pendurada — uma janela
- * sem moldura e sem botão para desfazer é pior que o defeito original:
+ * Nenhuma saída pode deixar a outra metade pendurada — janela sem moldura com o
+ * leiaute normal, ou um elemento `fixed` cobrindo tudo sem jeito de sair, são
+ * os dois piores resultados:
  *
- *   - **Esc do navegador**: sai só do elemento. O `fullscreenchange` (ouvido
- *     aqui no módulo, não só no hook) tira a janela em seguida;
- *   - **F11 / semáforo verde**: sai só da janela. O `onResized` do Tauri é o
- *     único sinal que sobra, e ele tira o elemento;
+ *   - **Esc**: no DOM é o navegador; na emulação é o ouvinte daqui
+ *     (`ligarEscapeDaEmulada`), que tira as duas metades;
+ *   - **o mesmo botão / o duplo clique**: `alternarTelaCheiaDe` no elemento que
+ *     já é o dono é sempre "sair";
+ *   - **F11 / semáforo verde**: saem só da janela, e nada disso passa por nós.
+ *     O `onResized` do Tauri é o único sinal que sobra e desmarca o elemento;
  *   - **desmonte** de quem promoveu: `soltarTelaCheiaDe` (tile) e a limpeza de
- *     `useTelaCheia` (palco);
- *   - **sair da chamada**: é o desmonte do palco, acima.
+ *     `useTelaCheia` (palco) — que é também o "sair da chamada".
  *
  * ## Estado por elemento, não um booleano de módulo
  *
- * A janela é uma só, mas quem a pôs em tela cheia é sempre **um elemento**, e
- * guardar só um `boolean` foi o que produziu o defeito anterior: bastava o
- * palco ter usado o caminho da janela uma vez para o clique no tile ir direto
- * para lá. `janelaNossa` guarda o modo **e o elemento dono**.
+ * A janela é uma só, mas quem a pôs em tela cheia é sempre **um elemento**.
+ * Guardar só um `boolean` foi o que produziu um defeito anterior: bastava o
+ * palco ter entrado uma vez para o clique no tile herdar o estado dele. Por
+ * isso `emulada` guarda **o elemento dono**.
  */
 
 /** Os nomes prefixados do WebKit, que não estão no `lib.dom`. */
@@ -93,7 +94,14 @@ type DocumentoComWebkit = Document & {
   webkitExitFullscreen?: () => Promise<void> | void;
 };
 
-/** O elemento que está em tela cheia agora, pelos dois nomes. */
+/**
+ * O atributo que `app/globals.css` transforma em tela cheia emulada. Exportado
+ * para o teste conferir o nome: se os dois lados divergirem, o clique deixa de
+ * ter efeito visual nenhum e nada mais denuncia.
+ */
+export const ATRIBUTO_DE_TELA_CHEIA = "data-tela-cheia-emulada";
+
+/** O elemento que está em tela cheia **do DOM** agora, pelos dois nomes. */
 function elementoEmTelaCheia(): Element | null {
   if (typeof document === "undefined") return null;
   const doc = document as DocumentoComWebkit;
@@ -124,123 +132,113 @@ function suportaTelaCheiaDoDOM(): boolean {
 }
 
 /**
- * A intenção de quem pede tela cheia — hoje só uma pergunta, e ela é de
- * produto, não de plataforma.
+ * A intenção de quem pede tela cheia.
+ *
+ * `recuarParaAJanela` **não tem mais efeito** e é aceito só para não quebrar
+ * quem chama (`TileDeVoz` passa `false`). Ele existia quando a única saída do
+ * app desktop era pôr a **janela** em tela cheia e sair: o palco aceitava esse
+ * consolo, o tile preferia não fazer nada. Com a emulação não há consolo nenhum
+ * a escolher — dentro do Tauri o elemento é promovido de verdade, e o palco e o
+ * tile recebem a mesma coisa.
  */
 export type OpcoesDeTelaCheia = {
-  /**
-   * Quando o DOM **não** promover o elemento, a tela cheia só da **janela**
-   * ainda atende o pedido?
-   *
-   * Atenção ao que mudou: isto já foi o caminho normal do app desktop e agora
-   * é só a **saída de emergência**. O caminho normal é a combinação (elemento
-   * + janela), e ela não é opcional — dentro do Tauri o elemento sozinho não
-   * cobre a tela. Este `recuarParaAJanela` só decide o que fazer quando a
-   * promoção do elemento falha ou nem existe:
-   *
-   *   - `true` (o padrão, e o comportamento histórico) para o **palco**, onde
-   *     "tela cheia" significa "a chamada ocupa a tela": a janela sem moldura
-   *     entrega isso mesmo sem elemento promovido, e é o que salva o WKWebView
-   *     do macOS, que nasce com o *element fullscreen* desligado;
-   *   - `false` para um **tile**: ali a janela em tela cheia não é uma versão
-   *     pior do que foi pedido, é outra coisa — a transmissão continuaria do
-   *     mesmo tamanho no meio da grade. Melhor falhar com aviso.
-   */
+  /** @deprecated sem efeito: a emulação atende o palco e o tile igualmente. */
   recuarParaAJanela?: boolean;
 };
 
-/** O padrão do recuo em um só lugar, para os dois pontos de entrada concordarem. */
-function aceitaRecuo(opcoes: OpcoesDeTelaCheia | undefined): boolean {
-  return opcoes?.recuarParaAJanela ?? true;
+/**
+ * Por onde a tela cheia vai sair **neste ambiente**. É a única decisão de
+ * plataforma do módulo, e por isso está separada: pura, sem DOM, testável.
+ *
+ *   - `emulado`: dentro do Tauri, **sempre**. Não pergunta ao DOM de propósito
+ *     — a resposta dele não serve (ver o topo do arquivo): no Windows o
+ *     elemento promovido fica preso ao interior da janela e no macOS o recurso
+ *     nem está ligado. A emulação, por ser nossa, funciona nos dois;
+ *   - `dom`: no navegador, onde a API existe e é melhor que qualquer emulação;
+ *   - `nenhum`: navegador sem a API (`<iframe>` sem `allow`, WebKit antigo).
+ *     Aí a UI esconde o botão em vez de oferecer um clique inerte.
+ */
+export type CaminhoDeTelaCheia = "emulado" | "dom" | "nenhum";
+
+export function caminhoDeTelaCheia(ambiente: {
+  tauri: boolean;
+  domSuporta: boolean;
+}): CaminhoDeTelaCheia {
+  if (ambiente.tauri) return "emulado";
+  return ambiente.domSuporta ? "dom" : "nenhum";
+}
+
+/** O caminho para o ambiente de agora. */
+function caminhoDeAgora(): CaminhoDeTelaCheia {
+  return caminhoDeTelaCheia({ tauri: isTauri(), domSuporta: suportaTelaCheiaDoDOM() });
 }
 
 /**
  * Dá para pôr **isto** em tela cheia aqui? Quem pergunta é a UI, para
  * **esconder** o botão onde ele seria inerte.
  *
- * Com o recuo aceito (o palco), no app desktop a resposta é sempre `true`:
- * mesmo que o DOM recuse, sobra a tela cheia da janela.
- *
- * Sem o recuo (um tile), quem responde é o DOM e só ele. Dentro do app com
- * WebView2 isso hoje é "sim" — o Chromium implementa a Fullscreen API e a
- * combinação com a janela faz o resto —, e é por isso que o botão do tile
- * voltou a aparecer no desktop. Continua sendo "não" no WKWebView do macOS,
- * onde o *element fullscreen* nasce desligado e o tile recusa o recuo. Note
- * que este `true` é **permissão**, não promessa: o pedido ainda pode ser
- * recusado na hora, e é por isso que a recusa sem recuo falha com aviso em vez
- * de virar outra ação.
+ * Dentro do app desktop a resposta é sempre `true` — a emulação não depende de
+ * nada que a webview possa recusar. No navegador quem responde é o DOM.
  */
-export function suportaTelaCheia(opcoes?: OpcoesDeTelaCheia): boolean {
-  if (aceitaRecuo(opcoes) && isTauri()) return true;
-  return suportaTelaCheiaDoDOM();
+export function suportaTelaCheia(_opcoes?: OpcoesDeTelaCheia): boolean {
+  return caminhoDeAgora() !== "nenhum";
 }
 
+// ── Tela cheia emulada (app desktop) ────────────────────────────────────────
+
+type Emulada = {
+  /** quem está promovido; o dono, para o clique de sair e para o desmonte. */
+  elemento: HTMLElement;
+  /**
+   * A janela já estava em tela cheia **antes** de nós (F11, semáforo verde)?
+   * Então ela não é nossa: ao sair, desfazemos só a nossa metade. Tirar da tela
+   * cheia uma janela que o usuário pôs à mão seria desfazer o que ele fez.
+   */
+  janelaEraDeles: boolean;
+};
+
+let emulada: Emulada | null = null;
+
+function marcar(el: HTMLElement) {
+  el.setAttribute(ATRIBUTO_DE_TELA_CHEIA, "");
+}
+
+function desmarcar(el: HTMLElement) {
+  el.removeAttribute(ATRIBUTO_DE_TELA_CHEIA);
+}
+
+/** O ouvinte de Esc da emulação, enquanto ela está ligada. */
+let escapeDaEmulada: ((e: KeyboardEvent) => void) | null = null;
+
 /**
- * A tela cheia de **janela** que nós pedimos — e por causa de quê.
- *
- * `combinada` é o caminho normal do app desktop: a janela acompanha um
- * elemento promovido, e as duas saem juntas. `sozinha` é o recuo, onde não há
- * elemento nenhum promovido e a janela é tudo o que há.
- *
- * Fica em módulo porque a janela é uma só, mas **carrega o elemento dono**: um
- * booleano de módulo foi exatamente o defeito anterior (o palco recuava uma vez
- * e o clique do tile herdava esse estado).
- */
-type TelaCheiaDaJanela =
-  | { modo: "combinada"; elemento: HTMLElement }
-  | { modo: "sozinha" };
-
-let janelaNossa: TelaCheiaDaJanela | null = null;
-
-/** O ouvinte de Esc do recuo, enquanto ele está ligado. */
-let escapeDaJanela: ((e: KeyboardEvent) => void) | null = null;
-
-/**
- * Liga o Esc do **recuo**. No caminho combinado quem faz isto é o navegador (o
- * Esc sai do elemento e o `fullscreenchange` leva a janela junto); no recuo não
- * há elemento promovido, ninguém ouve, e sem isto a única saída seria o botão —
- * que em tela cheia de janela some junto com a moldura em algumas plataformas.
+ * Liga o Esc da emulação. Aqui não há tela cheia do navegador para ele desfazer
+ * sozinho: sem este ouvinte a única saída seria o botão — que some junto com a
+ * moldura quando o ponteiro para, e não existe em tile nenhum do celular.
  *
  * Fase de borbulha e `defaultPrevented` respeitado de propósito: um modal
  * aberto por cima do palco também fecha no Esc, e ele tem de ganhar.
  */
-function ligarEscapeDaJanela() {
-  if (typeof window === "undefined" || escapeDaJanela) return;
-  escapeDaJanela = (e: KeyboardEvent) => {
+function ligarEscapeDaEmulada() {
+  if (typeof window === "undefined" || escapeDaEmulada) return;
+  escapeDaEmulada = (e: KeyboardEvent) => {
     if (e.key !== "Escape" || e.defaultPrevented) return;
     e.preventDefault();
-    void tirarAJanelaDaTelaCheia();
+    void sairDaEmulada();
   };
-  window.addEventListener("keydown", escapeDaJanela);
+  window.addEventListener("keydown", escapeDaEmulada);
 }
 
-function desligarEscapeDaJanela() {
-  if (typeof window === "undefined" || !escapeDaJanela) return;
-  window.removeEventListener("keydown", escapeDaJanela);
-  escapeDaJanela = null;
-}
-
-/**
- * Tira a janela da tela cheia, se ela for nossa, e apaga a anotação. Idempotente
- * de propósito: as quatro saídas podem chegar aqui em qualquer ordem, e a
- * segunda não pode desfazer o que a primeira já arrumou.
- */
-async function tirarAJanelaDaTelaCheia(): Promise<void> {
-  if (!janelaNossa) return;
-  const era = janelaNossa;
-  janelaNossa = null;
-  desligarEscapeDaJanela();
-  await definirTelaCheiaDaJanela(false);
-  // no caminho combinado quem manda no `telaCheia` da store é o
-  // `fullscreenchange` do elemento (o hook abaixo); só o recuo precisa contar
-  if (era.modo === "sozinha") useVoice.getState().setTelaCheia(false);
+function desligarEscapeDaEmulada() {
+  if (typeof window === "undefined" || !escapeDaEmulada) return;
+  window.removeEventListener("keydown", escapeDaEmulada);
+  escapeDaEmulada = null;
 }
 
 /**
  * Já pedimos o `onResized` da janela? É um só e fica para sempre: o desligar
  * chega por `await`, e desfazê-lo a cada entrada/saída abriria uma corrida em
- * que o ouvinte antigo sobrevive ao pedido de parada. Ele não faz nada quando a
- * janela não é nossa, então deixar ligado não custa.
+ * que o ouvinte antigo sobrevive ao pedido de parada. Ele não faz nada quando
+ * não há emulação ligada, então deixar ligado não custa.
  */
 let observandoAJanela = false;
 
@@ -263,57 +261,78 @@ async function observarSaidaPorFora(): Promise<void> {
 }
 
 /**
- * A janela saiu da tela cheia sem nos avisar? Então a nossa metade do DOM
- * também tem de cair — senão sobraria um elemento promovido preenchendo uma
- * janela normal, que é meia tela cheia e nenhum botão dizendo a verdade.
+ * A janela saiu da tela cheia sem nos avisar? Então a nossa metade também tem
+ * de cair — senão sobraria um elemento `fixed` cobrindo uma janela normal, com
+ * o botão de sair fora da tela.
  */
 async function reconciliarComAJanela(): Promise<void> {
-  if (!janelaNossa) return;
+  if (!emulada || emulada.janelaEraDeles) return;
   if (await janelaEmTelaCheia()) return;
-  const era = janelaNossa;
-  janelaNossa = null;
-  desligarEscapeDaJanela();
-  if (era.modo === "sozinha") {
-    useVoice.getState().setTelaCheia(false);
+  await sairDaEmulada({ janelaJaSaiu: true });
+}
+
+/**
+ * Entra na tela cheia emulada. O elemento é marcado **antes** de qualquer
+ * `await`: a ida ao Rust custa um quadro ou mais, e promover depois faria a
+ * janela crescer com o leiaute antigo à vista no meio do caminho.
+ */
+async function entrarNaEmulada(el: HTMLElement): Promise<void> {
+  // trocar de dono (tile → palco, tile → tile) não mexe na janela: ela já está
+  // em tela cheia por nós, só muda quem está promovido
+  if (emulada) {
+    if (emulada.elemento === el) return;
+    desmarcar(emulada.elemento);
+    marcar(el);
+    emulada = { ...emulada, elemento: el };
     return;
   }
-  if (elementoEmTelaCheia()) await sairDoElemento();
+
+  marcar(el);
+  emulada = { elemento: el, janelaEraDeles: false };
+  ligarEscapeDaEmulada();
+  useVoice.getState().setTelaCheia(true);
+  void observarSaidaPorFora();
+
+  const jaEstava = await janelaEmTelaCheia();
+  // o Esc (ou o desmonte) pode ter chegado durante a ida ao Rust
+  if (emulada?.elemento !== el) return;
+  if (jaEstava) {
+    emulada.janelaEraDeles = true;
+    return;
+  }
+
+  const ok = await definirTelaCheiaDaJanela(true);
+  if (!ok) {
+    // o elemento continua promovido — ele cobre o interior da janela, que é o
+    // melhor possível sem a permissão. O aviso diz onde procurar.
+    console.warn(
+      "[tela cheia] a janela do app recusou a tela cheia — falta `core:window:allow-set-fullscreen`? " +
+        "O elemento está promovido, mas só até a borda da janela.",
+    );
+    // não entramos na janela, então não saímos dela: um `setFullscreen(false)`
+    // na saída mexeria numa janela que ninguém pôs em tela cheia
+    emulada.janelaEraDeles = true;
+  }
 }
 
 /**
- * O `fullscreenchange` do módulo — que **não** é o do hook.
+ * Sai da tela cheia emulada. Idempotente de propósito: as saídas podem chegar
+ * em qualquer ordem, e a segunda não pode desfazer o que a primeira arrumou.
  *
- * O hook só existe onde há palco; um tile promovido por `alternarTelaCheiaDe`
- * não tem ninguém escutando por ele, e é ele quem mais precisa: o Esc do
- * navegador sai do elemento e deixaria a janela sem moldura para sempre.
- *
- * Nunca é removido, pela mesma razão do `onResized`: é inerte enquanto a janela
- * não for nossa, e removê-lo abriria corrida com a próxima entrada.
+ * `janelaJaSaiu` é o caminho do `onResized`: a janela já voltou ao normal por
+ * fora, e mandá-la sair de novo seria uma ida ao Rust sem efeito.
  */
-let reconciliadorLigado = false;
-
-function ligarReconciliadorDoDOM() {
-  if (typeof document === "undefined" || reconciliadorLigado) return;
-  reconciliadorLigado = true;
-  const aoTrocar = () => void reconciliarComODOM();
-  document.addEventListener("fullscreenchange", aoTrocar);
-  document.addEventListener("webkitfullscreenchange", aoTrocar);
+async function sairDaEmulada(opcoes?: { janelaJaSaiu?: boolean }): Promise<void> {
+  const era = emulada;
+  if (!era) return;
+  emulada = null;
+  desmarcar(era.elemento);
+  desligarEscapeDaEmulada();
+  useVoice.getState().setTelaCheia(false);
+  if (!era.janelaEraDeles && !opcoes?.janelaJaSaiu) await definirTelaCheiaDaJanela(false);
 }
 
-/**
- * Saiu do elemento (Esc, ou o elemento desmontou)? A janela vai junto.
- *
- * A condição é "não há **nenhum** elemento em tela cheia", e não "não é mais
- * aquele": trocar a tela cheia de um tile para o palco (ou para outro tile) é
- * um `requestFullscreen` novo com o anterior saindo, e checar identidade aqui
- * faria a janela cair no meio da troca. Enquanto houver alguém promovido, a
- * combinação continua de pé — só muda o dono, anotado na entrada.
- */
-async function reconciliarComODOM(): Promise<void> {
-  if (janelaNossa?.modo !== "combinada") return;
-  if (elementoEmTelaCheia()) return;
-  await tirarAJanelaDaTelaCheia();
-}
+// ── Tela cheia do DOM (navegador) ───────────────────────────────────────────
 
 /** Sai da tela cheia do elemento, pelos dois nomes. */
 async function sairDoElemento(): Promise<void> {
@@ -336,14 +355,14 @@ async function sairDoElemento(): Promise<void> {
 }
 
 /**
- * Pede a tela cheia do elemento **agora**, sem `await` nenhum antes da chamada.
+ * Pede a tela cheia do elemento **agora**, sem `await` nenhum antes da chamada:
+ * `requestFullscreen` exige gesto do usuário, e qualquer `await` anterior já
+ * basta para o navegador considerar o clique gasto.
  *
  * Devolve a promessa do pedido, ou `null` quando este navegador não tem a
- * Fullscreen API de elemento (WKWebView com o recurso desligado, `<iframe>` sem
- * `allow`) — que é caso de recuo, e não de recusa.
+ * Fullscreen API de elemento.
  */
 function pedirTelaCheiaDoElemento(el: HTMLElement): Promise<void> | null {
-  if (!suportaTelaCheiaDoDOM()) return null;
   const comWebkit = el as ElementoComWebkit;
   const chamar: (() => Promise<void> | void) | null =
     typeof el.requestFullscreen === "function"
@@ -357,221 +376,98 @@ function pedirTelaCheiaDoElemento(el: HTMLElement): Promise<void> | null {
     // pelo evento `webkitfullscreenerror` — o `Promise.resolve` aceita os dois
     return Promise.resolve(chamar());
   } catch (erro) {
-    // `TypeError` síncrono: vira recusa, não recuo
     return Promise.reject(erro);
   }
 }
 
-/**
- * A segunda metade da tela cheia do app desktop: a janela acompanha o elemento
- * que acabou de ser promovido.
- *
- * Só depois do `await` do pedido do DOM — antes dele não pode haver `await`
- * nenhum (gesto do usuário), e a janela não precisa de gesto.
- */
-async function combinarComAJanela(el: HTMLElement): Promise<void> {
-  if (!isTauri()) return;
-
-  // trocar de elemento (tile → palco, tile → tile) não mexe na janela: ela já
-  // está em tela cheia por nós, só muda o dono anotado
-  if (janelaNossa?.modo === "combinada") {
-    janelaNossa = { modo: "combinada", elemento: el };
-    return;
-  }
-
-  // a janela pode já estar em tela cheia por fora (F11, semáforo verde). Não é
-  // nossa: não anotamos e não a tiramos depois — desfazer o que o usuário fez
-  // à mão seria pior que não fazer nada.
-  if (await janelaEmTelaCheia()) return;
-
-  // o Esc pode ter chegado durante as idas ao Rust acima; pôr a janela em tela
-  // cheia agora deixaria o app sem moldura com nada promovido dentro
-  if (elementoEmTelaCheia() !== el) return;
-
-  const ok = await definirTelaCheiaDaJanela(true);
-  if (!ok) {
-    console.warn(
-      "[tela cheia] o elemento foi promovido, mas a janela do app recusou a tela cheia — " +
-        "falta `core:window:allow-set-fullscreen`? No WebView2 o elemento sozinho só preenche " +
-        "o interior da janela.",
-    );
-    return;
-  }
-  janelaNossa = { modo: "combinada", elemento: el };
-  ligarReconciliadorDoDOM();
-  void observarSaidaPorFora();
-
-  // e se ele saiu bem no meio disto, desfaz — a ordem das duas saídas é livre,
-  // o que não pode é sobrar metade
-  if (elementoEmTelaCheia() !== el) await tirarAJanelaDaTelaCheia();
-}
-
-/** Entra na tela cheia só da janela (o recuo), a partir do estado **real** dela. */
-async function entrarSoNaJanela(): Promise<void> {
-  if (!isTauri()) return;
-  // A janela pode já estar em tela cheia sem nos avisar (semáforo verde do
-  // macOS, F11 do WebView2). Perguntar custa uma ida ao Rust e evita o clique
-  // que "não faz nada" porque a nossa anotação estava ao contrário.
-  if (await janelaEmTelaCheia()) {
-    await definirTelaCheiaDaJanela(false);
-    return;
-  }
-  const ok = await definirTelaCheiaDaJanela(true);
-  if (!ok) {
-    console.warn(
-      "[tela cheia] a janela do app recusou a tela cheia — falta `core:window:allow-set-fullscreen`?",
-    );
-    return;
-  }
-  janelaNossa = { modo: "sozinha" };
-  useVoice.getState().setTelaCheia(true);
-  ligarEscapeDaJanela();
-  void observarSaidaPorFora();
-}
+// ── API pública ─────────────────────────────────────────────────────────────
 
 /**
- * Entra/sai da tela cheia num elemento qualquer.
- *
- * Dentro do app desktop isto é **elemento + janela** (ver o topo do arquivo);
- * no navegador, só o elemento. `opcoes.recuarParaAJanela` só decide o que
- * acontece quando o DOM não promove — omitido, vale `true`, que é o
- * comportamento de sempre e o certo para o palco. `VoiceHotkeys` e
- * `useTelaCheia` chamam com o palco e continuam valendo sem tocar em nada.
+ * Entra/sai da tela cheia num elemento qualquer — pelo caminho do ambiente
+ * (ver `caminhoDeTelaCheia`). `opcoes` é aceito por compatibilidade e não muda
+ * nada hoje.
  */
-export async function alternarTelaCheiaDe(el: HTMLElement | null, opcoes?: OpcoesDeTelaCheia) {
+export async function alternarTelaCheiaDe(el: HTMLElement | null, _opcoes?: OpcoesDeTelaCheia) {
   if (typeof document === "undefined") return;
-  const recuo = aceitaRecuo(opcoes);
 
-  // Estamos no recuo? Então, para quem aceita o recuo, este clique é o de sair.
-  // Não há `fullscreenElement` para desmentir, e promover elemento aqui
-  // empilharia as duas telas cheias uma na outra.
-  //
-  // **Sair, e não "alternar"**: se a janela já tivesse saído por fora com a
-  // nossa anotação para trás, um "alternar" **entraria** de novo — o app inteiro
-  // em tela cheia sem ninguém ter pedido. Quem **não** aceita o recuo não entra
-  // aqui: mexer na janela do app (nem para sair) não é o que se pediu ao
-  // ampliar um tile; segue para o DOM.
-  if (janelaNossa?.modo === "sozinha" && recuo) {
-    await tirarAJanelaDaTelaCheia();
+  if (caminhoDeAgora() === "emulado") {
+    // Sair vale também com `el` nulo: o elemento pode ter desmontado entre o
+    // clique e aqui, e ficar preso em tela cheia é pior que sair sem pedir.
+    if (emulada && (!el || emulada.elemento === el)) {
+      await sairDaEmulada();
+      return;
+    }
+    if (!el) {
+      console.warn("[tela cheia] o alvo não está no DOM — nada a promover");
+      return;
+    }
+    await entrarNaEmulada(el);
     return;
   }
 
   if (!el) {
-    // o `ref` ainda não foi pendurado (ou o elemento já desmontou): antes isto
-    // era um `return` mudo, e um clique sem efeito nenhum
+    // antes isto era um `return` mudo, e um clique sem efeito nenhum
     console.warn("[tela cheia] o alvo não está no DOM — nada a promover");
     return;
   }
 
   // ── Sair ─────────────────────────────────────────────────────────────────
-  // Pelo elemento primeiro, que é **a mesma saída que o Esc usa**: o
-  // `fullscreenchange` cai no `reconciliarComODOM` e leva a janela junto. Ter
-  // uma saída só para acertar vale mais que a simetria com a entrada; o
-  // `await` abaixo é cinto e suspensório para o caso de o evento não vir.
   if (elementoEmTelaCheia() === el) {
     await sairDoElemento();
-    if (janelaNossa?.modo === "combinada" && !elementoEmTelaCheia()) {
-      await tirarAJanelaDaTelaCheia();
-    }
     return;
   }
 
   // ── Entrar ───────────────────────────────────────────────────────────────
-  // Tudo daqui até `pedirTelaCheiaDoElemento` é síncrono **de propósito**:
-  // `requestFullscreen` exige gesto do usuário, e um `await` antes dele já
-  // basta para o navegador considerar o clique gasto e recusar o pedido.
+  // Síncrono até o pedido, **de propósito**: ver `pedirTelaCheiaDoElemento`.
   const promocao = pedirTelaCheiaDoElemento(el);
-
-  if (promocao) {
-    try {
-      await promocao;
-    } catch (erro) {
-      // recusa comum: sem gesto do usuário, tela cheia desabilitada na webview,
-      // ou já havia uma transição em curso
-      console.warn("[tela cheia] o navegador recusou o pedido:", erro);
-      await recuarOuFalhar(recuo);
-      return;
-    }
-    // Promovido. No app desktop isto ainda não cobre a tela — o elemento
-    // preenche o interior da janela e mais nada —, então a janela vai junto.
-    await combinarComAJanela(el);
+  if (!promocao) {
+    console.warn("[tela cheia] este navegador não oferece tela cheia de elemento");
     return;
   }
-
-  console.warn("[tela cheia] este navegador não oferece tela cheia de elemento");
-  await recuarOuFalhar(recuo);
-}
-
-/**
- * O que fazer quando o elemento **não** foi promovido: para o palco, a janela
- * sozinha ainda é "a chamada ocupa a tela"; para um tile, não fazer nada é
- * melhor que fazer outra coisa.
- */
-async function recuarOuFalhar(recuo: boolean): Promise<void> {
-  if (!recuo) {
-    // Este `return` é a correção do defeito da 1.3.0. Quem pediu para ampliar
-    // **um elemento** prefere não acontecer nada a ver o app inteiro perder a
-    // moldura com a transmissão do mesmo tamanho.
-    console.warn(
-      "[tela cheia] o elemento não pôde ser promovido e o recuo para a janela não vale aqui: " +
-        "nada foi feito, de propósito (pôr a janela em tela cheia seria fazer outra coisa)",
-    );
-    return;
+  try {
+    await promocao;
+  } catch (erro) {
+    // recusa comum: sem gesto do usuário, tela cheia desabilitada na webview,
+    // ou já havia uma transição em curso
+    console.warn("[tela cheia] o navegador recusou o pedido:", erro);
   }
-  // O recuo é uma troca de ação — elemento por janela inteira. Sem este rastro
-  // ninguém descobre, pelo log, por que o app ficou sem moldura.
-  console.warn(
-    "[tela cheia] recuando para a tela cheia da JANELA: o elemento não foi promovido, " +
-      "quem perde a moldura é o app inteiro",
-  );
-  await entrarSoNaJanela();
 }
 
 /**
  * Desfaz a tela cheia que **este** elemento ligou. Para o desmonte de quem
- * promove sem hook (o tile): o navegador solta a tela cheia do DOM sozinho
- * quando o elemento sai da página, mas a janela do Tauri não — e aí sobraria um
- * app sem moldura depois que a transmissão acabou.
+ * promove sem hook (o tile): no navegador o próprio browser solta a tela cheia
+ * quando o elemento sai da página, mas a emulação é nossa — sem isto sobrariam
+ * a janela sem moldura e um atributo em elemento que já morreu.
  */
 export function soltarTelaCheiaDe(el: HTMLElement | null): void {
-  if (!el) return;
-  if (janelaNossa?.modo !== "combinada" || janelaNossa.elemento !== el) return;
-  void tirarAJanelaDaTelaCheia();
-}
-
-/** Desfaz qualquer tela cheia de janela nossa. Usado no desmonte do palco. */
-async function sairDaTelaCheiaDaJanela(): Promise<void> {
-  await tirarAJanelaDaTelaCheia();
+  if (!el || emulada?.elemento !== el) return;
+  void sairDaEmulada();
 }
 
 /**
  * Liga um palco à tela cheia e sincroniza o `telaCheia` da store com o que o
- * navegador (ou a janela) de fato está fazendo.
+ * navegador (ou a emulação) de fato está fazendo.
  *
  * `suportada` é resolvida num efeito, e não na primeira renderização: no HTML
  * gerado no servidor não há `document` — nem o `window.isTauri` que responde se
  * estamos no app —, e decidir ali deixaria a hidratação discordando da
  * marcação.
  */
-export function useTelaCheia(alvo: RefObject<HTMLElement | null>, opcoes?: OpcoesDeTelaCheia) {
+export function useTelaCheia(alvo: RefObject<HTMLElement | null>, _opcoes?: OpcoesDeTelaCheia) {
   const telaCheia = useVoice((s) => s.telaCheia);
   const setTelaCheia = useVoice((s) => s.setTelaCheia);
   const [suportada, setSuportada] = useState(false);
-  // o hook de hoje é sempre do palco, então o padrão (recuo aceito) é o certo;
-  // o parâmetro existe para quem vier depois não precisar de um hook novo
-  const recuo = aceitaRecuo(opcoes);
 
   useEffect(() => {
-    setSuportada(suportaTelaCheia({ recuarParaAJanela: recuo }));
-  }, [recuo]);
+    setSuportada(suportaTelaCheia());
+  }, []);
 
   useEffect(() => {
     const aoTrocar = () => {
-      // no recuo não há elemento promovido: quem manda no estado é a nossa
-      // chamada, e um `fullscreenchange` de outro elemento não pode apagá-lo.
-      // No caminho combinado é o contrário — o elemento é a verdade, e a janela
-      // é consequência dele.
-      if (janelaNossa?.modo === "sozinha") return;
+      // na emulação não há evento nenhum do DOM: quem manda no estado são
+      // `entrarNaEmulada`/`sairDaEmulada`, e um `fullscreenchange` que chegasse
+      // de outro lugar não pode apagá-lo
+      if (emulada) return;
       setTelaCheia(!!elementoEmTelaCheia());
     };
     // o pedido pode falhar **depois** da promessa no caminho prefixado: sem
@@ -587,18 +483,18 @@ export function useTelaCheia(alvo: RefObject<HTMLElement | null>, opcoes?: Opcoe
       document.removeEventListener("webkitfullscreenchange", aoTrocar);
       document.removeEventListener("fullscreenerror", aoFalhar);
       document.removeEventListener("webkitfullscreenerror", aoFalhar);
-      // a janela do Tauri não sai sozinha: sem isto, sair da call deixaria o
+      // a emulação não se desfaz sozinha: sem isto, sair da chamada deixaria o
       // app sem moldura e sem botão nenhum para desfazer
-      void sairDaTelaCheiaDaJanela();
+      void sairDaEmulada();
       // desmontar o palco em tela cheia deixaria a store mentindo
       setTelaCheia(false);
     };
   }, [setTelaCheia]);
 
-  const alternar = useCallback(
-    () => void alternarTelaCheiaDe(alvo.current, { recuarParaAJanela: recuo }),
-    [alvo, recuo],
-  );
+  // sem `opcoes` na dependência de propósito: ela não tem efeito, e como chega
+  // como objeto literal a cada renderização, dependê-la trocaria a identidade
+  // de `alternar` em toda renderização do palco
+  const alternar = useCallback(() => void alternarTelaCheiaDe(alvo.current), [alvo]);
 
   return { telaCheia, alternar, suportada };
 }
