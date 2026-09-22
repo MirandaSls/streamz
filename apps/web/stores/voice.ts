@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import { MARCA_DA_MIGRACAO, migrarRuido, RUIDO_PADRAO } from "@/lib/ruido-padrao";
+import {
+  ECO_PADRAO,
+  GANHO_PADRAO,
+  MARCA_DA_MIGRACAO,
+  MARCA_DA_MIGRACAO_TRATAMENTO,
+  migrarProcessamento,
+  RUIDO_PADRAO,
+} from "@/lib/ruido-padrao";
 import {
   type CallEndedEvent,
   type CallRingEvent,
@@ -470,12 +477,18 @@ export interface AudioPrefs {
  */
 export type NivelDeRuido = "off" | "padrao" | "avancada";
 
+/**
+ * O padrão de fábrica do processamento é o preset "No app": eco e ganho do
+ * sistema desligados, limpeza a cargo da supressão avançada. O porquê — e o
+ * custo (eco de volta para quem fala em alto-falante) — está por extenso em
+ * `lib/ruido-padrao.ts`, que é de onde saem as três constantes.
+ */
 const AUDIO_PADRAO: AudioPrefs = {
   entrada: 1,
   saida: 1,
   sensibilidade: 0.35,
   pttAtrasoMs: PTT_RELEASE_MS,
-  processamento: { eco: true, ruido: RUIDO_PADRAO, ganho: true },
+  processamento: { eco: ECO_PADRAO, ruido: RUIDO_PADRAO, ganho: GANHO_PADRAO },
 };
 
 const AUDIO_KEY = "voiceAudioPrefs";
@@ -500,21 +513,34 @@ function gravarNoStorage(chave: string, valor: string) {
 function carregarAudio(): AudioPrefs {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
-    if (!raw) return AUDIO_PADRAO;
+    if (!raw) {
+      // nada salvo: esta instalação já nasce no padrão atual. As marcas são
+      // gravadas aqui também para que a primeira escolha consciente (voltar
+      // para "Sistema", por exemplo) não seja lida como padrão antigo e
+      // desfeita na abertura seguinte.
+      gravarNoStorage(MARCA_DA_MIGRACAO, "1");
+      gravarNoStorage(MARCA_DA_MIGRACAO_TRATAMENTO, "1");
+      return AUDIO_PADRAO;
+    }
     const lido = JSON.parse(raw) as Partial<AudioPrefs>;
     const processamento = { ...AUDIO_PADRAO.processamento, ...(lido.processamento ?? {}) };
     // `ruido` era booleano antes de existir o nível "avançada": quem já tinha
     // preferência salva não pode cair no padrão por causa da mudança de tipo
     const bruto = (lido.processamento as { ruido?: unknown } | undefined)?.ruido;
     if (typeof bruto === "boolean") processamento.ruido = bruto ? "padrao" : "off";
-    // supressão avançada por padrão: migra uma vez quem estava no padrão antigo
-    const migracao = migrarRuido(processamento.ruido, lerDoStorage(MARCA_DA_MIGRACAO) === "1");
-    if (migracao.mudou) {
-      processamento.ruido = migracao.nivel;
-      gravarNoStorage(AUDIO_KEY, JSON.stringify({ ...AUDIO_PADRAO, ...lido, processamento }));
-    }
+    // padrões que mudaram depois que este storage foi gravado: supressão
+    // avançada (2026-09-16) e tratamento "No app" (2026-09-22). Cada uma roda
+    // uma vez só, guardada pela sua marca — sem elas, quem voltasse ao valor
+    // antigo de propósito seria arrastado de novo a cada abertura.
+    const migrado = migrarProcessamento(processamento, {
+      ruidoMigrado: lerDoStorage(MARCA_DA_MIGRACAO) === "1",
+      tratamentoMigrado: lerDoStorage(MARCA_DA_MIGRACAO_TRATAMENTO) === "1",
+    });
+    const final = { ...AUDIO_PADRAO, ...lido, processamento: migrado.processamento };
+    if (migrado.mudou) gravarNoStorage(AUDIO_KEY, JSON.stringify(final));
     gravarNoStorage(MARCA_DA_MIGRACAO, "1");
-    return { ...AUDIO_PADRAO, ...lido, processamento };
+    gravarNoStorage(MARCA_DA_MIGRACAO_TRATAMENTO, "1");
+    return final;
   } catch {
     return AUDIO_PADRAO;
   }
@@ -2091,6 +2117,13 @@ export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
     echoCancellation: audio.processamento.eco,
     noiseSuppression: nivel === "padrao" || avancadaCaiu,
     autoGainControl: audio.processamento.ganho,
+    // explícita para não depender de um padrão do SDK: os `audioDefaults` do
+    // livekit-client 2.22.0 mandam `voiceIsolation: true`, e essa restrição
+    // **substitui** a `noiseSuppression` onde o sistema a suporta — ou seja,
+    // quem decidiria a supressão nativa seria o SDK, não esta função. Hoje
+    // provavelmente é inerte (o Chrome só a aplica onde há suporte do sistema),
+    // mas uma variável a menos no tabuleiro custa uma linha
+    voiceIsolation: false,
   };
 }
 

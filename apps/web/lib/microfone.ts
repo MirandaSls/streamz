@@ -39,12 +39,36 @@ import { cadeiaDoMicrofone, contextoDeCaptura, type CadeiaDoMicrofone } from "@/
  * testável sem um SDK inteiro em pé.
  */
 
-/** O que o navegador precisa saber para abrir a captura. */
-export interface RestricoesDeMicrofone {
-  deviceId?: string;
+/**
+ * A parte das restrições que o navegador consegue trocar **na faixa que já
+ * está aberta**: tudo menos o aparelho.
+ *
+ * A separação existe por causa de `atualizarMicrofone`. Trocar de aparelho é
+ * outro `getUserMedia` e não há como não reabrir; trocar eco/ruído/AGC é um
+ * `applyConstraints` na mesma `MediaStreamTrack`, que **não fecha o
+ * dispositivo** — e reabrir o dispositivo à toa é caro em qualquer sistema
+ * (num fone Bluetooth é uma renegociação de perfil inteira).
+ */
+export interface ProcessamentoDeCaptura {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
+  /**
+   * A supressão "forte" do `mediacapture-extensions`, que **substitui** a
+   * `noiseSuppression` onde o sistema a suporta.
+   *
+   * Vai explícita porque o livekit-client 2.22.0 injeta `voiceIsolation: true`
+   * nos `audioDefaults` de `createLocalTracks`: sem dizer nada, o padrão do SDK
+   * é quem decide qual supressão nativa roda — e esse padrão pode mudar de
+   * versão para versão sem que nada aqui acuse. Quem escolhe a supressão neste
+   * app é `restricoesDeCaptura`.
+   */
+  voiceIsolation: boolean;
+}
+
+/** O que o navegador precisa saber para abrir a captura. */
+export interface RestricoesDeMicrofone extends ProcessamentoDeCaptura {
+  deviceId?: string;
 }
 
 /** A faixa local de áudio do LiveKit, só com o que este módulo usa. */
@@ -59,6 +83,17 @@ export interface FaixaDeMicrofone {
   setAudioContext(ctx: AudioContext | undefined): void;
   setProcessor(cadeia: CadeiaDoMicrofone): Promise<void>;
   stopProcessor(): Promise<void>;
+  /**
+   * Troca eco/ruído/AGC na captura que já está aberta, sem `getUserMedia` novo.
+   *
+   * O nome está em inglês, contra a convenção do projeto, porque é o do
+   * `LocalAudioTrack` do LiveKit: assim a faixa do SDK satisfaz esta interface
+   * como está, sem um embrulho no meio. Ele aplica na faixa **de entrada** (a
+   * de antes da cadeia, que é a do dispositivo) e mescla o que passou nas
+   * `constraints` guardadas, então uma reaquisição posterior do SDK não volta
+   * ao processamento antigo.
+   */
+  applyConstraints(processamento: ProcessamentoDeCaptura): Promise<void>;
   restartTrack(restricoes: RestricoesDeMicrofone): Promise<void>;
   mute(): Promise<unknown>;
   unmute(): Promise<unknown>;
@@ -140,13 +175,76 @@ function precisaDeCadeia(p: PreferenciasDoMicrofone): boolean {
   return p.supressao || p.ganho !== 1;
 }
 
-function mesmasRestricoes(a: RestricoesDeMicrofone, b: RestricoesDeMicrofone): boolean {
+/**
+ * O contexto em que a cadeia destas preferências vai viver.
+ *
+ * `setAudioContext` só existe para o LiveKit deixar `setProcessor` passar, e a
+ * cadeia monta o grafo no contexto que ela mesma toma — os dois têm de ser o
+ * mesmo, e agora há dois candidatos: os 48 kHz forçados são do RNNoise, e a
+ * cadeia sem RNNoise (só o ganho) roda na taxa do aparelho, como o resto de
+ * quem apenas ouve o sinal. O predicado é o mesmo que a cadeia usa em `montar`.
+ */
+function contextoDaCadeia(p: PreferenciasDoMicrofone): AudioContext {
+  return contextoDeCaptura(p.supressao);
+}
+
+function mesmoProcessamento(a: ProcessamentoDeCaptura, b: ProcessamentoDeCaptura): boolean {
   return (
-    a.deviceId === b.deviceId &&
     a.echoCancellation === b.echoCancellation &&
     a.noiseSuppression === b.noiseSuppression &&
-    a.autoGainControl === b.autoGainControl
+    a.autoGainControl === b.autoGainControl &&
+    a.voiceIsolation === b.voiceIsolation
   );
+}
+
+/** Só o que `applyConstraints` aceita: o aparelho fica de fora de propósito. */
+function processamentoDe(r: RestricoesDeMicrofone): ProcessamentoDeCaptura {
+  return {
+    echoCancellation: r.echoCancellation,
+    noiseSuppression: r.noiseSuppression,
+    autoGainControl: r.autoGainControl,
+    voiceIsolation: r.voiceIsolation,
+  };
+}
+
+/**
+ * Leva a faixa aberta das restrições `atuais` para as `novas` — reabrindo o
+ * dispositivo **só** quando não há outro jeito.
+ *
+ * Por que isto não é mais um `restartTrack` para tudo: `restartTrack` faz
+ * `stop()` na faixa e um `getUserMedia` novo, ou seja, fecha e reabre o
+ * dispositivo. Toda reabertura é uma renegociação com o áudio do sistema (num
+ * fone Bluetooth, de perfil e codec), e nada disso é necessário para mudar eco,
+ * ruído nativo ou ganho automático: são restrições da mesma captura, e
+ * `applyConstraints` as troca com o dispositivo aberto. É também o que fazem os
+ * dois clientes comparáveis que usam este mesmo SDK no navegador — Element Call
+ * e LiveKit Meet —, onde `restartTrack` aparece apenas como contorno para troca
+ * de **aparelho**.
+ *
+ * Trocar de aparelho continua sendo `restartTrack`: é outro dispositivo, outro
+ * `getUserMedia`.
+ */
+async function trocarRestricoes(estado: Vivo, novas: RestricoesDeMicrofone) {
+  const atuais = estado.prefs.restricoes;
+  if (atuais.deviceId !== novas.deviceId) {
+    await estado.faixa.restartTrack(novas);
+    return;
+  }
+  if (mesmoProcessamento(atuais, novas)) return;
+  try {
+    await estado.faixa.applyConstraints(processamentoDe(novas));
+  } catch (e) {
+    // `OverconstrainedError`: este navegador/driver não troca estas restrições
+    // com o dispositivo aberto. Recuar para `restartTrack` custa a reabertura
+    // que este caminho existe para evitar, mas deixar a preferência sem efeito
+    // (e em silêncio) seria pior — a pessoa mexeu no controle esperando algo.
+    console.warn(
+      "[voz] o navegador recusou trocar o processamento do microfone ao vivo; " +
+        "reabrindo a captura para aplicar a preferência",
+      e,
+    );
+    await estado.faixa.restartTrack(novas);
+  }
 }
 
 /**
@@ -176,7 +274,7 @@ async function aplicarCadeia(estado: Vivo, prefs: PreferenciasDoMicrofone) {
   }
 
   const cadeia = cadeiaDoMicrofone({ supressao: prefs.supressao, ganho: prefs.ganho });
-  estado.faixa.setAudioContext(contextoDeCaptura());
+  estado.faixa.setAudioContext(contextoDaCadeia(prefs));
   // `setProcessor` já derruba o processador anterior (e espera pela `destroy()`)
   await estado.faixa.setProcessor(cadeia);
   estado.cadeia = cadeia;
@@ -212,8 +310,8 @@ export function abrirMicrofone(
       try {
         // o contexto só serve para montar a cadeia (`setProcessor` precisa
         // dele); sem cadeia a pedir, tomá-lo aqui só abriria uma `AudioContext`
-        // de 48 kHz à toa para quem nunca vai usar supressão nem ganho
-        if (precisaDeCadeia(prefs)) faixa.setAudioContext(contextoDeCaptura());
+        // à toa para quem nunca vai usar supressão nem ganho
+        if (precisaDeCadeia(prefs)) faixa.setAudioContext(contextoDaCadeia(prefs));
         await aplicarCadeia(estado, prefs);
       } catch {
         estado.cadeia = null;
@@ -227,7 +325,7 @@ export function abrirMicrofone(
         estado.publicado = true;
         // o `publicar` repõe o contexto da `Room` na faixa; o nosso é que vale
         // — mas só há o que repor quando existe cadeia montada por cima dele
-        if (estado.cadeia) faixa.setAudioContext(contextoDeCaptura());
+        if (estado.cadeia) faixa.setAudioContext(contextoDaCadeia(estado.prefs));
       }
     } catch (e) {
       await descartar(estado);
@@ -242,12 +340,11 @@ export function atualizarMicrofone(prefs: PreferenciasDoMicrofone): Promise<void
   return emFila(async () => {
     const estado = vivo;
     if (!estado) return;
-    // eco/supressão nativa/AGC/dispositivo são do `getUserMedia`: só um
-    // `restartTrack` os troca — e ele reinicia a cadeia junto, pelo SDK
-    if (!mesmasRestricoes(estado.prefs.restricoes, prefs.restricoes)) {
-      await estado.faixa.restartTrack(prefs.restricoes);
-    }
+    await trocarRestricoes(estado, prefs.restricoes);
     try {
+      // a cadeia é nossa e vive fora do `getUserMedia`: montar/desmontar o
+      // RNNoise (e mexer no ganho) continua sendo trabalho daqui, tenha a
+      // captura sido reaberta ou só reconfigurada ao vivo
       await aplicarCadeia(estado, prefs);
     } catch {
       // mesma regra do `abrirMicrofone`: a call continua, sem a cadeia
@@ -295,7 +392,9 @@ export function definirMicrofoneEmTeste(testando: boolean): Promise<void> {
     } else if (!testando && !estado.publicado) {
       await estado.sala.publicar(estado.faixa).catch(() => {});
       estado.publicado = true;
-      estado.faixa.setAudioContext(contextoDeCaptura());
+      // como acima: só há contexto a repor quando existe cadeia montada sobre
+      // ele — sem cadeia, tomá-lo aqui abriria uma `AudioContext` à toa
+      if (estado.cadeia) estado.faixa.setAudioContext(contextoDaCadeia(estado.prefs));
     }
   });
 }
