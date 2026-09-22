@@ -1,46 +1,62 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { ScreenQuality } from "@streamz/shared";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
-import { AppWindow, Monitor } from "@/components/ui/icones";
-import { Checkbox } from "@/components/ui/primitivos";
+import { AppWindow, Monitor, MonitorUp } from "@/components/ui/icones";
+import { Button, Checkbox } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
+import { capturarTelaNoNavegador, suportaCapturaDeTela } from "@/lib/captura-de-tela";
 import {
   capacidadesDeTela,
   fontesDeTela,
+  isTauri,
   miniaturasDeTela,
   type CapacidadesDeTela,
 } from "@/lib/desktop";
 import {
+  ehCancelamento,
   estimativaDeBanda,
   fontesDaAba,
+  mensagemDeErro,
   rotuloDaFonte,
   type Aba,
   type FonteDeTela,
 } from "@/lib/seletor-de-tela";
+import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Seletor de transmissão do **desktop** — o modal do Discord: duas abas no topo
+ * Seletor de transmissão — o modal do Discord: duas abas no topo
  * ("Aplicativos" e "Tela Inteira", repartindo a largura), a grade de
- * miniaturas ao vivo no corpo e, no rodapé, a qualidade inteira à mostra.
+ * miniaturas no corpo e, no rodapé, a qualidade inteira à mostra.
  *
- * **Só no app de desktop.** As fontes vêm do Rust (`fontes_de_tela` +
- * `miniaturas_de_tela`, captura nativa sem a borda amarela) e clicar numa
- * miniatura **já transmite**, como no Discord — não há prévia nem "Ao vivo"
- * para confirmar. No navegador este modal não abre: lá não existe listar
- * janelas (`getDisplayMedia` é uma API de gesto, com seletor próprio do
- * browser), e o modal virava um passo a mais antes do diálogo que decide de
- * verdade — `ScreenShareButton` chama a captura direto, e a qualidade mora na
- * aba Voz das configurações.
+ * **Duas origens para a grade, um modal só.**
+ *
+ * - No **app de desktop** as fontes vêm do Rust (`fontes_de_tela` +
+ *   `miniaturas_de_tela`, captura nativa sem a borda amarela) e clicar numa
+ *   miniatura **já transmite**, como no Discord — não há prévia nem "Ao vivo"
+ *   para confirmar.
+ * - No **navegador** uma página **não pode** listar telas e janelas: a única
+ *   API que enumera é `getDisplayMedia`, e ela abre o diálogo do próprio
+ *   browser/sistema, dentro do gesto do usuário. Isso não tem contorno, e o
+ *   Discord web passa pelo mesmo — na print `p2` quem avisa "O discord.com
+ *   está compartilhando sua tela" é a barra do Chrome, não o Discord. Então o
+ *   que este modal faz aqui é o que ele pode fazer: decidir **qualidade, taxa
+ *   de quadros e áudio do sistema** antes, dar a dica de qual painel do
+ *   diálogo abrir (a aba escolhida vira `displaySurface`) e receber de volta a
+ *   captura como a única miniatura da grade, que é onde se clica para ir ao
+ *   ar. **O diálogo do navegador continua existindo** — nenhuma linha daqui o
+ *   faz sumir.
  *
  * **Qualidade sem etapa.** O alternador SD/HD e a engrenagem viravam uma
  * segunda tela para responder "em que resolução isto vai?" — pergunta que se
  * responde olhando. No lugar deles, dois segmentos sempre visíveis no rodapé
  * (`SegmentosDeQualidade`, os mesmos das configurações), com a estimativa de
- * banda e o áudio do sistema à esquerda, na mesma altura.
+ * banda e o áudio do sistema à esquerda, na mesma altura. Os mesmos segmentos
+ * seguem na aba Voz das configurações porque este modal só existe **antes** de
+ * ir ao ar: com a transmissão no ar, trocar o preset só tem lugar lá.
  *
  * **Medidas** (prints `2026-08-31 123946` e `124000`, janela do Discord de
  * 1283×718, conferidas 1:1 pelo avatar de 32 da lista de DMs, pela rail de
@@ -58,19 +74,31 @@ import { useVoice } from "@/stores/voice";
  * configurações, prints `2026-09-01 1143–1146`, janela de 1920×1032), e piso de
  * 880 para o rodapé não quebrar — o piso é nosso, não medido.
  *
+ * **Sem a grade nativa o modal é menor** (955×560, a medida que ele tinha antes
+ * da grade de auto-fill): no navegador o corpo são dois cartões, e o modal
+ * grande virava moldura vazia em volta deles.
+ *
  * Os segmentos do rodapé repetem a forma das abas, com o acento limão na opção
  * ativa.
  */
 export default function ScreenSharePicker({ onClose }: { onClose: () => void }) {
   const [aba, setAba] = useState<Aba>("aplicativos");
-  // null = ainda não perguntamos ao Rust
-  const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(null);
+  // null = ainda não perguntamos ao Rust; fora do Tauri a resposta é sabida na
+  // hora, e assim o modal já nasce no tamanho certo em vez de encolher depois
+  const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(
+    isTauri() ? null : { nativo: false, backend: null, janelaRecortada: false },
+  );
+  // captura do navegador à espera do clique (só fora da captura nativa)
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [capturando, setCapturando] = useState(false);
   const [iniciando, setIniciando] = useState(false);
+  const publicado = useRef(false);
 
   const quality = useVoice((s) => s.screenQuality);
   const audio = useVoice((s) => s.screenAudio);
   const setQuality = useVoice((s) => s.setScreenQuality);
   const setAudio = useVoice((s) => s.setScreenAudio);
+  const publicarTela = useVoice((s) => s.publicarTela);
   const publicarTelaNativa = useVoice((s) => s.publicarTelaNativa);
   const prepararTelaNativa = useVoice((s) => s.prepararTelaNativa);
   const descartarTelaNativa = useVoice((s) => s.descartarTelaNativa);
@@ -85,6 +113,8 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     };
   }, []);
 
+  const nativo = capacidades?.nativo ?? false;
+
   /**
    * O `#tela` entra na sala **agora**, sem publicar nada, e o clique na
    * miniatura só terá de publicar. O handshake do LiveKit (mais o
@@ -93,18 +123,77 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
    * já ia gastar. Ver `prepararTelaNativa` na store.
    */
   useEffect(() => {
-    if (!capacidades?.nativo) return;
+    if (!nativo) return;
     void prepararTelaNativa();
-  }, [capacidades?.nativo, prepararTelaNativa]);
+  }, [nativo, prepararTelaNativa]);
 
   // Fechou sem escolher: o `#tela` não pode ficar na sala sem publicar nada.
   // Se foi ao ar, a conexão virou a transmissão e não há o que descartar.
+  useEffect(() => {
+    if (!nativo) return;
+    return () => {
+      if (!useVoice.getState().screenOn) void descartarTelaNativa();
+    };
+  }, [nativo, descartarTelaNativa]);
+
+  // Fechar sem ir ao ar também não pode deixar a captura do navegador viva: o
+  // browser seguiria mostrando "compartilhando" com ninguém do outro lado.
   useEffect(
     () => () => {
-      if (!useVoice.getState().screenOn) void descartarTelaNativa();
+      if (!publicado.current) stream?.getTracks().forEach((t) => t.stop());
     },
-    [descartarTelaNativa],
+    [stream],
   );
+
+  function aplicarQualidade(q: ScreenQuality) {
+    setQuality(q);
+    // prévia do navegador no ar: reconstrange a faixa em vez de recapturar
+    // (recapturar reabriria o diálogo, e a escolha já foi feita)
+    const faixa = stream?.getVideoTracks()[0];
+    const p = SCREEN_QUALITY[q];
+    void faixa
+      ?.applyConstraints({ width: p.width, height: p.height, frameRate: p.frameRate })
+      .catch(() => {
+        // fonte que não aceita a restrição: ela vai como está, e é melhor assim
+      });
+  }
+
+  /**
+   * Abre o diálogo do navegador. Chamada **direto do clique**: nenhum `await`
+   * a precede, porque `getDisplayMedia` só vale dentro do gesto do usuário.
+   */
+  async function capturarNoNavegador(tipo: Aba) {
+    setCapturando(true);
+    try {
+      const novo = await capturarTelaNoNavegador(quality, audio, tipo);
+      if (!novo) {
+        ui.toast("Este navegador não permite compartilhar a tela", "error");
+        return;
+      }
+      stream?.getTracks().forEach((t) => t.stop());
+      setStream(novo);
+    } catch (e) {
+      // cancelar o diálogo é uma decisão, não um erro: nada acontece, sem aviso
+      if (!ehCancelamento(e)) ui.toast(mensagemDeErro(e), "error");
+    } finally {
+      setCapturando(false);
+    }
+  }
+
+  /** Vai ao ar com a captura que o diálogo do navegador devolveu. */
+  async function irAoVivoCom(captura: MediaStream) {
+    if (iniciando) return;
+    setIniciando(true);
+    publicado.current = true;
+    await publicarTela(captura);
+    // a store avisa o erro em toast e já encerra as faixas; só fecha se foi ao ar
+    if (useVoice.getState().screenOn) onClose();
+    else {
+      publicado.current = false;
+      setStream(null);
+      setIniciando(false);
+    }
+  }
 
   /** Vai ao ar com uma fonte da captura nativa — o clique na miniatura. */
   async function irAoVivoNativo(fonteId: string) {
@@ -128,7 +217,13 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         como estava (o Esc e o clique fora bastam, e o print do Discord não tem).
       */
       showClose={ehMobileAgora()}
-      className="h-[888px] w-[min(1400px,max(75vw,880px))]"
+      className={
+        // a grade nativa pede o modal medido; a escolha do navegador são dois
+        // cartões, e cabe nos 955×560 de sempre
+        capacidades === null || nativo
+          ? "h-[888px] w-[min(1400px,max(75vw,880px))]"
+          : "h-[560px] w-[955px]"
+      }
       bodyClassName="flex flex-col px-6 pb-6 pt-6"
     >
       <BarraDeAbas aba={aba} onAba={setAba} />
@@ -136,7 +231,7 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-4">
         {capacidades === null ? (
           <p className="pt-10 text-center text-sm text-text-muted">Procurando janelas…</p>
-        ) : capacidades.nativo ? (
+        ) : nativo ? (
           <GradeNativa
             aba={aba}
             aviso={
@@ -147,10 +242,21 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             onEscolher={(id) => void irAoVivoNativo(id)}
             iniciando={iniciando}
           />
+        ) : suportaCapturaDeTela() ? (
+          <EscolhaDoNavegador
+            aba={aba}
+            stream={stream}
+            capturando={capturando}
+            iniciando={iniciando}
+            onEscolher={() => void capturarNoNavegador(aba)}
+            onIrAoVivo={() => {
+              if (stream) void irAoVivoCom(stream);
+            }}
+          />
         ) : (
-          // O Rust respondeu que não sabe capturar aqui (backend ausente ou o
-          // comando falhou). Sem grade não há o que clicar, e dizer isso é
-          // melhor do que um modal vazio.
+          // Nem captura nativa (o Rust disse que não sabe, ou não estamos no
+          // app) nem `getDisplayMedia`: não há como capturar nada aqui, e
+          // dizer isso é melhor do que um modal vazio.
           <EstadoVazio
             icone={<Monitor size={32} />}
             texto="A captura de tela não está disponível neste sistema"
@@ -158,7 +264,7 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         )}
       </div>
 
-      <Rodape quality={quality} audio={audio} onQualidade={setQuality} onAudio={setAudio} />
+      <Rodape quality={quality} audio={audio} onQualidade={aplicarQualidade} onAudio={setAudio} />
     </Dialog>
   );
 }
@@ -307,7 +413,7 @@ function GradeNativa({
   return (
     <div>
       {aviso && <p className="mb-3 text-xs text-text-muted">{aviso}</p>}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-x-4 gap-y-4">
+      <Grade>
         {visiveis.map((f) => (
           <Miniatura
             key={f.id}
@@ -340,7 +446,16 @@ function GradeNativa({
             )}
           </Miniatura>
         ))}
-      </div>
+      </Grade>
+    </div>
+  );
+}
+
+/** A grade de `auto-fill` do corpo, a mesma nas duas origens. */
+function Grade({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-x-4 gap-y-4">
+      {children}
     </div>
   );
 }
@@ -395,6 +510,87 @@ function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
   );
 }
 
+// ── navegador: o seletor do próprio browser ────────────────────────────────
+
+/**
+ * O corpo do modal no navegador: um cartão que abre o diálogo do browser e,
+ * quando ele volta com uma captura, a miniatura dela ao lado — clicar nela é
+ * o "ir ao ar".
+ *
+ * O cartão existe porque a lista de janelas **não é nossa** e não pode ser:
+ * `getDisplayMedia` é a única API que enumera, ela só responde dentro do gesto
+ * do usuário e devolve já uma fonte escolhida. O que sobra para nós é o que
+ * está nesta tela — as abas (que viram a dica `displaySurface`), a qualidade e
+ * o áudio do rodapé — e o texto do cartão diz isso em voz alta, para o diálogo
+ * do sistema não parecer um acidente.
+ */
+function EscolhaDoNavegador({
+  aba,
+  stream,
+  capturando,
+  iniciando,
+  onEscolher,
+  onIrAoVivo,
+}: {
+  aba: Aba;
+  stream: MediaStream | null;
+  capturando: boolean;
+  iniciando: boolean;
+  onEscolher: () => void;
+  onIrAoVivo: () => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (video.current) video.current.srcObject = stream;
+  }, [stream]);
+
+  const rotuloDoBotao = aba === "telas" ? "Escolher tela" : "Escolher janela";
+
+  return (
+    <Grade>
+      {stream && (
+        <Miniatura
+          rotulo={stream.getVideoTracks()[0]?.label || "Captura do navegador"}
+          icone={
+            aba === "telas" ? (
+              <Monitor size={16} className="shrink-0 text-text-subtle" />
+            ) : (
+              <AppWindow size={16} className="shrink-0 text-text-subtle" />
+            )
+          }
+          onClick={onIrAoVivo}
+          disabled={iniciando}
+        >
+          <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
+        </Miniatura>
+      )}
+      <div className="flex w-full flex-col">
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border-strong px-8 text-center">
+          <MonitorUp size={32} className="text-text-muted" aria-hidden="true" />
+          <p className="text-sm text-text-muted">
+            {stream
+              ? "Clique na miniatura para ir ao ar, ou escolha outra fonte."
+              : aba === "telas"
+                ? "O navegador abre o seletor de telas; a escolhida aparece aqui."
+                : "O navegador abre o seletor de janelas; a escolhida aparece aqui."}
+          </p>
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            onClick={onEscolher}
+            disabled={capturando || iniciando}
+          >
+            {capturando ? "Aguardando…" : stream ? "Trocar fonte" : rotuloDoBotao}
+          </Button>
+        </div>
+        {/* espelha a linha do nome da miniatura, para os dois cartões da
+            grade terminarem na mesma altura */}
+        <div className="mt-2 h-6" aria-hidden="true" />
+      </div>
+    </Grade>
+  );
+}
+
 // ── rodapé ─────────────────────────────────────────────────────────────────
 
 /**
@@ -417,8 +613,11 @@ function Rodape({
   return (
     <div className="mt-5 flex h-10 shrink-0 items-center justify-between gap-6">
       <div className="min-w-0">
-        {/* O som vem do loopback do Windows (tudo o que está tocando), pelo
-            WASAPI do Rust — não da fonte escolhida. */}
+        {/* No desktop o som vem do loopback do Windows (tudo o que está
+            tocando), pelo WASAPI do Rust — não da fonte escolhida. No
+            navegador ele é um **pedido**: quem decide é a caixa "compartilhar
+            áudio" do diálogo do browser, que só existe para aba e tela
+            inteira. */}
         <Checkbox marcado={audio} aoMudar={onAudio} rotulo="Compartilhar áudio do sistema" />
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}

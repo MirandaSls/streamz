@@ -46,12 +46,11 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * verdade — a sala não te ouve, você não ouve ninguém e os outros te veem
  * assim — e escuta o seu próprio microfone. Parar devolve o par de antes.
  *
- * A seção "Compartilhar tela" está aqui porque no **navegador** o botão de
- * transmitir não abre mais modal nenhum — ele chama `getDisplayMedia` direto e
- * publica (`ScreenShareButton`). A escolha de resolução, taxa de quadros e
- * áudio do sistema precisava de um lugar calmo, e é este; no desktop os mesmos
- * controles continuam no rodapé do seletor, escrevendo na mesma store, então
- * não há duas verdades.
+ * A seção "Compartilhar tela" está aqui porque o seletor **só existe antes de
+ * ir ao ar**: com a transmissão no ar não há onde trocar a qualidade, e o
+ * popout que o Discord abre no tile ao vivo não foi construído. Os mesmos
+ * controles estão no rodapé do seletor (nos dois caminhos, navegador e
+ * desktop) e escrevem na mesma store, então não há duas verdades.
  */
 export default function VozTab() {
   const t = useT();

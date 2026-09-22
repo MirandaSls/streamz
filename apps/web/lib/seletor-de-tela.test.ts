@@ -98,6 +98,19 @@ describe("captura do navegador", () => {
     });
   });
 
+  it("a aba do seletor vira a dica de qual painel do diálogo abrir", () => {
+    // é o único controle que uma página tem sobre o diálogo do navegador, e
+    // ainda assim é só uma dica: ele lista tudo de qualquer jeito
+    const janela = restricoesDeCaptura("720p30", false, "aplicativos")
+      .video as MediaTrackConstraints;
+    expect(janela.displaySurface).toBe("window");
+    const tela = restricoesDeCaptura("720p30", false, "telas").video as MediaTrackConstraints;
+    expect(tela.displaySurface).toBe("monitor");
+    // sem aba, a dica é o monitor — o botão se chama "Compartilhar tela"
+    const padrao = restricoesDeCaptura("720p30", false).video as MediaTrackConstraints;
+    expect(padrao.displaySurface).toBe("monitor");
+  });
+
   it("cancelar o diálogo não é erro; bloqueio do sistema é", () => {
     // o usuário fechou o seletor do navegador: nada acontece, sem aviso
     const cancelou = new DOMException(
