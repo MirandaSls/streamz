@@ -2,8 +2,8 @@
 //!
 //! O crate `windows-capture` roda a sessão numa thread própria com laço de
 //! mensagens, e entrega cada quadro num callback. Aqui o callback só copia o
-//! quadro para uma caixa compartilhada e avisa; quem transmite lê da caixa no
-//! ritmo dele. A caixa guarda **um** quadro: se o encoder atrasar, o quadro
+//! quadro para a `Caixa` compartilhada (`captura::caixa`) e avisa; quem
+//! transmite lê dela no ritmo dele. A caixa guarda **um** quadro: se o encoder atrasar, o quadro
 //! velho é substituído pelo novo, que é o comportamento certo para vídeo ao
 //! vivo (atraso acumulado é pior que quadro perdido).
 //!
@@ -15,9 +15,8 @@
 //! adiantado no callback **sem** tocar na textura. A textura de staging e o
 //! `Vec` do quadro são reaproveitados entre quadros.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{
@@ -36,7 +35,9 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use super::{copiar_sem_padding, intervalo_do_fps, Alvo, Capturador, Erro, Quadro, Ritmo};
+use super::super::caixa::Caixa;
+use super::super::{copiar_sem_padding, intervalo_do_fps, Alvo, Capturador, Erro, Quadro, Ritmo};
+use super::{hmonitor_de, hwnd_de};
 
 /// Quanto uma miniatura espera pelo primeiro quadro. O WGC entrega o primeiro
 /// em um ou dois vsyncs; meio segundo é folga para máquina lenta sem travar a
@@ -48,18 +49,6 @@ const ESPERA_DA_MINIATURA: Duration = Duration::from_millis(500);
 /// Win 10 para os nossos fins.
 pub fn sem_borda_disponivel() -> bool {
     GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false)
-}
-
-/// O que a thread de captura e quem transmite compartilham.
-#[derive(Default)]
-struct Caixa {
-    quadro: Mutex<Option<Quadro>>,
-    chegou: Condvar,
-    /// A fonte fechou (o `Closed` da sessão): a partir daqui não vem mais nada.
-    encerrada: AtomicBool,
-    /// Buffer de um quadro que o encoder já consumiu (`Capturador::reciclar`),
-    /// para o callback encher no lugar de alocar outro.
-    livre: Mutex<Option<Vec<u8>>>,
 }
 
 /// O que a sessão passa ao callback ao nascer.
@@ -131,13 +120,7 @@ impl GraphicsCaptureApiHandler for Entregador {
         let altura = frame.height();
         let mut bgra = std::mem::take(&mut self.reserva);
         if bgra.capacity() == 0 {
-            if let Some(livre) = self
-                .caixa
-                .livre
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take()
-            {
+            if let Some(livre) = self.caixa.tomar_livre() {
                 bgra = livre;
             }
         }
@@ -149,14 +132,11 @@ impl GraphicsCaptureApiHandler for Entregador {
             self.ritmo.marcar(agora);
         }
 
-        let mut guarda = self.caixa.quadro.lock().unwrap_or_else(|e| e.into_inner());
-        let antigo = guarda.replace(Quadro {
+        let antigo = self.caixa.entregar(Quadro {
             largura,
             altura,
             bgra,
         });
-        drop(guarda);
-        self.caixa.chegou.notify_all();
         // Quadro que o encoder não chegou a pegar: o buffer dele é o próximo.
         if let Some(antigo) = antigo {
             self.reserva = antigo.bgra;
@@ -165,8 +145,7 @@ impl GraphicsCaptureApiHandler for Entregador {
     }
 
     fn on_closed(&mut self) -> Result<(), Self::Error> {
-        self.caixa.encerrada.store(true, Ordering::Release);
-        self.caixa.chegou.notify_all();
+        self.caixa.encerrar();
         Ok(())
     }
 }
@@ -244,7 +223,8 @@ impl Sessao {
     pub fn abrir(alvo: Alvo, fps: Option<u32>) -> Result<Self, Erro> {
         let caixa = Arc::new(Caixa::default());
         let controle = match alvo {
-            Alvo::Janela(hwnd) => {
+            Alvo::Janela(bruto) => {
+                let hwnd = hwnd_de(bruto);
                 // O handle pode ter sido reciclado desde a enumeração; a
                 // conversão para item de captura falharia com um erro
                 // genérico, e "a janela fechou" é a mensagem certa.
@@ -255,9 +235,11 @@ impl Sessao {
                 cutucar(hwnd);
                 controle
             }
-            Alvo::Monitor(hmonitor) => {
-                iniciar(Monitor::from_raw_hmonitor(hmonitor.0), caixa.clone(), fps)?
-            }
+            Alvo::Monitor(bruto) => iniciar(
+                Monitor::from_raw_hmonitor(hmonitor_de(bruto).0),
+                caixa.clone(),
+                fps,
+            )?,
         };
         Ok(Self {
             caixa,
@@ -338,36 +320,17 @@ fn cutucar(hwnd: HWND) {
 
 impl Capturador for Sessao {
     fn proximo_quadro(&mut self, limite: Duration) -> Result<Option<Quadro>, Erro> {
-        let fim = Instant::now() + limite;
-        let mut guarda = self.caixa.quadro.lock().unwrap_or_else(|e| e.into_inner());
-        loop {
-            if let Some(quadro) = guarda.take() {
-                return Ok(Some(quadro));
-            }
-            if self.caixa.encerrada.load(Ordering::Acquire) {
-                return Err(Erro::FonteSumiu);
-            }
-            // A thread de captura morreu por erro (o `Closed` não dispara
-            // nesse caso): tratar como fonte perdida, e não esperar para
-            // sempre por um quadro que não vem.
-            if self.controle.as_ref().is_some_and(|c| c.is_finished()) {
-                return Err(Erro::FonteSumiu);
-            }
-            let agora = Instant::now();
-            if agora >= fim {
-                return Ok(None);
-            }
-            let (nova, _) = self
-                .caixa
-                .chegou
-                .wait_timeout(guarda, fim - agora)
-                .unwrap_or_else(|e| e.into_inner());
-            guarda = nova;
-        }
+        // A checagem de vida que a `Caixa` não sabe fazer sozinha: a thread de
+        // captura pode ter morrido por erro, e nesse caso o `Closed` não
+        // dispara — sem isto a espera ficaria pendurada por um quadro que não
+        // vem.
+        let controle = self.controle.as_ref();
+        self.caixa
+            .proximo(limite, &|| !controle.is_some_and(|c| c.is_finished()))
     }
 
     fn reciclar(&mut self, quadro: Quadro) {
-        *self.caixa.livre.lock().unwrap_or_else(|e| e.into_inner()) = Some(quadro.bgra);
+        self.caixa.devolver_livre(quadro.bgra);
     }
 }
 

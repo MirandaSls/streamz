@@ -1,63 +1,63 @@
 //! Captura de quadros de uma janela ou de um monitor — a metade "capture isto"
-//! do módulo `tela` (a metade "o que existe" é `fontes.rs`).
+//! do módulo `tela` (a metade "o que existe" é `fontes`).
 //!
-//! **Dois backends, escolhidos em tempo de execução, e a razão é a borda
-//! amarela.** A Windows Graphics Capture (WGC) desenha uma moldura amarela em
-//! volta do que está sendo capturado como aviso de segurança. A partir do
-//! Windows 11 a sessão aceita `IsBorderRequired = false`; no Windows 10 a
-//! propriedade não existe e a API recusa desligar. Então:
-//!
-//! - **WGC sem borda** quando a propriedade existe (Windows 11). Captura a
-//!   janela isolada, mesmo coberta por outras.
-//! - **DXGI Desktop Duplication** quando não existe (Windows 10). Duplica o
-//!   monitor inteiro — nunca desenha borda — e, para janela, recorta o quadro
-//!   no retângulo dela. O recorte mostra o que estiver por cima da janela; é
-//!   a mesma limitação do Discord no Windows 10, e o seletor avisa (ver
-//!   `capacidades_de_tela` em `tela/mod.rs`).
-//!
-//! A decisão é por **capacidade** (a propriedade `IsBorderRequired` existe na
-//! `GraphicsCaptureSession`?), e não por número de build: é exatamente a
-//! pergunta que interessa, e não depende de uma tabela de versões que um dia
-//! fica velha.
+//! **Este arquivo é neutro de plataforma.** Aqui ficam o `Quadro` BGRA, o
+//! `Erro`, a trait `Capturador`, o marcapasso `Ritmo` e a cópia sem padding —
+//! tudo o que os backends fazem igual, em qualquer sistema. Quem sabe de API
+//! do sistema é o submódulo do alvo (`win`: WGC e DXGI; `mac`:
+//! ScreenCaptureKit), e `backend()`/`abrir()`/`miniaturas()` só delegam para
+//! ele. O `Alvo` que atravessa essa fronteira carrega um **número opaco**, de
+//! propósito: é o que tira daqui o `use windows::…`.
 //!
 //! As miniaturas da grade do seletor saem daqui também, de propósito: uma
-//! biblioteca de screenshot genérica usaria WGC com borda, e a moldura amarela
-//! piscaria em cada janela enquanto o seletor estivesse aberto.
+//! biblioteca de screenshot genérica usaria a captura com o aviso de segurança
+//! ligado — no Windows, a moldura amarela do WGC —, e ele piscaria em cada
+//! janela enquanto o seletor estivesse aberto. Por que o aviso existe, e como
+//! cada backend escapa dele, está em `win/mod.rs`.
 //!
-//! A arquitetura (trait `Capturador` com os dois backends, miniaturas pelo
+//! A arquitetura (trait `Capturador` com um backend por API, miniaturas pelo
 //! mesmo caminho da transmissão) é a do plano da sessão anterior, que também
-//! escreveu a enumeração; este módulo é a etapa "capturar sem borda" dele.
+//! escreveu a enumeração.
 
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::HMONITOR;
-
-mod dxgi;
+mod caixa;
 mod escala;
-mod wgc;
+#[cfg(target_os = "macos")]
+mod mac;
+#[cfg(windows)]
+mod win;
+
+// A delegação de plataforma acontece uma vez, aqui: `backend()`, `abrir()` e
+// `miniaturas()` chamam `plataforma::…` e nenhum outro lugar deste arquivo
+// precisa de `#[cfg]`.
+#[cfg(target_os = "macos")]
+use self::mac as plataforma;
+#[cfg(windows)]
+use self::win as plataforma;
 
 /// O que capturar, já resolvido de um id de `Fonte` (ver `fontes::alvo`).
+///
+/// O número é **opaco**, e quem o põe aqui é o `fontes` da plataforma:
+/// `HWND`/`HMONITOR` no Windows, `CGWindowID`/`CGDirectDisplayID` no macOS.
+/// Guardá-lo como `u64` é o que tira deste arquivo o `use windows::…` e o
+/// `unsafe impl Send` que ele não deveria ter.
 #[derive(Debug, Clone, Copy)]
 pub enum Alvo {
-    Janela(HWND),
-    Monitor(HMONITOR),
+    Janela(u64),
+    Monitor(u64),
 }
-
-// SAFETY: `HWND` e `HMONITOR` são identificadores opacos do sistema, não
-// ponteiros para memória nossa. Mandá-los para outra thread é o uso normal
-// deles (qualquer thread pode consultar uma janela pelo handle).
-unsafe impl Send for Alvo {}
 
 /// Um quadro BGRA sem padding: 4 bytes por pixel, linhas contíguas.
 ///
-/// BGRA e não RGBA porque é o que o Windows entrega nos dois backends, e a
-/// conversão para o YUV do encoder (`argb_to_i420`, na nomenclatura da libyuv)
-/// lê exatamente esta ordem de bytes. Reordenar aqui seria uma passada a mais
-/// por 14 MB de quadro a 60 vezes por segundo.
+/// BGRA e não RGBA porque é o que o Windows entrega nos dois backends — e o
+/// mesmo que o `kCVPixelFormatType_32BGRA` do macOS entrega —, e a conversão
+/// para o YUV do encoder (`argb_to_i420`, na nomenclatura da libyuv) lê
+/// exatamente esta ordem de bytes. Reordenar aqui seria uma passada a mais por
+/// 14 MB de quadro a 60 vezes por segundo.
 pub struct Quadro {
     pub largura: u32,
     pub altura: u32,
@@ -183,6 +183,8 @@ pub enum Backend {
     Wgc,
     /// DXGI Desktop Duplication com recorte por janela (Windows 10).
     Dxgi,
+    /// ScreenCaptureKit (macOS 12.3+).
+    Sck,
 }
 
 impl Backend {
@@ -190,22 +192,27 @@ impl Backend {
         match self {
             Backend::Wgc => "wgc",
             Backend::Dxgi => "dxgi",
+            Backend::Sck => "sck",
         }
+    }
+
+    /// Compartilhar uma **janela** mostra o que estiver por cima dela?
+    ///
+    /// Só no DXGI, que não sabe duplicar uma janela e recorta o monitor no
+    /// retângulo dela (ver `win/dxgi.rs`). O WGC e o ScreenCaptureKit capturam
+    /// a janela isolada, mesmo coberta. O seletor avisa quando é o caso — ver
+    /// `capacidades_de_tela` em `tela/mod.rs`.
+    pub fn janela_recortada(self) -> bool {
+        self == Backend::Dxgi
     }
 }
 
-/// Decide o backend uma vez por processo. A consulta é uma chamada WinRT
-/// barata, mas o resultado não muda com o app aberto, e chamá-la a cada
-/// miniatura seria ruído.
+/// Decide o backend uma vez por processo. A consulta de capacidade é barata,
+/// mas o resultado não muda com o app aberto, e chamá-la a cada miniatura
+/// seria ruído.
 pub fn backend() -> Backend {
     static ESCOLHIDO: OnceLock<Backend> = OnceLock::new();
-    *ESCOLHIDO.get_or_init(|| {
-        if wgc::sem_borda_disponivel() {
-            Backend::Wgc
-        } else {
-            Backend::Dxgi
-        }
-    })
+    *ESCOLHIDO.get_or_init(plataforma::backend)
 }
 
 #[derive(Debug)]
@@ -213,7 +220,7 @@ pub enum Erro {
     /// A janela fechou (ou o monitor foi desligado) no meio: quem transmite
     /// para, sem tentar de novo.
     FonteSumiu,
-    /// Falha da API de captura, com a mensagem do Windows para o log.
+    /// Falha da API de captura, com a mensagem do sistema para o log.
     Falha(String),
 }
 
@@ -228,8 +235,8 @@ impl fmt::Display for Erro {
 
 impl std::error::Error for Erro {}
 
-/// Uma sessão de captura aberta sobre um alvo. Os dois backends implementam
-/// isto, e quem transmite não sabe qual dos dois está por baixo.
+/// Uma sessão de captura aberta sobre um alvo. Todos os backends implementam
+/// isto, e quem transmite não sabe qual deles está por baixo.
 pub trait Capturador: Send {
     /// Espera até `limite` por um quadro novo.
     ///
@@ -247,13 +254,7 @@ pub trait Capturador: Send {
 /// `fps` quadros por segundo (o do preset). O limite vale **antes** da leitura
 /// da GPU: quadro que a transmissão jogaria fora não chega a ser copiado.
 pub fn abrir(alvo: Alvo, fps: u32) -> Result<Box<dyn Capturador>, Erro> {
-    match backend() {
-        Backend::Wgc => Ok(Box::new(wgc::Sessao::abrir(alvo, Some(fps))?)),
-        Backend::Dxgi => Ok(Box::new(dxgi::Duplicacao::abrir(
-            alvo,
-            Ritmo::puxando(fps),
-        )?)),
-    }
+    plataforma::abrir(alvo, fps)
 }
 
 /// Miniaturas JPEG de várias fontes, na ordem pedida. `None` onde não deu
@@ -273,17 +274,5 @@ pub fn abrir(alvo: Alvo, fps: u32) -> Result<Box<dyn Capturador>, Erro> {
 /// varredura — quem inicia levanta esta bandeira e a varredura desiste na
 /// fonte seguinte, devolvendo `None` para o que faltava.
 pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>> {
-    match backend() {
-        Backend::Wgc => {
-            let mut saida: Vec<Option<Vec<u8>>> = vec![None; alvos.len()];
-            for (i, alvo) in alvos.iter().enumerate() {
-                if cancelar.load(Ordering::Acquire) {
-                    break;
-                }
-                saida[i] = wgc::um_quadro(*alvo).and_then(|q| escala::jpeg(&q));
-            }
-            saida
-        }
-        Backend::Dxgi => dxgi::miniaturas(alvos, cancelar),
-    }
+    plataforma::miniaturas(alvos, cancelar)
 }

@@ -13,22 +13,29 @@
 //! o que foi capturado na sala do LiveKit, e as três juntas é que substituem
 //! o `getDisplayMedia` no app de desktop.
 //!
-//! Fora do Windows a lista sai vazia e `capacidades_de_tela` responde
-//! `nativo: false` de propósito: a web trata isso como "sem backend nativo" e
-//! cai no `getDisplayMedia` de sempre, que é o caminho do navegador e do
-//! desenvolvimento em Linux/macOS.
+//! Quem tem backend nativo é o cfg `tela_nativa`, posto pelo `build.rs`
+//! (Windows e macOS). Nos outros alvos a lista sai vazia e
+//! `capacidades_de_tela` responde `nativo: false` de propósito: a web trata
+//! isso como "sem backend nativo" e cai no `getDisplayMedia` de sempre, que é
+//! o caminho do navegador e do desenvolvimento em Linux.
 
 use serde::Serialize;
 
-#[cfg(windows)]
+// `audio` fica **fora** do `cfg` de propósito. A metade testável dele —
+// `audio::mistura`, a reamostragem e a redução a dois canais — não toca
+// sistema nenhum, mas enquanto o módulo inteiro era `#[cfg(windows)]` os
+// quatro `#[test]` dela não rodavam em lugar algum: não neste servidor, não
+// em máquina de build. Compilar o módulo em todo alvo é o que faz
+// `cargo test` alcançá-los; o que é de plataforma (o `Loopback`) continua
+// atrás de `#[cfg]` lá dentro.
 mod audio;
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 mod captura;
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 mod fontes;
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 mod icone;
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 mod transmissao;
 
 /// Uma janela ou um monitor que o usuário pode transmitir.
@@ -74,14 +81,14 @@ pub async fn fontes_de_tela() -> Result<Vec<Fonte>, String> {
         .map_err(|e| format!("falha ao listar fontes de tela: {e}"))
 }
 
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 fn listar() -> Vec<Fonte> {
     let mut todas = fontes::monitores();
     todas.extend(fontes::janelas());
     todas
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 fn listar() -> Vec<Fonte> {
     Vec::new()
 }
@@ -91,14 +98,41 @@ fn listar() -> Vec<Fonte> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capacidades {
-    /// Há backend nativo (só no Windows).
+    /// Há backend nativo (Windows e macOS).
     pub nativo: bool,
-    /// `"wgc"` (Windows 11, janela isolada) ou `"dxgi"` (Windows 10, recorte
-    /// do monitor). `None` sem backend.
+    /// `"wgc"` (Windows 11, janela isolada), `"dxgi"` (Windows 10, recorte do
+    /// monitor) ou `"sck"` (macOS, ScreenCaptureKit). `None` sem backend.
     pub backend: Option<&'static str>,
     /// Compartilhar uma **janela** mostra o que estiver por cima dela. É o
     /// caso do DXGI, e o seletor avisa o usuário antes de ele escolher.
     pub janela_recortada: bool,
+    /// Dá para levar o som do sistema junto?
+    ///
+    /// Não é a mesma pergunta que `nativo`: no Windows o loopback do WASAPI é
+    /// do próprio sistema e vale sempre; no macOS só do 13 em diante, porque
+    /// o `capturesAudio` do ScreenCaptureKit não existe no 12. Com `false` o
+    /// seletor esconde a caixa "compartilhar áudio" em vez de oferecer uma
+    /// opção que a transmissão ignoraria em silêncio.
+    pub audio_do_sistema: bool,
+    /// O sistema exige autorização para capturar a tela, e ela está dada?
+    pub permissao: Permissao,
+}
+
+/// O eixo da autorização de captura — que existe em uns sistemas e não em
+/// outros, e por isso não cabia num `bool`.
+///
+/// O macOS pede autorização de **gravação de tela** (TCC) e, sem ela, o
+/// `SCShareableContent` responde erro `-3801`: a grade ficaria em "Nenhuma
+/// janela aberta" para sempre, sem dizer por quê — é para esse silêncio que
+/// este campo existe. O Windows não tem equivalente (quem está na sessão pode
+/// capturar a sessão), daí `NaoPrecisa`, que a web lê como "não mostre nada
+/// sobre permissão".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Permissao {
+    NaoPrecisa,
+    Concedida,
+    Faltando,
 }
 
 #[tauri::command]
@@ -106,22 +140,48 @@ pub fn capacidades_de_tela() -> Capacidades {
     capacidades()
 }
 
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 fn capacidades() -> Capacidades {
     let backend = captura::backend();
     Capacidades {
         nativo: true,
         backend: Some(backend.nome()),
-        janela_recortada: backend == captura::Backend::Dxgi,
+        // Quem sabe se a janela sai recortada é o backend; repetir a
+        // comparação com o DXGI aqui seria uma segunda verdade para manter.
+        janela_recortada: backend.janela_recortada(),
+        // Idem para o som: a resposta por plataforma já mora no `audio`.
+        audio_do_sistema: audio::disponivel(),
+        permissao: permissao(),
     }
 }
 
-#[cfg(not(windows))]
+/// O Windows não tem o eixo da autorização: quem está na sessão pode capturar
+/// a sessão, sem nada a pedir a ninguém.
+#[cfg(all(tela_nativa, not(target_os = "macos")))]
+fn permissao() -> Permissao {
+    Permissao::NaoPrecisa
+}
+
+/// No macOS a resposta verdadeira vem do TCC, e lê-la é outro cartão. Até lá,
+/// `Faltando` é o palpite conservador: responder `Concedida` sem ter
+/// perguntado devolveria uma grade vazia e sem explicação — exatamente o
+/// defeito que este eixo existe para evitar.
+#[cfg(all(tela_nativa, target_os = "macos"))]
+fn permissao() -> Permissao {
+    Permissao::Faltando
+}
+
+#[cfg(not(tela_nativa))]
 fn capacidades() -> Capacidades {
     Capacidades {
         nativo: false,
         backend: None,
         janela_recortada: false,
+        // Sem backend não há som a levar junto nem autorização a pedir: quem
+        // captura neste alvo é o `getDisplayMedia` do webview, que negocia o
+        // consentimento dele por conta.
+        audio_do_sistema: false,
+        permissao: Permissao::NaoPrecisa,
     }
 }
 
@@ -142,7 +202,7 @@ pub async fn miniaturas_de_tela(ids: Vec<String>) -> Result<Vec<Option<String>>,
         .map_err(|e| format!("falha ao gerar miniaturas: {e}"))
 }
 
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     use base64::Engine as _;
 
@@ -174,19 +234,19 @@ fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     saida
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     vec![None; ids.len()]
 }
 
 /// Uma varredura de miniaturas por vez: duas sessões de captura da mesma
 /// janela ao mesmo tempo é o que o WGC menos gosta.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 static UMA_VARREDURA: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Enquanto isto está levantado, a grade não gera miniatura nenhuma — e a
 /// varredura que já estava rodando desiste na fonte seguinte.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 static SEM_MINIATURAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// **Onde estava boa parte do atraso ao transmitir uma janela.**
@@ -204,10 +264,10 @@ static SEM_MINIATURAS: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// devolve o controle quando o caminho está livre. Ao ser derrubada, as
 /// miniaturas voltam — o seletor pode ter continuado aberto porque a
 /// transmissão falhou.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 pub struct SemMiniaturas;
 
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 impl SemMiniaturas {
     /// Bloqueia até a varredura em curso terminar: chame de `spawn_blocking`.
     fn erguer() -> Self {
@@ -217,24 +277,24 @@ impl SemMiniaturas {
     }
 }
 
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 impl Drop for SemMiniaturas {
     fn drop(&mut self) {
         SEM_MINIATURAS.store(false, std::sync::atomic::Ordering::Release);
     }
 }
 
-/// A transmissão em curso, gerenciada pelo Tauri (`app.manage`). Fora do
-/// Windows é um marcador vazio: os comandos respondem que não há captura
-/// nativa e a web fica no `getDisplayMedia`.
-#[cfg(windows)]
+/// A transmissão em curso, gerenciada pelo Tauri (`app.manage`). Num alvo sem
+/// captura nativa é um marcador vazio: os comandos respondem que não há
+/// captura nativa e a web fica no `getDisplayMedia`.
+#[cfg(tela_nativa)]
 pub use transmissao::Transmissao;
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 #[derive(Default)]
 pub struct Transmissao;
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 impl Transmissao {
     pub fn encerrar(&self) {}
 }
@@ -246,7 +306,7 @@ impl Transmissao {
 /// DTLS. Feita no clique, ela é segundo(s) de tela preta; feita quando o
 /// seletor abre, o usuário a paga enquanto escolhe o que transmitir. Falhar
 /// aqui não é erro para ninguém — `iniciar_tela` conecta na hora, como antes.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 #[tauri::command]
 pub async fn preparar_tela(
     estado: tauri::State<'_, Transmissao>,
@@ -255,25 +315,25 @@ pub async fn preparar_tela(
     transmissao::preparar(&estado, preparo).await
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 #[tauri::command]
 pub async fn preparar_tela(
     _estado: tauri::State<'_, Transmissao>,
     _preparo: serde_json::Value,
 ) -> Result<(), String> {
-    Err("Captura de tela nativa só existe no Windows".to_string())
+    Err("Captura de tela nativa não existe neste sistema".to_string())
 }
 
 /// Desfaz a pré-conexão: o seletor fechou sem ninguém escolher fonte. Sem
 /// isto o `#tela` ficaria na sala sem publicar até o LiveKit expirá-lo.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 #[tauri::command]
 pub async fn descartar_tela(estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
     transmissao::descartar(&estado).await;
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 #[tauri::command]
 pub async fn descartar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
     Ok(())
@@ -287,7 +347,7 @@ pub async fn descartar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<()
 /// Devolve o tempo de cada etapa (ver `transmissao::Tempos`): é o que a web
 /// imprime em `console.debug`, e é como se descobre qual delas ficou cara sem
 /// ninguém ter um depurador aberto na máquina do usuário.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 #[tauri::command]
 pub async fn iniciar_tela(
     app: tauri::AppHandle,
@@ -310,25 +370,25 @@ pub async fn iniciar_tela(
     resultado
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 #[tauri::command]
 pub async fn iniciar_tela(
     _app: tauri::AppHandle,
     _estado: tauri::State<'_, Transmissao>,
     _pedido: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    Err("Captura de tela nativa só existe no Windows".to_string())
+    Err("Captura de tela nativa não existe neste sistema".to_string())
 }
 
 /// Para a transmissão em curso (se houver) e tira o `#tela` da sala.
-#[cfg(windows)]
+#[cfg(tela_nativa)]
 #[tauri::command]
 pub async fn parar_tela(estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
     transmissao::parar(&estado).await;
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(tela_nativa))]
 #[tauri::command]
 pub async fn parar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
     Ok(())

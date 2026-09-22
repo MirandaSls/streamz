@@ -369,7 +369,12 @@ pub async fn iniciar(
     // O áudio do sistema é uma segunda faixa do mesmo participante. Falhar
     // aqui (sem dispositivo de saída, formato estranho) não derruba o vídeo:
     // a transmissão segue muda, como quando a opção está desligada.
-    let fonte_audio = if pedido.audio {
+    //
+    // `audio::disponivel()` porque nem todo alvo com captura de tela sabe
+    // capturar o som do sistema (o macOS só do 13 em diante). Onde não sabe,
+    // publicar a faixa seria anunciar silêncio para a sala inteira: melhor
+    // não publicar nada e deixar o vídeo seguir.
+    let fonte_audio = if pedido.audio && audio::disponivel() {
         let fonte = NativeAudioSource::new(
             // sem cancelamento de eco nem supressão: a fonte é o próprio
             // sistema, e os processadores de voz achatariam música em mono
