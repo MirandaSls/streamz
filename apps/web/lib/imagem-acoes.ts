@@ -143,3 +143,53 @@ export function comoAbrir(url: string, noDesktop: boolean): Abertura | null {
 export function ehHttp(url: string): boolean {
   return /^https?:\/\//i.test(url.trim());
 }
+
+/**
+ * Os endereços a tentar, **em ordem**, para conseguir os bytes de uma imagem.
+ *
+ * O primeiro é sempre o que já está na tela: no caso normal é a URL assinada
+ * do R2, que responde direto do bucket, sem passar pela nossa API — é o
+ * caminho rápido e é o que quase sempre funciona. Ele vence junto com a
+ * assinatura (`ATTACHMENT_URL_TTL_SECONDS`, 1 h): a partir daí o `<img>`
+ * continua mostrando o que já carregou, mas um `fetch` novo leva 403 do
+ * bucket. Era aí que "Copiar imagem" e "Salvar imagem" morriam numa janela
+ * aberta a tarde inteira.
+ *
+ * O segundo endereço é a saída: o proxy autenticado da API
+ * (`GET /api/uploads/file/:id`), que não tem prazo e responde CORS para as
+ * nossas origens. Ele só existe quando sabemos o **id do anexo** — a chave no
+ * bucket é `attachments/<uuid aleatório>/<nome>` e esse uuid **não** é o id do
+ * registro (`uploads.service.ts`), então não há como derivá-lo da URL
+ * assinada: quem abriu a imagem a partir de um `Attachment` é que tem de
+ * trazer o id junto.
+ *
+ * Imagem que não é anexo nosso (prévia de link, GIF do provedor, avatar) fica
+ * com um endereço só, exatamente como antes.
+ *
+ * O proxy é omitido quando a URL recebida **já** aponta para ele: buscar duas
+ * vezes o mesmo caminho não descobre nada de novo — quem repete essa, aí sim
+ * com `Authorization`, é o `baixar` de `imagem-arquivo.ts`.
+ */
+export function enderecosParaBaixar(
+  url: string,
+  opcoes?: { idDoAnexo?: string | null; baseDaApi?: string | null },
+): string[] {
+  const id = opcoes?.idDoAnexo?.trim();
+  const base = opcoes?.baseDaApi?.trim().replace(/\/+$/, "");
+  if (!id || !base) return [url];
+  const proxy = `${base}/api/uploads/file/${encodeURIComponent(id)}`;
+  return mesmoRecurso(url, proxy) ? [url] : [url, proxy];
+}
+
+/** Dois endereços apontando para o mesmo recurso — a query não conta. */
+function mesmoRecurso(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.origin === ub.origin && ua.pathname === ub.pathname;
+  } catch {
+    // relativo ou lixo: não dá para afirmar que é o mesmo, e afirmar de menos
+    // só custa uma tentativa extra
+    return false;
+  }
+}

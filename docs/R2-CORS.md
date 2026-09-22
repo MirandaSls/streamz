@@ -1,7 +1,21 @@
 # CORS do bucket R2 (anexos)
 
-Por que "Copiar imagem" e "Salvar imagem" não funcionam em produção, o que
-muda no bucket para consertar, e o que **não** muda.
+Por que "Copiar imagem" e "Salvar imagem" precisavam de CORS, o que foi posto
+no bucket, e o que **não** muda.
+
+> **Já aplicado em 2026-09-21.** A política está no bucket de produção e foi
+> conferida sondando o R2 com `Origin`: `https://streamz.chat`,
+> `http://tauri.localhost` e `tauri://localhost` respondem `204` com
+> `Access-Control-Allow-Origin`; uma origem não listada não recebe o cabeçalho.
+> O resto deste documento descreve por que foi preciso e como repetir o ajuste
+> noutro bucket — **não** descreve o estado atual do nosso.
+>
+> **CORS não era a única causa.** Continua valendo que a URL do anexo é
+> assinada e expira em 1 h (`ATTACHMENT_URL_TTL_SECONDS`): numa janela aberta
+> há mais tempo, o `<img>` segue mostrando o que já carregou, mas um `fetch`
+> novo leva `403` do bucket — sem relação com CORS. O caminho imune às duas
+> coisas é o proxy autenticado da API (`GET /uploads/file/:id`), que exige o id
+> do anexo.
 
 ## Medido em produção: o token da API não alcança CORS
 

@@ -56,7 +56,20 @@ export type Modal =
    * reações existentes embaixo da foto. A galeria do canal e a prévia de link
    * solta abrem sem ele.
    */
-  | { kind: "galeria"; urls: string[]; alts: string[]; indice: number; messageId?: string }
+  | {
+      kind: "galeria";
+      urls: string[];
+      alts: string[];
+      /**
+       * ids dos anexos, na mesma ordem de `urls`. Quem abre a galeria a partir
+       * de `Attachment` manda a lista; é o que deixa copiar/salvar caírem no
+       * proxy da API quando a URL assinada do R2 vence (ver o cabeçalho de
+       * `lib/imagem-arquivo.ts`). Prévia de link e embed sem anexo não têm id.
+       */
+      anexoIds?: (string | undefined)[];
+      indice: number;
+      messageId?: string;
+    }
   /** gerência de emojis e figurinhas de um servidor. */
   | { kind: "guildEmojis"; guildId: string }
   /** "+ Adicionar som" do painel de efeitos sonoros. */

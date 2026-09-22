@@ -119,6 +119,7 @@ function renderModal(modal: Modal) {
         <ImageModal
           urls={modal.urls}
           alts={modal.alts}
+          anexoIds={modal.anexoIds}
           indice={modal.indice}
           messageId={modal.messageId}
         />

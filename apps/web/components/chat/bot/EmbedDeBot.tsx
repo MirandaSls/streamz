@@ -112,6 +112,12 @@ export default function EmbedDeBot({ embed, message }: { embed: Embed; message: 
       kind: "galeria",
       urls: [url],
       alts: [embed.title ?? "Imagem do embed"],
+      // o embed pode estar mostrando um anexo da própria mensagem — o servidor
+      // já trocou `attachment://<nome>` pela URL dele, que é como
+      // `anexosVisiveis` também os reconhece (`embed-layout.ts`). Achando o
+      // anexo, copiar/salvar sobrevivem à assinatura vencida; não achando
+      // (imagem hospedada fora), a posição fica `undefined` e nada muda.
+      anexoIds: [message.attachments.find((a) => a.url === url)?.id],
       indice: 0,
       messageId: message.efemera ? undefined : message.id,
     });

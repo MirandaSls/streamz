@@ -101,6 +101,7 @@ export default function MediaGroup({
       itensDaImagem({
         url: anexo.url,
         alt: attachmentDisplayName(anexo),
+        idDoAnexo: anexo.id,
         onReagir: mensagemId ? () => setPicker(ancora) : undefined,
       }),
     );
@@ -127,6 +128,12 @@ export default function MediaGroup({
                   kind: "galeria",
                   urls: imagens.map((x) => x.url),
                   alts: imagens.map((x) => attachmentDisplayName(x)),
+                  // o id de cada anexo viaja junto: a URL assinada do R2 vence
+                  // em 1 h e é por ele que copiar/salvar caem no proxy da API.
+                  // O GIF do provedor também tem id sem ter objeto no bucket —
+                  // mas a URL dele não expira, e o proxy só é tentado depois de
+                  // a primeira busca falhar, então na prática não é tentado.
+                  anexoIds: imagens.map((x) => x.id),
                   indice: i,
                   messageId: mensagemId,
                 })
