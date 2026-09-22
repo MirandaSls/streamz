@@ -11,10 +11,12 @@ import {
  * que vão para `getDisplayMedia` no navegador, a leitura do erro do diálogo, a
  * divisão das fontes por aba e o pedido que vai para a captura nativa.
  *
- * Os dois caminhos saem daqui: no **desktop** o seletor com miniaturas manda um
- * `PedidoDeTela` para o Rust; no **navegador** o botão chama `getDisplayMedia`
- * direto com `restricoesDeCaptura` — o seletor de janelas já é do browser, e um
- * modal nosso antes dele só somava um passo.
+ * Os dois caminhos saem daqui, e os dois passam pelo **nosso** seletor
+ * (`ScreenSharePicker`): no **desktop** ele lista as fontes de verdade e manda
+ * um `PedidoDeTela` para o Rust; no **navegador** ele decide qualidade e áudio
+ * e então chama `getDisplayMedia` com `restricoesDeCaptura`, o que abre o
+ * diálogo do próprio browser para a escolha da janela ou da tela.
+ */
 
 // ── qualidade ──────────────────────────────────────────────────────────────
 
@@ -60,18 +62,24 @@ export const TAXAS: ("30" | "60")[] = [...new Set(CHAVES.map((q) => separarPrese
 /**
  * O que `getDisplayMedia` recebe no navegador. `displaySurface` é só uma
  * **dica** de qual painel do diálogo abrir primeiro (o navegador lista tudo de
- * qualquer jeito); como o botão se chama "Compartilhar tela", a dica é o
- * monitor.
+ * qualquer jeito, e pode ignorar a dica): a aba "Tela Inteira" do nosso
+ * seletor pede `monitor` e a aba "Aplicativos" pede `window`. É o máximo de
+ * influência que uma página tem sobre esse diálogo — ver o cabeçalho de
+ * `ScreenSharePicker`.
  *
  * O áudio vai com os três processadores de voz desligados e dois canais de
  * propósito: eles são feitos para microfone e achatam música/jogo em mono
  * abafado. Aqui a fonte é o próprio sistema, então não há eco a cancelar.
  */
-export function restricoesDeCaptura(q: ScreenQuality, audio: boolean): DisplayMediaStreamOptions {
+export function restricoesDeCaptura(
+  q: ScreenQuality,
+  audio: boolean,
+  aba: Aba = "telas",
+): DisplayMediaStreamOptions {
   const p = SCREEN_QUALITY[q];
   return {
     video: {
-      displaySurface: "monitor",
+      displaySurface: aba === "telas" ? "monitor" : "window",
       width: p.width,
       height: p.height,
       frameRate: p.frameRate,

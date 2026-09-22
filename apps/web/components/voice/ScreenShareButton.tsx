@@ -1,19 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
-import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
-import { useEhMobile } from "@/hooks/useEhMobile";
-import {
-  SEM_CAPTURA_DE_TELA,
-  capturarTelaNoNavegador,
-  suportaCapturaDeTela,
-} from "@/lib/captura-de-tela";
+import { SEM_CAPTURA_DE_TELA, suportaCapturaDeTela } from "@/lib/captura-de-tela";
 import { capacidadesDeTela, isTauri } from "@/lib/desktop";
-import { ehCancelamento, mensagemDeErro } from "@/lib/seletor-de-tela";
 import { ui } from "@/stores/ui";
 import { acaoDoBotaoDeTela } from "@/stores/parar-transmissao";
 import { useVoice } from "@/stores/voice";
@@ -33,26 +26,33 @@ function conhecerCapacidades() {
 }
 
 /**
- * Compartilhar tela — dois caminhos, um botão.
+ * Compartilhar tela — **um caminho só: o nosso seletor** (`ScreenSharePicker`).
  *
- * **No desktop** abre o seletor próprio (`ScreenSharePicker`): lá o Rust sabe
- * listar janelas e monitores, e a grade de miniaturas é a escolha.
+ * No desktop ele lista janelas e monitores pelo Rust; no navegador ele decide
+ * qualidade, taxa de quadros e áudio do sistema e então abre o diálogo do
+ * próprio browser, que é a única coisa capaz de enumerar telas ali (ver o
+ * cabeçalho do seletor). Um tempo o navegador pulou o modal e foi direto ao
+ * diálogo; isso tirou do usuário a escolha que é nossa e não foi pedido — o
+ * modal voltou.
  *
- * **No navegador** não abre modal nenhum. Quem lista as fontes é o próprio
- * browser, e `getDisplayMedia` só pode ser chamada no gesto do usuário: o modal
- * antes dela era um "Escolher janela" que abria o diálogo de verdade, virava a
- * captura numa miniatura e ainda pedia um clique nela — dois passos para uma
- * escolha que já tinha sido feita. Agora o clique chama a captura direto, com o
- * preset que está na store, e publica. Cancelar o diálogo do navegador é uma
- * decisão, não um erro: não acontece nada, sem aviso.
+ * `acaoDoBotaoDeTela` continua respondendo **qual motor de captura** vale
+ * aqui; quem transforma isso em tela é este botão, e para "nativo" e
+ * "navegador" a resposta é a mesma: abrir o seletor, que sabe se virar nos
+ * dois. Só "indisponivel" (aparelho sem `getDisplayMedia` e sem Rust) não abre
+ * modal — abrir uma caixa sem nenhum caminho dentro é pior que a frase.
  *
  * A qualidade (resolução, taxa de quadros e áudio do sistema) fica no rodapé do
- * seletor no desktop e na **aba Voz das configurações** no navegador — a mesma
- * store nos dois, e os mesmos segmentos (`SegmentosDeQualidade`).
+ * seletor e também na aba Voz das configurações — a mesma store nos dois, e os
+ * mesmos segmentos (`SegmentosDeQualidade`). O rodapé serve a escolha de antes
+ * de ir ao ar; as configurações são o único lugar que serve a troca **durante**
+ * a transmissão, quando o modal já fechou.
  *
- * No ar o botão fica **verde**, não vermelho. Vermelho cheio na barra é o
- * desligar, e só ele: transmitindo, o botão está *ligado*, não em erro — quem
- * lê a fileira de longe precisa achar um vermelho só, o que encerra a chamada.
+ * No ar o botão fica **verde**, não vermelho, e **é ele que para a
+ * transmissão** — como no Discord (print `p2`: o botão de tela do painel de voz
+ * aceso; print `p5`: o mesmo botão na barra de controles do rodapé). Vermelho
+ * cheio na barra é o desligar, e só ele: transmitindo, o botão está *ligado*,
+ * não em erro — quem lê a fileira de longe precisa achar um vermelho só, o que
+ * encerra a chamada.
  */
 export default function ScreenShareButton({
   variante = "barra",
@@ -61,44 +61,16 @@ export default function ScreenShareButton({
   variante?: "barra" | "largo";
 }) {
   const [seletor, setSeletor] = useState(false);
-  // o diálogo do navegador já está aberto: um segundo clique só faria o browser
-  // recusar a chamada (o botão continua clicável porque a fileira não tem
-  // estado "ocupado" — o que falta é a segunda chamada, não o clique)
-  const pedindo = useRef(false);
   const screenOn = useVoice((s) => s.screenOn);
   const pararTela = useVoice((s) => s.pararTela);
 
   const label = screenOn ? "Parar transmissão" : "Compartilhar tela";
-
-  async function capturarNoNavegador() {
-    if (pedindo.current) return;
-    pedindo.current = true;
-    const { screenQuality, screenAudio, publicarTela } = useVoice.getState();
-    try {
-      // `null` = o navegador não tem `getDisplayMedia` (Safari do iOS, Chrome
-      // do Android). Aqui isso é raro — quem chega neste botão está num
-      // computador —, e no celular o botão já nasce apagado com a mesma frase
-      // (ver `ControlesMobile`). O aviso fica porque falhar calado é pior.
-      const captura = await capturarTelaNoNavegador(screenQuality, screenAudio);
-      if (!captura) {
-        ui.toast(SEM_CAPTURA_DE_TELA, "error");
-        return;
-      }
-      await publicarTela(captura);
-    } catch (e) {
-      if (!ehCancelamento(e)) ui.toast(mensagemDeErro(e), "error");
-    } finally {
-      pedindo.current = false;
-    }
-  }
 
   useEffect(conhecerCapacidades, []);
 
   const acionar = () => {
     // `isTauri()` no clique, não na renderização: o valor não muda em runtime e
     // ler no evento evita divergir do HTML servido antes da hidratação.
-    // Sem captura nativa (app do Mac/Linux) o seletor só dizia "não
-    // disponível": ali vale o `getDisplayMedia` do webview, quando existe.
     const acao = acaoDoBotaoDeTela({
       noAr: useVoice.getState().screenOn,
       tauri: isTauri(),
@@ -106,8 +78,13 @@ export default function ScreenShareButton({
       navegadorCaptura: suportaCapturaDeTela(),
     });
     if (acao === "parar") return void pararTela();
-    if (acao === "seletor-nativo") return setSeletor(true);
-    void capturarNoNavegador();
+    // Sem nenhum motor de captura (Safari do iOS, Chrome do Android) o botão
+    // já nasce apagado na barra do celular, com esta mesma frase — aqui o
+    // aviso fica porque falhar calado é pior.
+    if (acao === "indisponivel") return ui.toast(SEM_CAPTURA_DE_TELA, "error");
+    // "nativo" e "navegador" abrem o mesmo modal: é lá dentro que a diferença
+    // aparece (grade do Rust ou diálogo do browser).
+    setSeletor(true);
   };
 
   return (
@@ -153,40 +130,35 @@ export default function ScreenShareButton({
 
 /**
  * Selo "Você está ao vivo" — o lembrete que impede alguém de continuar
- * transmitindo sem perceber. Fica no palco, não no botão: o botão pode estar
- * fora da tela, e o palco não.
+ * transmitindo sem perceber.
+ *
+ * **É só um selo: não tem botão de parar.** Ele chegou a ganhar um "Parar
+ * transmissão" ao lado, e isso não existe em lugar nenhum do Discord — nem no
+ * cabeçalho do palco (print `p5`: ali o canto direito é a pílula de qualidade
+ * + "AO VIVO", e mais nada) nem no painel de voz (print `p2`). Parar é do
+ * **botão de tela da barra de controles**, que fica aceso enquanto a
+ * transmissão está no ar e a desliga (`ScreenShareButton` acima, nas três
+ * barras: a do palco, a de "Voz conectada" e a do celular). Duas portas para a
+ * mesma ação, sendo que uma delas o Discord não tem, é uma porta a mais para
+ * manter e uma divergência a explicar.
+ *
+ * Por isso também **não fica no cabeçalho do palco** (`CallStage`): lá o
+ * Discord desenha a trilha `@conversa · Tela de fulano` à esquerda e a pílula
+ * de qualidade à direita. O selo sobrou onde ainda não há equivalente medido —
+ * o cabeçalho do canal de voz e o alto do palco no celular (`VoicePanel`).
+ *
+ * `w-max` + `nowrap`: os dois contêineres têm larguras bem diferentes, e sem
+ * isto o selo se deixava espremer e quebrava "Você está ao vivo" uma palavra
+ * por linha.
  */
 export function AoVivoIndicador() {
   const screenOn = useVoice((s) => s.screenOn);
-  const pararTela = useVoice((s) => s.pararTela);
-  const ehMobile = useEhMobile();
   if (!screenOn) return null;
 
-  // `w-max` + `nowrap`: o mesmo selo é usado no cabeçalho do palco e no do
-  // painel de canal, contêineres de larguras bem diferentes. Sem isto ele se
-  // deixava espremer, quebrava "Você está ao vivo" uma palavra por linha e o
-  // botão subia por cima do texto.
   return (
-    <div className="flex w-max items-center gap-2 rounded-full bg-status-danger/15 py-1 pl-3 pr-1 text-xs font-semibold text-status-danger">
+    <div className="flex w-max items-center gap-2 rounded-full bg-status-danger/15 px-3 py-1 text-xs font-semibold text-status-danger">
       <Radio size={14} className="shrink-0" aria-hidden="true" />
       <span className="whitespace-nowrap">Você está ao vivo</span>
-      {/* No telefone este é o botão que tira a sua tela do ar, e ele media 21px
-          de altura (`py-1` sobre 11px de texto): metade do piso de toque, em
-          cima de um palco onde tudo o mais tem 44 ou 48. Cresce para
-          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 16). O selo é a
-          única coisa que a barra de controles do celular não repete com folga —
-          o botão de tela dela também para a transmissão, mas quem lê "Você está
-          ao vivo" está olhando para cá. */}
-      <button
-        type="button"
-        onClick={() => void pararTela()}
-        style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-        className={`shrink-0 whitespace-nowrap rounded-full bg-status-danger px-2 text-[11px] font-bold text-control-critical-primary-text-default transition hover:bg-control-critical-primary-background-hover ${
-          ehMobile ? "" : "py-1"
-        }`}
-      >
-        Parar transmissão
-      </button>
     </div>
   );
 }

@@ -271,21 +271,18 @@ export function VoiceTile({
   const sou = state.user.id === meId;
   const caixa = useRef<HTMLDivElement>(null);
   /**
-   * **Tela cheia de um tile nunca é a da janela sozinha** — mas no app desktop
-   * ela vem acompanhada dela.
+   * **Tela cheia do tile nunca é a da janela sozinha** — e no app desktop ela
+   * também não é a do navegador.
    *
-   * Dentro do Tauri (WebView2) o `requestFullscreen` só faz o tile preencher o
-   * interior da janela, que não cresce; a janela em tela cheia sozinha mostra o
-   * app com o leiaute normal — foi o defeito da 1.3.0. Por isso
-   * `alternarTelaCheiaDe` faz **as duas** ali (ver `fullscreen.ts`), e o que o
-   * `recuarParaAJanela: false` recusa é só o consolo: se o DOM não promover o
-   * tile, é melhor nada acontecer do que o app inteiro perder a moldura com a
-   * transmissão do mesmo tamanho no meio da grade.
+   * Dentro do Tauri a Fullscreen API do DOM não serve (no Windows o tile fica
+   * preso ao interior da janela; no macOS o recurso nem está ligado no
+   * WebView), então `alternarTelaCheiaDe` **emula**: janela em tela cheia mais
+   * o tile promovido por CSS nosso. O detalhe todo está em `fullscreen.ts`.
    *
-   * O mesmo `false` responde o `suportaTelaCheia`, que sem recuo pergunta ao
-   * DOM: "sim" no navegador e no WebView2 (onde o botão voltou a aparecer,
-   * porque agora funciona), "não" no WKWebView do macOS, que nasce com o
-   * *element fullscreen* desligado e onde o botão seria inerte.
+   * Por isso `suportaTelaCheia` responde "sim" em qualquer ambiente do app —
+   * a emulação não depende de nada que a webview possa recusar — e o botão só
+   * some no navegador sem a API (`<iframe>` sem `allow`, WebKit antigo), onde
+   * ele seria mesmo inerte.
    *
    * Resolvido num efeito, como em `useTelaCheia`: no HTML do servidor não há
    * `document`, e decidir na primeira renderização deixaria a hidratação
@@ -293,7 +290,7 @@ export function VoiceTile({
    */
   const [podeTelaCheia, setPodeTelaCheia] = useState(false);
   useEffect(() => {
-    setPodeTelaCheia(suportaTelaCheia({ recuarParaAJanela: false }));
+    setPodeTelaCheia(suportaTelaCheia());
   }, []);
   /**
    * O tile pode sumir em tela cheia (a pessoa parou de transmitir, a chamada
@@ -402,7 +399,7 @@ export function VoiceTile({
               // "dois cliques na transmissão"
               if ((e.target as HTMLElement).closest("button")) return;
               window.clearTimeout(cliquePendente.current);
-              void alternarTelaCheiaDe(caixa.current, { recuarParaAJanela: false });
+              void alternarTelaCheiaDe(caixa.current);
             }
       }
       onContextMenu={(e) => {
@@ -784,7 +781,7 @@ export function VoiceTile({
           {!compacto && podeTelaCheia && (
             <AcaoDoTile
               label="Tela cheia"
-              onClick={() => void alternarTelaCheiaDe(caixa.current, { recuarParaAJanela: false })}
+              onClick={() => void alternarTelaCheiaDe(caixa.current)}
             >
               <Maximize size={14} />
             </AcaoDoTile>

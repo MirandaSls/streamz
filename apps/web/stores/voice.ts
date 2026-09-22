@@ -1124,10 +1124,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     /**
      * A captura vem pronta de fora porque `getDisplayMedia` só funciona no
-     * gesto do usuário: quem a chama é o botão (`ScreenShareButton`, no
-     * navegador), com as restrições de `restricoesDeCaptura`, e aqui só
-     * publicamos o que ele já obteve. No desktop a tela não passa por aqui —
-     * vai pelo Rust, em `publicarTelaNativa`.
+     * gesto do usuário: quem a chama é o seletor (`ScreenSharePicker`, no
+     * clique em "Escolher janela"/"Escolher tela"), com as restrições de
+     * `restricoesDeCaptura`, e aqui só publicamos o que ele já obteve. Com a
+     * captura nativa a tela não passa por aqui — vai pelo Rust, em
+     * `publicarTelaNativa`.
      */
     publicarTela: async (stream) => {
       const lp = sala?.localParticipant;
@@ -1328,8 +1329,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     /**
-     * Parar é igual para toda origem (botão, selo "ao vivo", barra do
-     * navegador, fim nativo) e nunca espera a rede antes de soltar a captura:
+     * Parar é igual para toda origem (botão de tela das barras de controle,
+     * barra do navegador, fim nativo, sair da chamada) e nunca espera a rede
+     * antes de soltar a captura:
      * primeiro `stop()` em tudo o que foi capturado, depois o Rust, e só então
      * a despublicação — as duas faixas **em paralelo**. Em série, cada
      * `unpublishTrack` esperava a renegociação da anterior (até 15 s com a

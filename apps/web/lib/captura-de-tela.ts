@@ -21,7 +21,7 @@
  * compartilha a tela do telefone — compartilha o Streamz consigo mesmo.
  */
 
-import { restricoesDeCaptura } from "@/lib/seletor-de-tela";
+import { restricoesDeCaptura, type Aba } from "@/lib/seletor-de-tela";
 import type { ScreenQuality } from "@streamz/shared";
 
 /**
@@ -55,8 +55,10 @@ export const SEM_CAPTURA_DE_TELA =
 export async function capturarTelaNoNavegador(
   qualidade: ScreenQuality,
   audio: boolean,
+  /** Aba do nosso seletor, só para dar a dica de `displaySurface` ao diálogo. */
+  aba: Aba = "telas",
 ): Promise<MediaStream | null> {
   const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
   if (!md?.getDisplayMedia) return null;
-  return md.getDisplayMedia(restricoesDeCaptura(qualidade, audio));
+  return md.getDisplayMedia(restricoesDeCaptura(qualidade, audio, aba));
 }

@@ -7,14 +7,18 @@ import { RESOLUCOES, TAXAS, juntarPreset, separarPreset } from "@/lib/seletor-de
 
 /**
  * Os dois controles segmentados da qualidade da transmissão de tela —
- * resolução e taxa de quadros —, num componente só porque agora eles moram em
- * dois lugares:
+ * resolução e taxa de quadros —, num componente só porque eles moram em dois
+ * lugares:
  *
- * - no **rodapé do seletor** do desktop (`ScreenSharePicker`), ao lado da
- *   grade de miniaturas, que é onde a escolha se vê;
- * - na **aba Voz das configurações** (`settings/VozTab`), que passou a ser o
- *   lugar da escolha no navegador, onde clicar em "Compartilhar tela" vai
- *   direto para o diálogo do próprio navegador e não há rodapé nenhum.
+ * - no **rodapé do seletor** (`ScreenSharePicker`), ao lado da grade, que é
+ *   onde a escolha se vê e onde o Discord a põe (print
+ *   `2026-08-31 123946`: SD/HD e a engrenagem no rodapé do modal de
+ *   transmitir). Vale nas duas origens — grade nativa do desktop e diálogo do
+ *   navegador;
+ * - na **aba Voz das configurações** (`settings/VozTab`), que é o único lugar
+ *   que serve a troca **durante** a transmissão: o modal só existe antes de ir
+ *   ao ar, e o Discord resolve esse caso com um popout no próprio tile ao
+ *   vivo, que ainda não temos.
  *
  * Duplicar os segmentos deixaria as duas telas divergirem no primeiro ajuste;
  * a forma (sulco de 40px raio 8, segmentos de 32px, acento limão no ativo) é a
@@ -56,10 +60,10 @@ export function SegmentosDeQualidade({
  * sem precisar de moldura.
  *
  * **No celular os segmentos crescem para 44.** `h-8` desenha 32px com a raiz de
- * 16 (a escala do Tailwind é `rem`), bem menos que o piso de toque de 44: no
- * navegador é aqui que se escolhe a qualidade da transmissão (o
- * seletor com rodapé só existe no app de desktop), então estes são os botões da
- * escolha, não uma preferência escondida. O sulco acompanha, 44 + os 8 do `p-1`.
+ * 16 (a escala do Tailwind é `rem`), bem menos que o piso de toque de 44: estes
+ * são os botões de uma escolha que se faz na hora de transmitir — no rodapé do
+ * seletor e nas configurações —, não uma preferência escondida. O sulco
+ * acompanha, 44 + os 8 do `p-1`.
  *
  * Exportado porque a taxa de quadros da câmera (`fps-da-camera.tsx`) é o mesmo
  * controle: um segmento com cara própria seria a divergência que o componente

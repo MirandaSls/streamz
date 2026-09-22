@@ -103,7 +103,8 @@ export default function VoicePanel({
     <div
       ref={palco}
       {...doPalco}
-      // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`.
+      // a tela cheia sai do `fullscreen.ts` (API do navegador fora do app,
+      // emulada dentro dele) — nada a posicionar aqui.
       // Preto puro (`bg-black`, o `--black` do Discord, não o preto do
       // Tailwind) só enquanto `aqui`: print `2026-08-31 101857`, pixel 1000,100
       // = `#000000` (`CallStage.tsx` já usa o mesmo tom). A `VistaDoCanalDeVoz`
@@ -130,8 +131,12 @@ export default function VoicePanel({
           <Volume2 size={24} className="shrink-0 text-text-muted" aria-hidden="true" />
           <span className="truncate">{nome}</span>
         </span>
+        {/* Sem selo "ao vivo" aqui: o Discord não desenha nada no cabeçalho do
+            canal quando alguém transmite — quem diz que a transmissão está no
+            ar é o card da tela na grade (o "AO VIVO" do tile) e o botão de
+            tela aceso na barra de controles. Ver os prints de uma call real em
+            `docs/Reference` (p2, p4, p6). */}
         <span className="flex shrink-0 items-center gap-1">
-          <AoVivoIndicador />
           {/* no canal de voz o palco ocupa tudo: este botão é o ÚNICO caminho
               para o chat de texto do canal */}
           <BotaoDeIcone
