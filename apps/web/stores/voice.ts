@@ -211,6 +211,16 @@ function encerrarCapturaDaTela() {
  * pessoa desligar a câmera, escolher outro fps ou sair da sala.
  */
 let cameraSobCpu = false;
+/**
+ * O último aviso de microfone já mostrado, como `"<sala>|<texto>"`.
+ *
+ * `rejoinAposReconexao` refaz a entrada a cada volta do socket. Com o microfone
+ * quebrado de vez (aparelho desplugado, permissão revogada) e a rede oscilando,
+ * isso vira um toast idêntico por reconexão, empilhando — o `ui.toast` não
+ * deduplica. Repetir a mesma frase não informa nada de novo; um aviso
+ * **diferente**, ou o mesmo depois de o microfone ter voltado a subir, informa.
+ */
+let ultimoAvisoDeMicrofone: string | null = null;
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
   states: Record<string, VoiceStateEvent[]>;
@@ -2066,9 +2076,10 @@ function ehPermissaoNegada(e: unknown): boolean {
  *
  * Duas guardas por ser assíncrono em relação à entrada:
  *
- * 1. `sala !== room` no fim: quem saiu (ou trocou de canal) enquanto o
- *    `getUserMedia` pensava não pode ganhar um microfone publicado numa sala
- *    aposentada, nem a bandeira de "pronto" de uma sala que já não é a dele.
+ * 1. `sala !== room`: quem saiu (ou trocou de canal) enquanto o `getUserMedia`
+ *    pensava não pode ganhar um microfone publicado numa sala aposentada, nem a
+ *    bandeira de "pronto" de uma sala que já não é a dele — nem o aviso de
+ *    falha, que nesse caso é consequência da própria saída.
  * 2. o mudo é **reaplicado** depois de a faixa nascer: um `toggleMute` que
  *    aconteça durante a abertura chega em `definirMicrofoneAberto` quando ainda
  *    não há faixa nenhuma, e sem esta linha o clique se perderia — a pessoa
@@ -2085,6 +2096,8 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
       useVoice.getState().testandoMicrofone,
     );
     crono.etapa("microfone aberto e publicado");
+    // subiu: se falhar de novo mais tarde, é notícia outra vez
+    ultimoAvisoDeMicrofone = null;
   } catch (e) {
     // ficar sem microfone não tira ninguém da sala: continua ouvindo
     crono.etapa("microfone falhou");
@@ -2098,14 +2111,21 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
     // chega a pedir permissão) é o `explicarMidia` que as configurações de voz
     // já usam — escrever texto novo aqui seria uma segunda versão da verdade.
     const negado = ehPermissaoNegada(e) ? explicarMidia(motivoDaFalha()) : null;
-    ui.toast(
+    const texto =
       negado ??
-        errorMessage(
-          e,
-          "Não foi possível ligar o microfone. Escolha outro aparelho nas configurações de voz e entre de novo.",
-        ),
-      "error",
-    );
+      errorMessage(
+        e,
+        "Não foi possível ligar o microfone. Escolha outro aparelho nas configurações de voz e entre de novo.",
+      );
+    // Quem já saiu não leva o aviso: `desmontarSala` desconecta a sala enquanto
+    // esta publicação ainda está no ar, e ela rejeita **por causa da saída** —
+    // o toast culparia o microfone de quem acabou de sair da chamada. O
+    // `console.warn` acima fica de qualquer jeito: é o rastro do relato.
+    const aviso = `${room.name}|${texto}`;
+    if (sala === room && ultimoAvisoDeMicrofone !== aviso) {
+      ultimoAvisoDeMicrofone = aviso;
+      ui.toast(texto, "error");
+    }
   }
   if (sala !== room) return;
   await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});
