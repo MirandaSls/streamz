@@ -2,6 +2,7 @@
 
 import { ExternalLink, Maximize, Minimize } from "@/components/ui/icones";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 
 /**
  * Os ícones do canto inferior direito do palco.
@@ -48,7 +49,7 @@ export default function IconesDoCanto({
   telaCheia: boolean;
   onTelaCheia: () => void;
   visivel: boolean;
-  moldura?: { onPointerEnter: () => void; onPointerLeave: () => void };
+  moldura?: PropsDaMoldura;
 }) {
   return (
     <div

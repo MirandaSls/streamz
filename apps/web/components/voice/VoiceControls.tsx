@@ -15,6 +15,7 @@ import {
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
+import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -43,7 +44,7 @@ export default function VoiceControls({
   leaveLabel?: string;
   /** o palco pediu silêncio visual (mouse parado); ver `useOcultarInativo`. */
   oculto?: boolean;
-  moldura?: { onPointerEnter: () => void; onPointerLeave: () => void };
+  moldura?: PropsDaMoldura;
 }) {
   const [mais, setMais] = useState<null | "menu" | "ajustes">(null);
   const caixa = useRef<HTMLDivElement>(null);
