@@ -193,8 +193,11 @@ scripts/build-desktop-macos.sh [<ref>] … --publicar [--login-em <arquivo>] [--
 Roda **num Mac** — o `.app` precisa de `codesign`, `lipo` e `hdiutil`, que só o
 macOS tem; não há caminho a partir do servidor Linux. Pré-requisitos: Command
 Line Tools do Xcode, rustup com Rust ≥ 1.85 (o `Cargo.lock` tem `getrandom 0.4`,
-edição 2024), Node ≥ 20, pnpm 9. Usa uma worktree própria
-(`.claude/worktrees/build-desktop-macos`) e sai em
+edição 2024), Node ≥ 20, pnpm 9. O app de Mac não compila o
+`livekit`/`webrtc-sys`; quando a captura nativa do macOS (ScreenCaptureKit)
+entrar, ele volta, e aí passa a exigir Xcode/Command Line Tools 15 ou mais novo
+(Apple clang 15) — com as CLT 14 o build para no `webrtc-sys`. Usa uma
+worktree própria (`.claude/worktrees/build-desktop-macos`) e sai em
 `.claude/saida-desktop/<versão>-<commit>-macos/`.
 
 `--assinar-atualizador <chave>` liga `tauri.release.conf.json`

@@ -1,14 +1,16 @@
 fn main() {
-    // `tela_nativa`: alvos em que o módulo `tela` tem backend de captura
-    // (Windows: WGC/DXGI; macOS: ScreenCaptureKit). Linux e celular ficam de
-    // fora e caem no `getDisplayMedia` do webview. É um cfg de conveniência:
-    // sem ele o `tela/mod.rs` repetiria
-    // `any(target_os = "windows", target_os = "macos")` em vinte lugares.
+    // `tela_nativa`: alvos em que o módulo `tela` tem backend de captura —
+    // hoje só o Windows (WGC/DXGI). Linux e celular ficam de fora e caem no
+    // `getDisplayMedia` do webview. O macOS tem esqueleto em `tela/captura/mac`
+    // e `tela/fontes`, mas também fica de fora: sem backend implementado ele só
+    // pagaria o `livekit`/`webrtc-sys`, que pede Apple clang ≥ 15 (Xcode/CLT 15)
+    // e quebrou o build num Mac com CLT 14. A volta do macOS aqui anda junto com
+    // o `Backend::Sck` virar `implementado` e com o bloco de dependências do
+    // `Cargo.toml` — e aí o pré-requisito do README sobe para Xcode/CLT 15.
+    // Continua um cfg próprio, e não `windows` direto nos vinte lugares do
+    // `tela/mod.rs`, para o macOS voltar mexendo só nesta linha.
     println!("cargo::rustc-check-cfg=cfg(tela_nativa)");
-    if matches!(
-        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
-        Ok("windows") | Ok("macos")
-    ) {
+    if matches!(std::env::var("CARGO_CFG_TARGET_OS").as_deref(), Ok("windows")) {
         println!("cargo::rustc-cfg=tela_nativa");
     }
 
