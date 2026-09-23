@@ -49,10 +49,16 @@ mod atenuacao;
 #[cfg(target_os = "linux")]
 mod permissoes_linux;
 
+// Só o handshake de saída usa isto, e ele é desktop apenas (ver
+// `RunEvent::ExitRequested` em `run`).
+#[cfg(desktop)]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(desktop)]
 use std::time::Duration;
 
-use tauri::{Emitter, Manager, RunEvent};
+#[cfg(desktop)]
+use tauri::Emitter;
+use tauri::{Manager, RunEvent};
 
 // Bandeja e "fechar minimiza": desktop apenas. No celular o sistema é quem
 // tira o app da frente, e `tauri::tray` nem existe no alvo Android.
@@ -67,12 +73,28 @@ use tauri::{
 #[cfg(all(desktop, not(target_os = "linux")))]
 use tauri::WindowEvent;
 
-/// O aviso de saída já foi dado? Ver `RunEvent::ExitRequested` em `run`.
+/// O aviso de saída já foi **emitido**? Evita um segundo `app:saindo` e um
+/// segundo relógio. Ver `RunEvent::ExitRequested` em `run`.
+#[cfg(desktop)]
 static JA_AVISOU: AtomicBool = AtomicBool::new(false);
 
+/// A despedida **acabou** (a janela respondeu, ou o teto estourou): a próxima
+/// saída passa direto. É o par de `JA_AVISOU`, e o porquê de serem dois está
+/// no comentário do `RunEvent::ExitRequested`.
+#[cfg(desktop)]
+static PODE_SAIR: AtomicBool = AtomicBool::new(false);
+
 /// A janela terminou de se despedir (ou não tinha o que dizer): pode sair.
+///
+/// **Desktop apenas**, como o arm que o convida: quem emite `app:saindo` é o
+/// `RunEvent::ExitRequested`, que no celular não existe — registrar aqui um
+/// comando que ninguém chama seria promessa falsa. O `generate_handler!`
+/// aceita `#[cfg]` por comando, então o ramo some junto no Android/iOS, e a
+/// web já trata o comando ausente (ver `ouvirSaidaDoApp` em `lib/desktop.ts`).
+#[cfg(desktop)]
 #[tauri::command]
 fn pronto_para_sair(app: tauri::AppHandle) {
+    PODE_SAIR.store(true, Ordering::SeqCst);
     app.exit(0);
 }
 
@@ -149,6 +171,7 @@ pub fn run() {
         // `getDisplayMedia`.
         .manage(tela::Transmissao::default())
         .invoke_handler(tauri::generate_handler![
+            #[cfg(desktop)]
             pronto_para_sair,
             tela::capacidades_de_tela,
             tela::fontes_de_tela,
@@ -360,24 +383,64 @@ pub fn run() {
               travada ou um socket já caído prenderiam o app aberto para
               sempre. Meio segundo é muito mais do que o aviso precisa (ele é
               um pacote num socket já aberto) e pouco o bastante para ninguém
-              reparar. `JA_AVISOU` evita o laço: o `app.exit` do fim volta a
-              cair aqui, e da segunda vez a saída passa direto.
+              reparar.
+
+              **São dois estados, e isso é de propósito.** `JA_AVISOU` diz "o
+              aviso já saiu" (não emitir de novo nem abrir um segundo relógio);
+              `PODE_SAIR` diz "a despedida acabou", e é armado pelo
+              `pronto_para_sair` ou pelo relógio — é ele que evita o laço, já
+              que o `app.exit` do fim volta a cair aqui. Um sinalizador só
+              colapsaria as duas perguntas, e clicar "Sair" duas vezes dentro
+              do meio segundo mataria o app antes do round-trip: a conta
+              voltaria a ficar 45 s na sala, que é exatamente o defeito que
+              isto conserta. O preço é que o segundo clique **não apressa
+              nada** — ele também espera o teto. É troca deliberada: não junte
+              os dois de volta.
+
+              **Reiniciar para instalar atualização não passa por aqui**, e
+              não é escolha nossa: o `relaunch()` do `tauri-plugin-process`
+              pede a saída com `RESTART_EXIT_CODE`, e para esse código o Tauri
+              **ignora** o `prevent_exit` (ver `ExitRequestApi::prevent_exit`).
+              Segurar o processo seria impossível, então o aviso seria uma
+              promessa que ninguém consegue honrar — daí casar o `code` antes
+              de tudo, em vez de queimar o handshake numa saída que já está
+              decidida. O corolário honesto: **reiniciar para atualizar
+              continua custando os 45 s de carência**.
 
               O que isto **não** resolve, e não tem como: forçar o
               encerramento pelo gerenciador de tarefas mata o processo sem
-              evento nenhum. Esse caso continua custando a carência — que é
-              exatamente para o que ela existe.
+              evento nenhum. E no **Linux** o `ExitRequested` do wry nasce
+              *depois* de a janela ser destruída: ou o `get_webview_window`
+              devolve `None` e a saída passa direto, sem despedida, ou o aviso
+              vai para um webview morto e o processo fica meio segundo sem
+              janela. Lá, portanto, só o "Sair" da bandeja usa o caminho bom —
+              fechar a janela (que no Linux encerra de verdade, ver
+              `on_window_event`) continua custando a carência. Em todos esses
+              casos sobra a carência, que é exatamente para o que ela existe.
+
+              **Desktop apenas**, como todo o resto de comportamento de
+              plataforma neste arquivo: no celular não há bandeja nem "Sair",
+              ninguém escuta `app:saindo` com sentido, e prevenir a saída
+              prenderia o usuário num app que o sistema mandou fechar.
             */
-            RunEvent::ExitRequested { api, .. } => {
-                if !JA_AVISOU.swap(true, Ordering::SeqCst) {
+            #[cfg(desktop)]
+            RunEvent::ExitRequested { api, code, .. } => {
+                if code != Some(tauri::RESTART_EXIT_CODE) && !PODE_SAIR.load(Ordering::SeqCst) {
                     if let Some(janela) = app.get_webview_window("main") {
-                        let _ = janela.emit("app:saindo", ());
+                        if !JA_AVISOU.swap(true, Ordering::SeqCst) {
+                            let _ = janela.emit("app:saindo", ());
+                            let app = app.clone();
+                            // primeiro a thread, depois prevenir: `spawn` entra
+                            // em pânico (não devolve `Result`) se o SO recusar a
+                            // thread, e na ordem inversa a saída já estaria
+                            // cancelada sem ninguém para retomá-la.
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(500));
+                                PODE_SAIR.store(true, Ordering::SeqCst);
+                                app.exit(0);
+                            });
+                        }
                         api.prevent_exit();
-                        let app = app.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(Duration::from_millis(500));
-                            app.exit(0);
-                        });
                     }
                 }
             }
