@@ -67,20 +67,18 @@ tauri-plugin-process = "2"
 [features]
 custom-protocol = ["tauri/custom-protocol"]
 
-# Alvos com **captura de tela nativa** — exatamente os que o `build.rs` marca
-# com o cfg `tela_nativa` (Windows e macOS). As duas listas têm de andar
-# juntas: o módulo `tela` inteiro compila nestes dois alvos, e o que ele
-# importa deixou de ser só do Windows — `transmissao.rs` importa `livekit` e
-# `tokio::sync::mpsc`, `captura/escala.rs` importa `image` (e `mod escala;` não
-# tem `#[cfg]`, porque as miniaturas são comuns aos backends) e `tela/mod.rs`
-# usa `base64` para montar a data URL de cada miniatura.
+# Só no Windows: é o alvo que o `build.rs` marca com o cfg `tela_nativa`, e
+# esta lista é o que o módulo `tela` importa ali — as duas andam juntas. Além
+# do WebView2 e da captura pela API do Windows, entra o que o `tela` usa fora
+# do backend: `transmissao.rs` importa `livekit` e `tokio::sync::mpsc`,
+# `captura/escala.rs` importa `image` (e `mod escala;` não tem `#[cfg]`, porque
+# as miniaturas são comuns aos backends) e `tela/mod.rs` usa `base64` para
+# montar a data URL de cada miniatura.
 #
-# **Isto custa tempo de build no macOS, e o custo não é pequeno.** O `livekit`
-# arrasta o `webrtc-sys`, que é a dependência mais lenta deste crate; ela passa
-# a ser compilada também no macOS e, num `.dmg` **universal**, duas vezes — uma
-# por arquitetura (aarch64 e x86_64). O orçamento de tempo de build que o
-# `codemagic.yaml` assume foi medido antes disso e não vale mais.
-[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+# O macOS ficou de fora de propósito enquanto a captura de lá for esqueleto: o
+# `livekit` arrasta o `webrtc-sys`, que exige Apple clang ≥ 15 (Xcode/CLT 15),
+# e hoje não traria nada ao app de Mac, que usa o `getDisplayMedia` do webview.
+[target.'cfg(windows)'.dependencies]
 # Publica a captura na sala como o participante `<userId>#tela`, direto deste
 # processo. Traz o libwebrtc pré-compilado (`webrtc-sys` baixa no build): o
 # instalador cresce dezenas de MB, e é o preço de não passar os quadros pelo
@@ -94,11 +92,6 @@ tokio = { version = "1", features = ["sync"] }
 # e JPEG de 480 px (miniatura da grade).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
-
-# Só no Windows, e aqui "só" é literal: nada nesta lista existe noutro sistema.
-# É o WebView2 e a captura pela API do Windows — o que o módulo `tela` tem em
-# comum com o macOS está no bloco acima.
-[target.'cfg(windows)'.dependencies]
 # `PermissionRequested` do WebView2 (ver `src/permissoes.rs`). A versão é a
 # mesma que o Tauri usa — o `ICoreWebView2Controller` que o `with_webview`
 # entrega vem deste crate, e duas cópias dele seriam dois tipos diferentes com
