@@ -500,11 +500,35 @@ function atenderComoFigurante(chave, channelId) {
  */
 async function abrirChamadaNaConversa(page, chave) {
   await abrirConversa(page, chave);
+  const sock = socketDoFigurante(chave);
+  const channelId = s.conversas[chave].id;
+  // um `call.accept` antes de o `POST /dms/:id/call` voltar é recusado calado
+  // (a chamada ainda não "nasceu" no servidor). O `call.ring` é o próprio
+  // servidor avisando o figurante de que a chamada nasceu e pode ser
+  // atendida — mesma ideia do `voice.state` que `subirFigurantes` espera antes
+  // de confirmar um `voice.join`. A escuta começa **antes** do clique: o
+  // evento sai do servidor assim que o `POST` processa, o que pode acontecer
+  // antes de a resposta HTTP voltar ao navegador — escutar só depois do
+  // clique correria o risco de perder o evento por essa mesma corrida.
+  const chamadaTocou = new Promise((ok) => {
+    const aoTocar = (e) => {
+      if (e?.channelId === channelId) {
+        sock.off("call.ring", aoTocar);
+        ok(true);
+      }
+    };
+    sock.on("call.ring", aoTocar);
+    setTimeout(() => {
+      sock.off("call.ring", aoTocar);
+      ok(false);
+    }, 15_000);
+  });
   await acionar(page, page.locator('button[aria-label="Iniciar chamada de voz"]').first());
   await page.locator("[data-call-stage]").first().waitFor({ timeout: 20_000 });
-  // um `call.accept` antes de o `POST /dms/:id/call` voltar é recusado calado
-  await dormir(1_200);
-  atenderComoFigurante(chave, s.conversas[chave].id);
+  if (!(await chamadaTocou)) {
+    console.warn(`! ${chave}: não recebeu "call.ring" a tempo — atendendo mesmo assim`);
+  }
+  atenderComoFigurante(chave, channelId);
   await page
     .locator(`[data-call-stage] [aria-label="${esc(s.usuarios[chave].displayName)}"]`)
     .first()
@@ -533,11 +557,15 @@ async function abrirAcompanhante(page, chave) {
   // do teto da tela que o pediu; os 15 s padrão não bastam para cada passo
   outra.setDefaultTimeout(30_000);
   desfazer.push(async () => {
+    // se o clique falhar (seletor mudou, botão sumiu) a função cai para só
+    // fechar o contexto — o que reintroduz a carência de 45 s e vaza a
+    // figurante para a(s) tela(s) seguinte(s). Sem aviso aqui, esse defeito
+    // não deixa pista nenhuma no console.
     await outra
       .locator('button[aria-label="Desconectar"]')
       .first()
       .click({ timeout: 5_000 })
-      .catch(() => {});
+      .catch((e) => console.warn(`! abrirAcompanhante: desconectar não clicou (${e.message})`));
     await dormir(800);
     await ctx.close().catch(() => {});
   });
@@ -1039,16 +1067,15 @@ const PASSOS = {
       async fazer(page) {
         await abrirServidor(page);
         await abrirCanal(page, "geral");
-        // mensagem do próprio dono: "Apagar mensagem" pede confirmação (sem Shift).
+        // mensagem do próprio dono: "Excluir mensagem" pede confirmação (sem Shift).
         // O nome vai sem caixa no meio da frase de propósito: a onda 0 passou os
         // rótulos de menu para frase capitalizada, como o Discord — a regex é
         // insensível a caixa para não quebrar de novo numa troca dessas.
         const alvo = await centralizar(page, "resposta");
         await alvo.click({ button: "right", position: { x: 400, y: 30 } });
-        // aceita os dois rótulos: o menu diz "Excluir mensagem" (MessageItem.tsx) e
-        // o passeio nasceu com "Apagar". Qual dos dois é o certo para a paridade
-        // ainda está em aberto — travar a captura nisso só escondia a tela.
-        await page.getByRole("menuitem", { name: /(apagar|excluir) mensagem/i }).click();
+        // o menu diz "Excluir mensagem" (MessageItem.tsx:523) — não existe
+        // "Apagar mensagem" em lugar nenhum do código.
+        await page.getByRole("menuitem", { name: /excluir mensagem/i }).click();
         await page.locator('[role="dialog"]').first().waitFor();
       },
     },
@@ -1553,7 +1580,7 @@ async function subirFigurantes() {
       const sock = await conectarSocket(await loginRest(u), u.username);
       conexoes.push(sock);
       // por chave também: é assim que um passo pede "fulano começa a
-      // transmitir" ou "fulano atende" (ver `transmitirComoFigurante`)
+      // transmitir" ou "fulano atende" (ver `atenderComoFigurante`)
       figurantes.set(chave, sock);
       if (u.voz) {
         // o gateway só conhece o usuário do socket depois de terminar o

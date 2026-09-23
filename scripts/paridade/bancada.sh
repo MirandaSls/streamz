@@ -564,8 +564,8 @@ cmd_descer() {
 cmd_logs() {
   local alvo="${1:-api}"
   case "$alvo" in
-    api | web | postgres) docker logs --tail "${2:-200}" "paridade-$alvo" ;;
-    *) erro "logs de quê? api, web ou postgres" ;;
+    api | web | postgres | livekit) docker logs --tail "${2:-200}" "paridade-$alvo" ;;
+    *) erro "logs de quê? api, web, postgres ou livekit" ;;
   esac
 }
 
@@ -579,7 +579,7 @@ Comandos:
            --sem-relogio --sem-figurantes --escala-celular N --listar]
   folha [--refs <dir>] [--onda N] [--so id,id] [--escala-desktop 0.5]
   status                                  contêineres, serviços, bancos e última captura
-  logs [api|web|postgres] [linhas]
+  logs [api|web|postgres|livekit] [linhas]
   descer [--limpar | --limpar-tudo]
 EOF
 }
