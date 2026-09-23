@@ -126,6 +126,33 @@ export function telaQueAssumeOPalco(tiles: readonly Tile[], meuId?: string): Til
   return tiles.find((t) => t.tela && t.assistindo && t.userId !== meuId) ?? null;
 }
 
+/**
+ * O `style` do invólucro da tira de miniaturas do modo foco.
+ *
+ * **A largura tem de animar junto com as miniaturas.** É o invólucro que
+ * carrega a largura da tira, e quem o centraliza é o `justify-center` do pai:
+ * se essa largura mudar em corte seco enquanto o `left` das miniaturas
+ * interpola por 200 ms, o bloco inteiro salta de lado no primeiro quadro e a
+ * miniatura que sobrou desliza na **direção contrária** ao salto — de três
+ * para duas ela pulava ~98px para a direita antes de andar 196 para a
+ * esquerda, que é o oposto do que a transição queria mostrar. Com a largura no
+ * mesmo token (`--mov-reflow`, pelo `TRANSICAO_DE_REFLOW`), o `justify-center`
+ * recentraliza a cada quadro e o único movimento que se vê é o das miniaturas.
+ *
+ * Função à parte pelo mesmo motivo de `estiloDoTile`: é o contrato que chega ao
+ * DOM, e é o que o teste afirma sem precisar de navegador.
+ */
+export function estiloDaTira(
+  quantidade: number,
+  animar: boolean,
+): { width: number; height: number; transition?: string } {
+  return {
+    width: larguraDaTira(quantidade),
+    height: FAIXA_ALTURA,
+    ...(animar ? { transition: TRANSICAO_DE_REFLOW } : {}),
+  };
+}
+
 export default function VoiceGrid({
   channelId,
   nomeDoCanal,
@@ -391,15 +418,13 @@ export default function VoiceGrid({
              quem entra empurra as outras num corte seco. O invólucro de largura
              explícita é o que mantém o comportamento de antes — centralizada
              enquanto cabe (`justify-center`) e rolável de lado quando não cabe
-             (`overflow-x-auto`), que é o que o Discord faz com dez miniaturas. */
+             (`overflow-x-auto`), que é o que o Discord faz com dez miniaturas.
+             Por que essa largura também **anima**: `estiloDaTira`. */
           <div
             className="flex shrink-0 justify-center overflow-x-auto"
             style={{ height: FAIXA_ALTURA }}
           >
-            <div
-              className="relative shrink-0"
-              style={{ width: larguraDaTira(resto.length), height: FAIXA_ALTURA }}
-            >
+            <div className="relative shrink-0" style={estiloDaTira(resto.length, animar)}>
               {resto.map((t, i) => (
                 <div
                   key={t.key}

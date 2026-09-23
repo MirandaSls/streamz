@@ -101,7 +101,8 @@ vi.mock("@/components/voice/fullscreen", () => ({
   suportaTelaCheia: () => true,
 }));
 
-import VoiceGrid, { telaQueAssumeOPalco } from "./VoiceGrid";
+import VoiceGrid, { estiloDaTira, telaQueAssumeOPalco } from "./VoiceGrid";
+import { larguraDaTira } from "./grid-layout";
 import type { Tile } from "./TileDeVoz";
 
 // ── cenário ────────────────────────────────────────────────────────────────
@@ -339,5 +340,34 @@ describe("a grade posiciona cada tile de forma absoluta", () => {
     // ligá-la antes da primeira medida faria cada tile **inflar de 0×0** ao
     // entrar na chamada: o quadro anterior é o palco não medido
     expect(palcoDeTres()).not.toContain("transition:");
+  });
+});
+
+/**
+ * **A tira do modo foco anima a largura, e não só as miniaturas.**
+ *
+ * Quem centraliza a tira é o `justify-center` do pai, e o que ele mede é a
+ * largura do invólucro. Com ela mudando em corte seco enquanto o `left` das
+ * miniaturas interpolava, o bloco saltava de lado num quadro e a miniatura
+ * sobrevivente deslizava na direção contrária ao salto — movimento errado
+ * exatamente no caso que a transição queria suavizar. O desenho não dá para
+ * afirmar sem navegador; o contrato que chega ao DOM, dá.
+ */
+describe("a tira de miniaturas do palco", () => {
+  it("põe a largura na mesma transição das miniaturas", () => {
+    const estilo = estiloDaTira(3, true);
+
+    expect(estilo.width).toBe(larguraDaTira(3));
+    // o token é o mesmo de `TRANSICAO_DE_REFLOW`, e é ele que o
+    // `prefers-reduced-motion` zera
+    expect(estilo.transition).toContain("width var(--mov-reflow)");
+  });
+
+  it("encolhe quando perde uma miniatura — é essa largura que o pai recentraliza", () => {
+    expect(estiloDaTira(2, true).width).toBeLessThan(estiloDaTira(3, true).width);
+  });
+
+  it("sem animação não leva transição nenhuma, como os tiles", () => {
+    expect(estiloDaTira(3, false).transition).toBeUndefined();
   });
 });
