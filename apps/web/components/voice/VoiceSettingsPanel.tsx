@@ -102,7 +102,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
     O sintoma — "entrei na call e tudo ficou abafado" — aparece **durante** a
     chamada, e este painel é o que a pessoa abre quando isso acontece; mandá-la
     ao modal de configurações para entender o que acabou de ouvir seria tirá-la
-    do lugar onde percebeu o problema (é o mesmo motivo do preset, abaixo).
+    do lugar onde percebeu o problema.
     Aqui só o caso do microfone já escolhido: a versão cheia (`VozTab.tsx`)
     cobre também o "Padrão do sistema" com um fone na lista, e esta coluna de
     380px não comporta dois blocos de aviso.
