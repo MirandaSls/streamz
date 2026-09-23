@@ -30,8 +30,6 @@ let tentouRenovar = false;
 
 /** O ouvinte de visibilidade é global e registrado uma vez só. */
 let ouvindoVisibilidade = false;
-/** Idem para o de saída da página. */
-let ouvindoSaida = false;
 
 /**
  * Aba volta do segundo plano: reconecta na hora se o socket tiver caído.
@@ -48,41 +46,6 @@ function observarVisibilidade() {
     if (document.visibilityState === "visible" && socket && !socket.connected) {
       socket.connect();
     }
-  });
-}
-
-/**
- * Fechar a aba (ou o app) tira da chamada **agora**, não em 45 segundos.
- *
- * O servidor não tem como adivinhar sozinho: a queda de um socket é igual, no
- * fio, quer a pessoa tenha fechado o programa, quer o Wi-Fi tenha oscilado. Por
- * isso ele espera `VOICE_RECONNECT_GRACE_MS` antes de tirar alguém da voz — e
- * quem fechou de verdade ficava 45 s na sala, para todos os outros, marcado
- * como "reconectando", sem nunca voltar.
- *
- * `socket.disconnect()` resolve porque muda o **motivo** que o servidor lê:
- * vira `client namespace disconnect`, e o gateway trata isso como saída pedida
- * (ver `modules/gateway/saida-de-voz.ts`). Sem esta linha o motivo seria
- * `transport close`, indistinguível de uma queda de rede.
- *
- * `pagehide` e não `beforeunload`: é o evento que o iOS realmente dispara, e o
- * único recomendado para trabalho de encerramento. O `persisted` é a ressalva
- * que importa — quando a página vai para o bfcache ela pode voltar inteira, e
- * aí desconectar de propósito tiraria da chamada quem não saiu.
- *
- * É melhor-esforço, como todo trabalho em `pagehide`: se o navegador matar a
- * aba antes de o pacote sair, o servidor cai na carência, que é o que
- * acontecia sempre antes disto.
- */
-function observarSaidaDaPagina() {
-  // A checagem é pela **função**, e não pelo objeto: um `window` parcial
-  // existe de verdade fora do navegador (shims de SSR, dublês de teste,
-  // webviews antigos), e `typeof window !== "undefined"` passa por ele.
-  if (ouvindoSaida || typeof window?.addEventListener !== "function") return;
-  ouvindoSaida = true;
-  window.addEventListener("pagehide", (e) => {
-    if ((e as PageTransitionEvent).persisted) return;
-    socket?.disconnect();
   });
 }
 
@@ -126,11 +89,21 @@ export function getSocket(): Socket {
 
   socket = s;
   observarVisibilidade();
-  observarSaidaDaPagina();
-  // No app de desktop não há `pagehide` confiável quando o processo encerra: o
-  // Rust avisa antes de morrer e espera meio segundo (ver `ouvirSaidaDoApp`).
-  // A despedida é a mesma — desconectar de propósito.
+  // Fechar o app tira da chamada **agora**, não em 45 segundos.
+  //
+  // No navegador não dá para pedir isso: o único evento de saída (`pagehide`)
+  // dispara igual num F5, e sair na hora ali derrubaria da chamada quem só
+  // recarregou a página — em conversa direta, encerrando a chamada para os dois
+  // lados. Por isso o navegador fica com a carência do gateway, que é o que a
+  // retomada depois do reload (`stores/voice-retomada.ts`) precisa.
+  //
+  // Aqui é diferente: o Rust avisa que o processo está morrendo e espera meio
+  // segundo (ver `ouvirSaidaDoApp`), então a intenção é **conhecida**. Em vez de
+  // deixar o servidor adivinhar pela desconexão, declaramos: `voice.leave` é o
+  // mesmo evento do botão "Sair", e o gateway já remove na hora, sem carência.
+  // O `disconnect()` vem depois só para fechar o socket de propósito.
   ouvirSaidaDoApp(() => {
+    socket?.emit(WS_EVENTS.VOICE_LEAVE);
     socket?.disconnect();
   });
   return s;
