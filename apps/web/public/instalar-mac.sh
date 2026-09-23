@@ -47,9 +47,15 @@ IDENTIFICADOR_DO_APP="dev.streamz.app"
 NOME_DO_APP="Streamz.app"
 API_PADRAO="https://api.streamz.chat"
 # Espelha `minimumSystemVersion` do tauri.macos.conf.json. O `.3` não é
-# capricho: o ScreenCaptureKit (compartilhamento de tela) só existe no disco
-# a partir do 12.3, e num 12.0 o dyld **recusa o app no launch**, antes do
-# `main()` — o usuário veria um app que não abre, sem mensagem.
+# capricho, mas também não é (ainda) o que este binário exige: é o piso da
+# captura de tela nativa por ScreenCaptureKit, que só existe no disco a partir
+# do 12.3 e ainda vai entrar (`tela/captura/mac/mod.rs` hoje é esqueleto, sem
+# `#[link]` nem dependência `objc2-*`/`screencapturekit` — o `.app` de hoje
+# abre normalmente até num 12.0). Subir o piso agora evita o cenário em que,
+# no dia em que essa captura entrar, um `LC_LOAD_DYLIB` forte que um `#[link]`
+# gere faça o dyld recusar o app no launch num sistema mais velho, antes do
+# `main()` — o usuário veria um app que não abre, sem mensagem. Mais barato
+# preparar antes do que corrigir depois de já distribuído.
 MACOS_MINIMO=12.3
 
 # Globais (e não `local`) porque o `trap` de saída roda depois que a função
@@ -137,13 +143,20 @@ conferir_sistema() {
   menor=${versao#*.}
   menor=${menor%%.*}
   [ "$menor" = "$versao" ] && menor=0
-  case "$maior$menor" in
+  # Testados em separado: com `versao=""`, `menor` vira "0" por conta da linha
+  # acima, e `"$maior$menor"` concatenado daria "0" — um guarda que passaria
+  # com a versão vazia, e só apareceria depois num `[ "" -lt ... ]` calado.
+  case "$maior" in
+    '' | *[!0-9]*) falha "não consegui ler a versão do macOS ($versao)." ;;
+  esac
+  case "$menor" in
     '' | *[!0-9]*) falha "não consegui ler a versão do macOS ($versao)." ;;
   esac
   # Comparar só o número maior aceitaria um 12.0, onde o app não abre. Por isso
   # o par (maior, menor), na ordem — sem `sort -V`, que não está garantido aqui.
   min_maior=${MACOS_MINIMO%%.*}
   min_menor=${MACOS_MINIMO#*.}
+  min_menor=${min_menor%%.*}
   [ "$min_menor" = "$MACOS_MINIMO" ] && min_menor=0
   if [ "$maior" -lt "$min_maior" ] ||
     { [ "$maior" -eq "$min_maior" ] && [ "$menor" -lt "$min_menor" ]; }; then
