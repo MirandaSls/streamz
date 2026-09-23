@@ -187,39 +187,22 @@ export default function VozTab() {
   }, [cameraFps, cameraId, abrirPrevia]);
 
   /*
-    O preset existe porque o compromisso do processamento de voz é invisível:
-    com `eco`/`ganho` ligados (o padrão) quem limpa o microfone é o sistema;
-    desligados, quem limpa é a supressão avançada (o RNNoise), que roda aqui
-    dentro e custa CPU. Daí as duas pontas nomeadas, em vez de dois
-    interruptores soltos que ninguém liga ao sintoma.
+    **Não existe mais preset de tratamento.** Ele punha "Sistema" (eco e ganho
+    ligados) ao lado de "No app" como se fossem dois jeitos igualmente válidos
+    de limpar o microfone. No macOS não são: o WebKit liga a
+    `VoiceProcessingIO` exatamente quando o cancelamento de eco está ativo, e
+    essa unidade assume entrada **e saída** do aparelho — escolher "Sistema"
+    estragava o som da máquina inteira, e o usuário reproduziu o par nos dois
+    sentidos em 2026-09-22 (entrar na call com música tocando, alternar, ouvir).
 
-    **O texto desta seção já errou nos dois sentidos, e cada erro estava certo
-    em alguma plataforma.** Primeiro prometeu que "No app" tirava o sistema do
-    modo de comunicação (falso no Windows); depois, corrigindo demais, afirmou
-    que *nenhuma* opção muda o som dos outros aplicativos (falso no macOS, onde
-    o WebKit liga a `VoiceProcessingIO` exatamente quando o cancelamento de eco
-    está ligado, e ela abaixa o áudio dos outros apps). A resposta certa depende
-    do sistema, então ela saiu daqui e virou `sistemaDeAudio` em
-    `lib/microfone.ts`, que é onde ficam as referências ao código do Chromium e
-    do WebKit. O preset volta a falar só do que ele de fato decide: eco e CPU.
-
-    O valor é **derivado** das preferências que já existem — não há campo novo na
-    store —, então mexer num dos interruptores abaixo reposiciona o preset
-    sozinho, sem chance de os dois discordarem.
+    Um controle cuja ponta ruim não serve a ninguém não é escolha, é armadilha.
+    O cancelamento de eco continua no interruptor abaixo, desligado, para quem
+    fala em alto-falante e precisa dele; o que saiu foi o atalho que o ligava
+    junto com o ganho automático e o vendia como metade de uma decisão
+    simétrica.
   */
   // qual explicação de "e o som dos outros aplicativos?" vale nesta máquina
   const sistema = useSistemaDeAudio();
-
-  const tratamento = processamento.eco || processamento.ganho ? "sistema" : "app";
-  const aplicarTratamento = (valor: "sistema" | "app") =>
-    setAudioPref({
-      processamento:
-        valor === "sistema"
-          ? { ...processamento, eco: true, ganho: true }
-          : // a avançada entra junto: sem ela, desligar eco e ganho deixaria o
-            // microfone cru — a troca seria uma piora audível
-            { ...processamento, eco: false, ganho: false, ruido: "avancada" },
-    });
 
   // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
   // formato que o `Select` pede
@@ -390,30 +373,6 @@ export default function VozTab() {
       </Section>
 
       <Section id="processamento" title={t("voz.processamento")}>
-        {/* A divisória fica no invólucro, e não no `RadioCards`: com ela no
-            fieldset o texto de ajuda cairia **depois** do traço e pareceria
-            legenda da redução de ruído, que é o bloco seguinte. */}
-        <div className="border-b border-border-subtle py-3">
-          <RadioCards
-            semDivisoria
-            legend={t("voz.tratamento")}
-            value={tratamento}
-            onChange={aplicarTratamento}
-            options={[
-              {
-                value: "sistema",
-                label: t("voz.tratamentoSistema"),
-                hint: t("voz.tratamentoSistemaAjuda"),
-              },
-              {
-                value: "app",
-                label: t("voz.tratamentoApp"),
-                hint: t("voz.tratamentoAppAjuda"),
-              },
-            ]}
-          />
-          <p className="mt-2 text-xs text-text-muted">{t("voz.tratamentoAjuda")}</p>
-        </div>
         <RadioCards
           legend={t("voz.ruido")}
           columns={3}

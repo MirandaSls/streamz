@@ -18,7 +18,7 @@ import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { useTelaCheia } from "@/components/voice/fullscreen";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
-import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
+import { useOcultarInativo, type PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
 import { useAuth } from "@/stores/auth";
@@ -602,7 +602,7 @@ function BotaoDeExpandir({
   expandido: boolean;
   onAlternar: () => void;
   visivel: boolean;
-  moldura?: { onPointerEnter: () => void; onPointerLeave: () => void };
+  moldura?: PropsDaMoldura;
 }) {
   return (
     <div

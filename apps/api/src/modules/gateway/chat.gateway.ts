@@ -41,6 +41,7 @@ import {
 } from "./rate-limit";
 import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
 import { conexoesAExpulsar } from "./voz-em-um-lugar-so";
+import { saidaFoiIntencional } from "./saida-de-voz";
 import { anunciarReacao } from "../messages/eventos-de-reacao";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -180,6 +181,13 @@ export class ChatGateway
         return;
       }
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
+      // O motivo da desconexão só existe no evento `disconnecting`, que o
+      // Socket.IO dispara **antes** do `disconnect` — e é o `disconnect` que
+      // chama o nosso `handleDisconnect`. Guardar aqui é o que permite lá
+      // distinguir "fechei o app" de "a rede caiu" (ver `saida-de-voz.ts`).
+      client.on("disconnecting", (motivo: string) => {
+        client.data.motivoDaDesconexao = motivo;
+      });
       // sala pessoal: eventos de usuário (guild.removed) e alvo de socketsJoin/Leave
       client.join(`user:${payload.sub}`);
       // Entra já no connect em tudo que pode ver: os canais de todos os seus
@@ -692,6 +700,16 @@ export class ChatGateway
 
     const chave = this.chaveDeVoz(user.id, channelId);
     clearTimeout(this.saidasDeVozPendentes.get(chave));
+    this.saidasDeVozPendentes.delete(chave);
+
+    // Quem clicou em "Sair" (na bandeja, na aba, no Cmd+Q) não vai voltar: a
+    // carência só o deixaria 45 s na sala, para todo mundo, marcado como
+    // "reconectando". Sai agora — e sem a marca, que descreveria algo falso.
+    if (saidaFoiIntencional(client.data.motivoDaDesconexao as string | undefined)) {
+      await this.removerDaVoz(user.id, channelId);
+      return;
+    }
+
     await this.voice.marcarReconectando(user.id, channelId, true).catch(() => {});
     this.saidasDeVozPendentes.set(
       chave,

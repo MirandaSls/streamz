@@ -86,7 +86,15 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
   // null = ainda não perguntamos ao Rust; fora do Tauri a resposta é sabida na
   // hora, e assim o modal já nasce no tamanho certo em vez de encolher depois
   const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(
-    isTauri() ? null : { nativo: false, backend: null, janelaRecortada: false },
+    isTauri()
+      ? null
+      : {
+          nativo: false,
+          backend: null,
+          janelaRecortada: false,
+          audioDoSistema: false,
+          permissao: "naoPrecisa",
+        },
   );
   // captura do navegador à espera do clique (só fora da captura nativa)
   const [stream, setStream] = useState<MediaStream | null>(null);

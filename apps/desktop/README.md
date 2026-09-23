@@ -129,7 +129,7 @@ alvo é macOS. O que ele decide, e por quê:
 | `bundle.macOS.hardenedRuntime` | `true` | padrão do Tauri, e pré-requisito de notarização no dia em que houver conta; com ele ligado, microfone/câmera exigem os entitlements abaixo **além** dos textos do Info.plist |
 | `bundle.macOS.entitlements` | `Entitlements.macos.plist` | `com.apple.security.device.audio-input` + `.camera` — sem eles o hardened runtime recusa a captura mesmo com permissão concedida nos Ajustes |
 | `bundle.macOS.infoPlist` | `Info.macos.plist` | `NSMicrophoneUsageDescription`/`NSCameraUsageDescription` (sem eles o TCC **mata o processo** no primeiro `getUserMedia`, sem diálogo) e `CFBundleDevelopmentRegion: pt-BR`. Nome próprio, não `Info.plist`: o build de iOS também procura um `Info.plist` solto nesta pasta, e um arquivo genérico vazaria as chaves de um sistema para o outro |
-| `bundle.macOS.minimumSystemVersion` | `"12.0"` | é o macOS em que o wry passa a conceder mídia pela API do WKWebView |
+| `bundle.macOS.minimumSystemVersion` | `"12.3"` | preparação para a captura de tela nativa por ScreenCaptureKit, que só existe no disco a partir do 12.3 — ela ainda não entrou (`tela/captura/mac/mod.rs` é esqueleto, sem `#[link]` nem dependência `objc2-*`/`screencapturekit`) e o `.app` de hoje abre normalmente até num 12.0. Subir o piso agora é mais barato do que subir depois de já distribuído: no dia em que essa captura entrar, um `#[link]` gerando `LC_LOAD_DYLIB` forte faria o dyld recusar o app no launch, antes do `main()`, num sistema mais velho |
 | janela `main` | `backgroundThrottling: "disabled"` | só a partir do macOS 14: o wry 0.55 o traduz em `WKPreferences.inactiveSchedulingPolicy = none`, que evita o **RunningBoard** suspender o *processo* WebContent quando a view fica inativa. Não é equivalente às flags do WebView2 no Windows — a página continua sendo uma página oculta para o WebKit (rAF parado, timers de fundo espaçados), só o processo é que não é suspenso de vez. No macOS 12–13 a política nem existe. A rede de segurança de verdade continua sendo a carência de voz do servidor (ver Limitações) |
 
 A janela `main` do `tauri.macos.conf.json` **repete a janela inteira**, não só
@@ -187,6 +187,7 @@ andamento), quem decide mostrar a `main` continua sendo ela.
 ```bash
 scripts/build-desktop-macos.sh [<commit-ou-ref>] [--assinar-atualizador <chave>] [--sem-finder]
 scripts/build-desktop-macos.sh [<ref>] --certificado <p12> [--senha-do-certificado-em <arquivo>]
+scripts/build-desktop-macos.sh [<ref>] … --publicar [--login-em <arquivo>] [--notas "texto"] [--api <url>]
 ```
 
 Roda **num Mac** — o `.app` precisa de `codesign`, `lipo` e `hdiutil`, que só o
@@ -205,7 +206,9 @@ seta para Aplicativos; sem sessão gráfica ele travaria o build no último pass
 `--certificado`/`--senha-do-certificado-em` (ou as mesmas variáveis do
 Codemagic, `APPLE_CERTIFICATE`/`APPLE_CERTIFICATE_PASSWORD`/
 `APPLE_SIGNING_IDENTITY`) trocam a assinatura ad-hoc pelo certificado
-autoassinado — ver a subseção abaixo.
+autoassinado — ver a subseção abaixo. `--publicar` (com `--login-em`,
+`--notas` e `--api`) manda a pasta de saída para a API no fim de um build
+bem-sucedido, sem segundo comando e sem digitar login — ver "Publicar".
 
 O script confere, no `.app` da pasta de build e no de dentro do `.dmg`: as
 duas arquiteturas no executável (`lipo -archs`), a assinatura válida com
@@ -302,7 +305,7 @@ mesmo certificado, e um preenchido sem o outro é configuração inconsistente
 
 Variáveis de ambiente: `STREAMZ_SENHA`, `STREAMZ_API` (só `https`; `http`
 apenas em `127.0.0.1`/`localhost`, para teste), `STREAMZ_DESTINO`,
-`STREAMZ_NAO_ABRIR=1`. `MACOS_MINIMO=12` no topo do script espelha o
+`STREAMZ_NAO_ABRIR=1`. `MACOS_MINIMO=12.3` no topo do script espelha o
 `minimumSystemVersion` do `tauri.macos.conf.json`. A página de download
 (`PaginaDeDownload.tsx` → `InstalarPeloTerminal`) mostra este comando com botão
 de copiar como a opção **recomendada** no macOS, e o `.dmg` continua disponível
@@ -313,6 +316,86 @@ Sistema → Privacidade e Segurança → "Abrir Mesmo Assim". No macOS 12–14
 continua valendo botão direito → Abrir.
 
 ### Publicar
+
+#### Um comando só, sem login interativo
+
+Build assinado + pacote do atualizador + publicação na API, do zero ao
+auto-update ligado, sem nada para digitar no meio:
+
+```bash
+scripts/build-desktop-macos.sh \
+  --certificado ~/.streamz/certificado-mac/streamz-mac.p12 \
+  --senha-do-certificado-em ~/.streamz/certificado-mac/senha-do-p12.txt \
+  --assinar-atualizador ~/.tauri/streamz.key \
+  --publicar \
+  --login-em ~/.streamz/certificado-mac/login-da-api.txt \
+  --notas "Correções e melhorias."
+```
+
+`--publicar` é a última etapa do script: ele chama o
+`scripts/enviar-macos.sh` com a pasta de saída recém-gerada, repassando
+`--login-em`, `--notas` e `--api`. Build que falha em qualquer ponto (cargo,
+`codesign`, as conferências do `.app` e do `.dmg`) derruba o script antes —
+**não existe caminho que publique um build quebrado**. O arquivo de
+`--login-em` é conferido no primeiro segundo, antes de compilar, para um erro
+de login não aparecer só meia hora depois.
+
+**`--publicar` sem `--assinar-atualizador` publica só o `.dmg`**: a página de
+download passa a oferecer a versão nova, mas o **auto-update do Mac não muda**
+— quem já tem o app instalado continua na versão velha, porque o atualizador
+precisa do `.app.tar.gz` + `.sig`. O script avisa disso em destaque, duas
+vezes (ao começar e na hora do envio). Quase sempre você quer os dois.
+
+#### O arquivo de `--login-em`
+
+Duas linhas, e nada mais — sem comentário e sem cabeçalho, porque `#` pode ser
+parte da senha:
+
+```
+fulano@exemplo.com
+<a senha da conta admin da instância>
+```
+
+A conta precisa ser **administradora da instância** (`PLATFORM_ADMIN_EMAILS`,
+com e-mail verificado): é ela que a API exige em `POST /api/updates/macos`.
+
+- **Fica fora do repositório**, junto do resto dos segredos do Mac — o padrão
+  do projeto é `~/.streamz/certificado-mac/`, a mesma pasta do `.p12` e do
+  arquivo com a senha dele.
+- **`chmod 600 ~/.streamz/certificado-mac/login-da-api.txt`.** O script recusa
+  publicar com um arquivo legível por grupo ou por outros, e diz o `chmod` a
+  dar. Esta é a senha da conta que publica atualização para **todos** os
+  usuários do app.
+- **A senha nunca entra no repositório** — nem em script, nem em `.env.example`,
+  nem neste README. O git rastreia só o *caminho* do arquivo; o conteúdo, não.
+  Senha em commit é comprometimento permanente da cadeia de atualização,
+  porque o histórico é público.
+- Ela também não aparece na linha de comando (nada de `ps`), não é impressa em
+  nenhum log do script e a sessão criada pelo envio é encerrada no fim
+  (logout), para não acumular em "Dispositivos".
+- Para conferir o arquivo sem publicar nada e sem falar com a API:
+  `scripts/enviar-macos.sh --login-em <arquivo> --conferir-login`.
+- Alternativa ao arquivo: `STREAMZ_LOGIN_EM=<arquivo>` no ambiente (o caminho,
+  nunca a senha) ou `STREAMZ_TOKEN=<access token>`, que pula o login.
+
+**Conta com 2FA**: o caminho não interativo não tem como responder ao código e
+para com a explicação, em vez de travar esperando. As saídas são publicar com
+`STREAMZ_TOKEN` (access token de uma sessão já autenticada) ou rodar o envio à
+mão, num terminal, sem `--login-em`.
+
+#### Publicar uma pasta de saída que já existe
+
+```bash
+scripts/enviar-macos.sh .claude/saida-desktop/<versão>-<commit>-macos \
+  --login-em ~/.streamz/certificado-mac/login-da-api.txt \
+  --notas "Correções e melhorias."
+```
+
+Sem `--login-em` ele pergunta e-mail e senha no terminal, como sempre fez.
+Repetir o comando é seguro: arquivo idêntico já publicado volta como
+"ja-existia".
+
+#### Pela raiz do servidor, sem a API
 
 `scripts/publicar-desktop.sh <pasta-de-saída> --aplicar` (ver seção Auto-update
 abaixo) — mesmo script das outras plataformas. O `.dmg` (e o `.pkg`, se

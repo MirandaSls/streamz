@@ -101,7 +101,8 @@ vi.mock("@/components/voice/fullscreen", () => ({
   suportaTelaCheia: () => true,
 }));
 
-import VoiceGrid, { telaQueAssumeOPalco } from "./VoiceGrid";
+import VoiceGrid, { estiloDaTira, telaQueAssumeOPalco } from "./VoiceGrid";
+import { larguraDaTira } from "./grid-layout";
 import type { Tile } from "./TileDeVoz";
 
 // ── cenário ────────────────────────────────────────────────────────────────
@@ -288,5 +289,85 @@ describe("o palco cai para a grade quando o foco não cabe", () => {
     for (const chave of ["ana", "bia", "ana:sid1"]) {
       expect(html).toContain(`data-voice-tile="${chave}"`);
     }
+  });
+});
+
+/**
+ * **A grade entrega o leiaute em retângulos absolutos.**
+ *
+ * Era isto que faltava para haver transição: com fileiras de flexbox, quem
+ * entra na chamada muda a *contagem* de filhos, e contagem não interpola — o
+ * leiaute trocava seco. Com cada tile em `position: absolute` e o retângulo no
+ * `style`, a mudança vira interpolação de `top/left/width/height`, que é o que
+ * o Signal Desktop faz na mesma tela (ver `TRANSICAO_DE_REFLOW`).
+ *
+ * Aqui o palco nunca é medido (`renderToStaticMarkup` não roda efeito e não há
+ * `ResizeObserver`), então os números saem zerados de propósito; o que se
+ * afirma é a **forma** de entrega. As coordenadas de verdade são do
+ * `grid-layout.test.ts`, que as calcula sem depender de render.
+ */
+describe("a grade posiciona cada tile de forma absoluta", () => {
+  function palcoDeTres() {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    falsas.sala.participantes = [
+      participante("ana", [telaPublicada("sid1")]),
+      participante("bia", []),
+    ];
+    return renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" />);
+  }
+
+  it("o palco é o contexto de posicionamento, e não mais uma pilha de fileiras", () => {
+    const html = palcoDeTres();
+    expect(html).toContain('class="relative h-full min-h-0 overflow-hidden"');
+  });
+
+  it("cada célula leva top/left/width/height no estilo", () => {
+    const html = palcoDeTres();
+    // os invólucros da grade são os únicos `class="absolute"` sem mais nada —
+    // os `absolute` de dentro do tile sempre vêm acompanhados (`inset-0`,
+    // `pointer-events-none`, …)
+    const envoltorios = html.match(/<div class="absolute" style="[^"]*"/g) ?? [];
+    // duas pessoas e a transmissão de uma delas
+    expect(envoltorios).toHaveLength(3);
+    for (const envoltorio of envoltorios) {
+      for (const lado of ["left:", "top:", "width:", "height:"]) {
+        expect(envoltorio).toContain(lado);
+      }
+    }
+  });
+
+  it("o primeiro quadro, ainda sem medida, não leva transição", () => {
+    // ligá-la antes da primeira medida faria cada tile **inflar de 0×0** ao
+    // entrar na chamada: o quadro anterior é o palco não medido
+    expect(palcoDeTres()).not.toContain("transition:");
+  });
+});
+
+/**
+ * **A tira do modo foco anima a largura, e não só as miniaturas.**
+ *
+ * Quem centraliza a tira é o `justify-center` do pai, e o que ele mede é a
+ * largura do invólucro. Com ela mudando em corte seco enquanto o `left` das
+ * miniaturas interpolava, o bloco saltava de lado num quadro e a miniatura
+ * sobrevivente deslizava na direção contrária ao salto — movimento errado
+ * exatamente no caso que a transição queria suavizar. O desenho não dá para
+ * afirmar sem navegador; o contrato que chega ao DOM, dá.
+ */
+describe("a tira de miniaturas do palco", () => {
+  it("põe a largura na mesma transição das miniaturas", () => {
+    const estilo = estiloDaTira(3, true);
+
+    expect(estilo.width).toBe(larguraDaTira(3));
+    // o token é o mesmo de `TRANSICAO_DE_REFLOW`, e é ele que o
+    // `prefers-reduced-motion` zera
+    expect(estilo.transition).toContain("width var(--mov-reflow)");
+  });
+
+  it("encolhe quando perde uma miniatura — é essa largura que o pai recentraliza", () => {
+    expect(estiloDaTira(2, true).width).toBeLessThan(estiloDaTira(3, true).width);
+  });
+
+  it("sem animação não leva transição nenhuma, como os tiles", () => {
+    expect(estiloDaTira(3, false).transition).toBeUndefined();
   });
 });

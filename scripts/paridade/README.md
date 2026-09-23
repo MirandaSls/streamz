@@ -2,8 +2,9 @@
 
 Ferramental do passeio do `docs/PLANO-PARIDADE-DISCORD.md` (§3, passos 4–5, e §4,
 onda 0.7): uma **bancada isolada** desta worktree, uma **semente determinística**
-com um servidor que tem de tudo, as **capturas** de cada tela do `telas.json`
-(desktop 1920×1080 e celular 390×844) e a **folha lado a lado** (nosso × Discord).
+com um servidor que tem de tudo, as **capturas** das 70 telas do `telas.json`
+(52 desktop 1920×1080, 18 celular 390×844) e a **folha lado a lado** (nosso ×
+Discord).
 
 | Arquivo | Faz |
 |---|---|
@@ -21,7 +22,7 @@ O host não tem node: tudo roda em docker. Da raiz da worktree:
 ```bash
 scripts/paridade/bancada.sh subir      # Postgres, build (shared+api+web), API e web — ~5-10 min
 scripts/paridade/bancada.sh semear     # recria o banco, semeia, guarda o modelo — ~2 min
-scripts/paridade/bancada.sh capturar   # restaura o modelo e fotografa as 46 telas — ~10 min
+scripts/paridade/bancada.sh capturar   # restaura o modelo e fotografa as 70 telas — ~10 min
 scripts/paridade/bancada.sh folha --refs /opt/stack/streamz/.claude/worktrees/referencias
 scripts/paridade/bancada.sh status
 scripts/paridade/bancada.sh descer     # --limpar apaga o volume do banco; --limpar-tudo também os caches
@@ -57,6 +58,7 @@ semente usam a mesma senha).
 | Postgres 16 | `paridade-postgres` | `127.0.0.1:55432`, volume `paridade-pgdata`, bancos `paridade` e `paridade_semente` (o modelo) |
 | API (Nest, `node dist/main.js`) | `paridade-api` | `127.0.0.1:43333`, aplica `prisma migrate deploy` ao subir |
 | web (`next start`) | `paridade-web` | `127.0.0.1:43000` |
+| LiveKit (`livekit/livekit-server`) | `paridade-livekit` | `127.0.0.1:47880` (sinal) + `47882/udp` (mídia); entra no `subir`, no `descer` e no `status` como as outras peças — ver "Decisões" |
 | build | `paridade-preparar` (transitório) | 4 GB / 4 CPUs, `node:22` na worktree montada |
 | semente | `paridade-semente` (transitório) | rede `paridade-rede`, fala com `paridade-api:43333` |
 | captura / folha | `paridade-captura`, `paridade-folha` | imagem `mcr.microsoft.com/playwright:v1.56.0-noble` |
@@ -92,6 +94,22 @@ Estado local em `.claude/paridade/` (ignorado pelo git): `segredos.env` e
 - **Um contexto de navegador por tela, com login pela tela de login**: nada vaza
   de uma foto para a outra. `THROTTLE_DISABLED=1` na API é o que permite um
   login por foto (`apps/api/src/app.module.ts:63`).
+- **LiveKit próprio da bancada** (`paridade-livekit`), porque o card de tela da
+  grade nasce de uma publicação de mídia de verdade (`VoiceGrid`), não só da
+  bandeira `screen` do estado de voz. Duas ressalvas de quem for mexer aqui:
+  - **`LIVEKIT_URL` aponta para `localhost`, isto é, para o navegador da
+    captura** (que roda com `--network host`), não para a API. É quem abre a
+    sala. O `RoomServiceClient` da API — expulsar da voz, mover de canal — **não
+    alcança** `localhost:47880` de dentro do contêiner dela, e um único endereço
+    não serve aos dois lados ao mesmo tempo. O passeio de hoje não fotografa
+    moderação de voz; quem quiser vai precisar resolver esse endereço primeiro.
+  - **O microfone continua falhando no contêiner, de propósito.** Não há
+    dispositivo de áudio real, e ligar `--use-fake-device-for-media-stream`
+    resolveria isso trocando o microfone por um tom sintético — mas o Chromium
+    emite um bipe de 440 Hz nesse modo, que acende o anel de "falando" de forma
+    não determinística (depende de quando o VAD detecta o tom). Isso quebraria a
+    comparação entre rodadas, então a bancada prefere o microfone quebrado e
+    previsível ao áudio falso e instável.
 - **O banco volta ao modelo antes de cada `capturar`** (`CREATE DATABASE …
   TEMPLATE paridade_semente`): abrir canal grava leitura, o modal de convite cria
   convite, a voz deixa estado. Sem restaurar, a segunda rodada não fotografaria a
@@ -182,7 +200,8 @@ navegador só agenda a saída, com carência de reconexão).
 |---|---|
 | Embed rico e botões **renderizados** | `Message` não tem `embeds`/`components`: a casca achata o embed em texto e descarta os componentes (`discord-compat/rest/messages.controller.ts:161-166`, `traducao/embed.ts`). A mensagem é semeada no formato do Discord e sai achatada até a onda 3 |
 | Avatar, ícone do servidor, faixa com imagem, emoji personalizado, figurinha, som | todos exigem o storage (R2); sem ele as rotas respondem 503. Avatares saem com as iniciais |
-| Mídia de voz (vídeo, "falando", tela) | exige LiveKit. A chamada sai "conectada, sem mídia" (`apps/web/stores/voice.ts:1479`) |
+| Moderação de voz fotografada (expulsar da sala, mover de canal) | o `RoomServiceClient` da API não alcança o LiveKit da bancada — ver a ressalva de `LIVEKIT_URL` em "Decisões" |
+| "Falando" com áudio real | sem dispositivo de microfone no contêiner; ligar o microfone falso do Chromium acenderia o anel de forma não determinística (ver "Decisões") — o passeio não depende disso |
 | Bot **online**, resposta efêmera, faixa "usou /comando" | exigem o bot conectado ao gateway de compatibilidade e respondendo interação. O Pixel aparece offline |
 | Enquete com prazo | o servidor encerra pelo relógio real (`polls.service.ts:56`): com prazo fixo ela já nasceria encerrada. Semeada sem prazo |
 | Prévia de link (Open Graph) | depende da rede e da página de fora; a dona "remove a prévia" (moderação) das mensagens com link externo. O cartão de **convite** fica, porque é local |
@@ -259,8 +278,12 @@ falhou", "sem referência"/"lacuna" e "referência não encontrada".
 6. **Relógio congelado**: se o app estranhar o `Date` parado (renovação de token,
    reconexão), rodar com `--sem-relogio` separa a causa.
 7. **Voz**: se o "Desconectar" (`VoiceConnectedBar.tsx:187`, agora
-   `BotaoDeIcone`) não aparecer sem LiveKit, `voz-chamada` e
-   `painel-usuario-voz` estouram o tempo — o `.falha.png` mostra o estado.
+   `BotaoDeIcone`) não aparecer, é o `paridade-livekit` que não subiu (ver
+   `bancada.sh logs` e o "Decisões" acima) — `voz-chamada` e
+   `painel-usuario-voz` estouram o tempo, e as telas novas da onda 4
+   (`voz-transmitindo`, `voz-assistindo`, `voz-palco-expandido`,
+   `voz-controles-hover`, `voz-seletor-tela`, `dm-chamada`) dependem da mídia de
+   verdade. O `.falha.png` mostra o estado.
 8. **Arquivos de root** na worktree (`dist/`, `.next/`, `.claude/paridade/`): os
    contêineres rodam como root; o host também, então não trava nada, mas vale
    saber.

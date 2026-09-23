@@ -16,6 +16,12 @@
  * `2026-08-31 101857` (1:1) dois tiles de 760×428 com 8px pretos entre eles
  * (linha y=470, x=1143–1150); na `2026-08-31 123917` (1:1) três tiles de
  * 291×163 com o mesmo vão (x=673–680).
+ *
+ * **O resultado da conta chega ao DOM como retângulo absoluto**, e não como
+ * linhas de flexbox: é `posicionarGrade` quem traduz colunas×linhas em
+ * `top/left/width/height`, e é só assim que a mudança de leiaute tem transição
+ * (ver `TRANSICAO_DE_REFLOW`, no fim do arquivo). A conta em si não mudou —
+ * mudou por onde ela sai.
  */
 
 export interface Arranjo {
@@ -176,4 +182,127 @@ export function distribuir(quantidade: number, colunas: number): number[] {
   const base = Math.floor(quantidade / linhas);
   const sobra = quantidade % linhas;
   return Array.from({ length: linhas }, (_, i) => base + (i < sobra ? 1 : 0));
+}
+
+/**
+ * A transição de reflow da grade, pronta para o `style` de cada tile.
+ *
+ * É a receita do **Signal Desktop** (`stylesheets/_modules.scss`,
+ * `.module-ongoing-call__group-call-remote-participant`), levantada em
+ * 2026-09-22: a grade é recalculada em JS a cada render, cada tile recebe
+ * `top/left/width/height` absolutos, e quem anima o reflow é o CSS. Sem FLIP,
+ * sem biblioteca de animação. O Telegram faz o mesmo em espírito
+ * (`InterpolateRect` por tile, 240ms) e o Discord também posiciona de forma
+ * absoluta com medidas calculadas em JS.
+ *
+ * **Por que não `grid-template-columns`:** ele não interpola *contagem* de
+ * trilhas. Alguém entrar na chamada é uma mudança discreta — o navegador cai
+ * para animação discreta, que é o corte seco que esta constante existe para
+ * acabar.
+ *
+ * `linear` é decisão, não desleixo: numa interpolação de retângulo a
+ * aceleração faz o tile parecer escorregar. E a duração sai do token
+ * `--mov-reflow` (200ms, o `CONTAINER_TRANSITION_TIME` do Signal) em vez de um
+ * literal porque é a regra central de `prefers-reduced-motion` do
+ * `globals.css` que zera a escala inteira — literal aqui seria movimento que
+ * sobrevive a quem pediu para não ter movimento.
+ */
+export const TRANSICAO_DE_REFLOW =
+  "top var(--mov-reflow) linear, left var(--mov-reflow) linear, width var(--mov-reflow) linear, height var(--mov-reflow) linear";
+
+/**
+ * Quantos tiles ainda animam o reflow.
+ *
+ * Acima disto a transição é desligada e o leiaute volta a trocar seco. O teto
+ * é o do **Element Call** (50), e a razão é a mesma: `top/left/width/height`
+ * não são propriedades de compositor — cada quadro da transição custa layout e
+ * pintura do palco inteiro, e isso *soma* ao custo de decodificar N vídeos ao
+ * vivo. Passado certo número de tiles, o que era suavidade vira engasgo, e um
+ * corte seco é melhor do que uma animação picotada.
+ *
+ * Numa chamada nossa o número não é alcançado; ele existe para o dia em que
+ * for.
+ */
+export const TETO_DE_TILES_ANIMADOS = 50;
+
+/** Onde um tile fica, em pixels, dentro da área medida do palco. */
+export interface Retangulo {
+  esquerda: number;
+  topo: number;
+  largura: number;
+  altura: number;
+}
+
+/**
+ * Converte o arranjo (colunas × linhas, tamanho de um tile) nos retângulos de
+ * cada célula.
+ *
+ * **Isto não é uma segunda fórmula de leiaute**: quem decide colunas e tamanho
+ * continua sendo `melhorArranjo`/`distribuir`, e esta função só coloca o
+ * resultado deles em coordenadas. O que muda é a *entrega*: em vez de linhas
+ * de flexbox que o navegador centraliza sozinho, cada tile recebe o retângulo
+ * pronto e fica em `position: absolute` — que é o que permite a transição (ver
+ * `TRANSICAO_DE_REFLOW`).
+ *
+ * A centralização repete exatamente a do flexbox que havia antes — o bloco
+ * inteiro centrado na vertical, cada linha centrada na horizontal —, para que
+ * o desenho continue onde estava.
+ */
+export function posicionarGrade(
+  quantidade: number,
+  arranjo: Arranjo,
+  largura: number,
+  altura: number,
+  gap = GAP,
+): Retangulo[] {
+  const linhas = distribuir(quantidade, arranjo.colunas);
+  if (linhas.length === 0) return [];
+
+  const alturaTotal = linhas.length * arranjo.altura + gap * (linhas.length - 1);
+  let topo = (altura - alturaTotal) / 2;
+
+  const vagas: Retangulo[] = [];
+  for (const quantos of linhas) {
+    const larguraTotal = quantos * arranjo.largura + gap * (quantos - 1);
+    let esquerda = (largura - larguraTotal) / 2;
+    for (let i = 0; i < quantos; i++) {
+      vagas.push({ esquerda, topo, largura: arranjo.largura, altura: arranjo.altura });
+      esquerda += arranjo.largura + gap;
+    }
+    topo += arranjo.altura + gap;
+  }
+  return vagas;
+}
+
+/**
+ * Largura da tira de miniaturas do modo foco.
+ *
+ * A tira também passou a posicionar cada miniatura de forma absoluta (senão
+ * quem entra empurra as outras num corte seco), e um bloco absoluto não tem
+ * largura própria: é ela que a mantém centralizada enquanto cabe e rolável
+ * quando não cabe.
+ */
+export function larguraDaTira(quantidade: number, gap = FAIXA_GAP): number {
+  if (quantidade <= 0) return 0;
+  return quantidade * FAIXA_LARGURA + gap * (quantidade - 1);
+}
+
+/**
+ * O `style` de um tile: o retângulo, mais a transição quando ela vale.
+ *
+ * Função à parte — e não um objeto montado no meio do JSX — porque é o
+ * contrato que chega ao DOM, e é o que os testes afirmam sem precisar de
+ * navegador.
+ */
+export function estiloDoTile(
+  vaga: Retangulo,
+  animar: boolean,
+): { left: number; top: number; width: number; height: number; transition?: string } {
+  return {
+    left: vaga.esquerda,
+    top: vaga.topo,
+    width: vaga.largura,
+    height: vaga.altura,
+    ...(animar ? { transition: TRANSICAO_DE_REFLOW } : {}),
+  };
 }

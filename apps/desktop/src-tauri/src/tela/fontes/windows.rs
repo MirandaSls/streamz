@@ -1,4 +1,5 @@
-//! Enumeração de janelas e monitores no Windows.
+//! Enumeração de janelas e monitores no Windows — a metade Windows da
+//! fachada de `fontes/mod.rs`.
 //!
 //! Os filtros aqui são a diferença entre uma grade parecida com a do Discord e
 //! uma lista com sessenta entradas fantasma. O Windows tem muita janela de topo
@@ -27,8 +28,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GW_OWNER, WS_CHILD, WS_EX_TOOLWINDOW,
 };
 
-use super::captura::Alvo;
-use super::{Fonte, TipoDeFonte};
+use crate::tela::captura::Alvo;
+use crate::tela::{Fonte, TipoDeFonte};
 
 /// Janela menor que isto não é aplicativo: é caixa de mensagem oculta, splash
 /// de um pixel, resquício de barra de ferramentas.
@@ -118,7 +119,9 @@ fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
 
         let executavel = caminho_do_processo(pid);
         let app = executavel.as_deref().and_then(nome_do_app);
-        let icone = executavel.as_deref().and_then(super::icone::do_executavel);
+        let icone = executavel
+            .as_deref()
+            .and_then(crate::tela::icone::do_executavel);
 
         Some(Fonte {
             id: format!("janela:{}", hwnd.0 as isize),
@@ -276,10 +279,15 @@ pub fn alvo(id: &str) -> Option<Alvo> {
     if let Some(numero) = id.strip_prefix("janela:") {
         let hwnd = HWND(numero.parse::<isize>().ok()? as *mut c_void);
         let existe = unsafe { IsWindow(Some(hwnd)) }.as_bool();
-        return existe.then_some(Alvo::Janela(hwnd));
+        // O `Alvo` guarda um número opaco, não um handle tipado: é o que
+        // mantém o `captura/mod.rs` sem `use windows::…`. Quem põe o número
+        // aqui é este arquivo, e é ele quem o lê de volta na hora de capturar.
+        // O `usize` no meio é só o tamanho natural do ponteiro — ir direto a
+        // `u64` num alvo de 32 bits seria um alargamento escondido.
+        return existe.then_some(Alvo::Janela(hwnd.0 as usize as u64));
     }
     let nome = id.strip_prefix("monitor:")?;
-    hmonitor_do_dispositivo(nome).map(Alvo::Monitor)
+    hmonitor_do_dispositivo(nome).map(|hmonitor| Alvo::Monitor(hmonitor.0 as usize as u64))
 }
 
 /// A fonte é uma janela **minimizada**?

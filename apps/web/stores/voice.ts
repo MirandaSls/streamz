@@ -121,7 +121,7 @@ import { ui, useUI } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
-import { useVoiceDevicesStore } from "@/stores/voiceDevices";
+import { explicarMidia, motivoDaFalha, useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 import { encerrarFaixas, ehFonteDeTela, inicioAindaVale } from "@/stores/parar-transmissao";
 
@@ -211,6 +211,16 @@ function encerrarCapturaDaTela() {
  * pessoa desligar a câmera, escolher outro fps ou sair da sala.
  */
 let cameraSobCpu = false;
+/**
+ * O último aviso de microfone já mostrado, como `"<sala>|<texto>"`.
+ *
+ * `rejoinAposReconexao` refaz a entrada a cada volta do socket. Com o microfone
+ * quebrado de vez (aparelho desplugado, permissão revogada) e a rede oscilando,
+ * isso vira um toast idêntico por reconexão, empilhando — o `ui.toast` não
+ * deduplica. Repetir a mesma frase não informa nada de novo; um aviso
+ * **diferente**, ou o mesmo depois de o microfone ter voltado a subir, informa.
+ */
+let ultimoAvisoDeMicrofone: string | null = null;
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
   states: Record<string, VoiceStateEvent[]>;
@@ -2043,6 +2053,19 @@ async function aplicarSaidaEscolhida(room: Room) {
 }
 
 /**
+ * A falha do `getUserMedia` foi "você recusou o microfone"?
+ *
+ * Só quem recusou tem conserto à mão, e o texto que aponta o conserto é outro
+ * — por isso a pergunta existe. O `name` é o sinal bom; a mensagem entra na
+ * conta porque ele nem sempre sobrevive ao caminho: na ponte do Tauri o erro
+ * chega serializado e do outro lado só resta o texto.
+ */
+function ehPermissaoNegada(e: unknown): boolean {
+  if ((e as { name?: unknown } | null | undefined)?.name === "NotAllowedError") return true;
+  return e instanceof Error && /NotAllowedError|permission denied/i.test(e.message);
+}
+
+/**
  * Abre o microfone e o publica na sala que já está de pé.
  *
  * O microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
@@ -2053,9 +2076,10 @@ async function aplicarSaidaEscolhida(room: Room) {
  *
  * Duas guardas por ser assíncrono em relação à entrada:
  *
- * 1. `sala !== room` no fim: quem saiu (ou trocou de canal) enquanto o
- *    `getUserMedia` pensava não pode ganhar um microfone publicado numa sala
- *    aposentada, nem a bandeira de "pronto" de uma sala que já não é a dele.
+ * 1. `sala !== room`: quem saiu (ou trocou de canal) enquanto o `getUserMedia`
+ *    pensava não pode ganhar um microfone publicado numa sala aposentada, nem a
+ *    bandeira de "pronto" de uma sala que já não é a dele — nem o aviso de
+ *    falha, que nesse caso é consequência da própria saída.
  * 2. o mudo é **reaplicado** depois de a faixa nascer: um `toggleMute` que
  *    aconteça durante a abertura chega em `definirMicrofoneAberto` quando ainda
  *    não há faixa nenhuma, e sem esta linha o clique se perderia — a pessoa
@@ -2072,9 +2096,36 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
       useVoice.getState().testandoMicrofone,
     );
     crono.etapa("microfone aberto e publicado");
-  } catch {
+    // subiu: se falhar de novo mais tarde, é notícia outra vez
+    ultimoAvisoDeMicrofone = null;
+  } catch (e) {
     // ficar sem microfone não tira ninguém da sala: continua ouvindo
     crono.etapa("microfone falhou");
+    // O `crono` fala por `console.debug`, que não aparece no nível padrão do
+    // console: sem este aviso a falha não deixava rastro nenhum na máquina de
+    // quem relatou "entrei na call e o áudio não funciona". Mesmo prefixo dos
+    // avisos de `lib/microfone`, para o relato vir inteiro num filtro só.
+    console.warn("[voz] o microfone não subiu; a sala continua sem ele", e);
+    // Recusar a permissão não é "deu erro": tem causa e conserto, e quem sabe
+    // apontar o conserto certo (o cadeado, ou o https quando o endereço nem
+    // chega a pedir permissão) é o `explicarMidia` que as configurações de voz
+    // já usam — escrever texto novo aqui seria uma segunda versão da verdade.
+    const negado = ehPermissaoNegada(e) ? explicarMidia(motivoDaFalha()) : null;
+    const texto =
+      negado ??
+      errorMessage(
+        e,
+        "Não foi possível ligar o microfone. Escolha outro aparelho nas configurações de voz e entre de novo.",
+      );
+    // Quem já saiu não leva o aviso: `desmontarSala` desconecta a sala enquanto
+    // esta publicação ainda está no ar, e ela rejeita **por causa da saída** —
+    // o toast culparia o microfone de quem acabou de sair da chamada. O
+    // `console.warn` acima fica de qualquer jeito: é o rastro do relato.
+    const aviso = `${room.name}|${texto}`;
+    if (sala === room && ultimoAvisoDeMicrofone !== aviso) {
+      ultimoAvisoDeMicrofone = aviso;
+      ui.toast(texto, "error");
+    }
   }
   if (sala !== room) return;
   await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});

@@ -92,28 +92,6 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
     alternar: alternarTeste,
   } = useTesteDeMicrofone();
 
-  /*
-    Preset do processamento — a mesma regra de `settings/VozTab.tsx`. Ele
-    escolhe **onde a sua voz é tratada**: com `eco`/`ganho` ligados quem trata é
-    o sistema (de graça); desligados, a limpeza vira a supressão avançada, que
-    roda aqui dentro e custa CPU. Se ele mexe ou não no áudio dos **outros**
-    aplicativos depende do sistema, e a resposta está no bloco do fim desta
-    seção (e em `sistemaDeAudio`, em `lib/microfone.ts`): no Windows não mexe,
-    no macOS o cancelamento de eco mexe. O valor é **derivado** das preferências que já existem —
-    nenhum campo novo na store —, então os interruptores abaixo e o preset nunca
-    podem discordar.
-  */
-  const tratamento = audio.processamento.eco || audio.processamento.ganho ? "sistema" : "app";
-  const aplicarTratamento = (valor: "sistema" | "app") =>
-    setAudioPref({
-      processamento:
-        valor === "sistema"
-          ? { ...audio.processamento, eco: true, ganho: true }
-          : // a avançada entra junto: sem ela, tirar o tratamento do sistema
-            // deixaria o microfone cru — a troca seria uma piora audível
-            { ...audio.processamento, eco: false, ganho: false, ruido: "avancada" },
-    });
-
   // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
   // formato que o `Select` pede — igual ao helper de `VozTab.tsx`
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
@@ -124,7 +102,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
     O sintoma — "entrei na call e tudo ficou abafado" — aparece **durante** a
     chamada, e este painel é o que a pessoa abre quando isso acontece; mandá-la
     ao modal de configurações para entender o que acabou de ouvir seria tirá-la
-    do lugar onde percebeu o problema (é o mesmo motivo do preset, abaixo).
+    do lugar onde percebeu o problema.
     Aqui só o caso do microfone já escolhido: a versão cheia (`VozTab.tsx`)
     cobre também o "Padrão do sistema" com um fone na lista, e esta coluna de
     380px não comporta dois blocos de aviso.
@@ -341,39 +319,10 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Processamento de voz
         </h3>
-        {/* O preset está aqui, e não só na aba cheia, porque é **aqui** que a
-            pessoa repara na própria voz: ela entra na chamada, se ouve com eco
-            (ou com o ventilador junto) e abre este painel. Mandá-la ao modal de
-            configurações para ajustar o que acabou de ouvir seria pedir que
-            saísse do lugar onde percebeu o problema. A densidade se resolve com
-            uma coluna só, como a redução de ruído logo abaixo. O texto repete o da aba
-            (`voz.tratamento*` em `lib/i18n.ts`): este painel ainda é todo em
-            pt-BR literal, e misturar `t()` numa seção só deixaria o inglês pela
-            metade. A divisória fica no invólucro (e não no `RadioCards`) pelo
-            mesmo motivo da aba cheia: no fieldset, o traço cairia entre o
-            preset e a sua ajuda. */}
-        <div className="border-b border-border-subtle pb-3">
-          <RadioCards
-            semDivisoria
-            legend="Onde tratar o seu microfone"
-            columns={1}
-            value={tratamento}
-            onChange={aplicarTratamento}
-            options={[
-              {
-                value: "sistema",
-                label: "Sistema",
-                hint: "trata o eco melhor; não custa CPU",
-              },
-              { value: "app", label: "No app", hint: "limpa o ruído aqui dentro; usa mais CPU" },
-            ]}
-          />
-          <p className="mt-2 text-xs text-text-muted">
-            Escolhe onde a sua voz é tratada. “Sistema” usa o cancelamento de eco e o ganho do seu
-            computador: é o melhor para quem fala no alto-falante e não custa processador. “No app”
-            desliga os dois e deixa a limpeza com a supressão avançada, que roda aqui dentro.
-          </p>
-        </div>
+        {/* Sem preset de "onde tratar": ver `settings/VozTab.tsx`. A ponta
+            "Sistema" ligava o cancelamento de eco, e no macOS é ele que entrega
+            o aparelho inteiro à `VoiceProcessingIO` do sistema. O interruptor
+            continua logo abaixo para quem fala em alto-falante. */}
         <ToggleLinha
           titulo="Cancelamento de eco"
           hint="Tira da sua voz o eco do que sai pelos alto-falantes, para os outros não se ouvirem de volta. Quem usa fone pode desligar sem ganhar eco."

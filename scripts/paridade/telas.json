@@ -46,7 +46,13 @@
     { "id": "mensagem-bot-v2", "onda": 3, "o_que": "#bots alinhado na mensagem Components v2 do Pixel, com o embed sem cor e o select de usuário logo abaixo" },
     { "id": "mensagem-bot-compacta", "onda": 3, "o_que": "a mesma mensagem de bot com embed rico e botões, no modo compacto" },
     { "id": "select-de-bot-aberto", "onda": 3, "o_que": "select de texto da mensagem de bot aberto (a lista deve ter a largura do gatilho)" },
-    { "id": "modal-de-bot", "onda": 3, "o_que": "modal aberto pelo bot (callback 9) ao clicar em Detalhes: título com o avatar do bot e o aviso" }
+    { "id": "modal-de-bot", "onda": 3, "o_que": "modal aberto pelo bot (callback 9) ao clicar em Detalhes: título com o avatar do bot e o aviso" },
+    { "id": "voz-seletor-tela", "onda": 4, "o_que": "modal do seletor de transmissão aberto: abas Aplicativos/Tela Inteira, o cartão que abre o diálogo do navegador e a qualidade no rodapé" },
+    { "id": "voz-transmitindo", "onda": 4, "o_que": "eu transmitindo: a grade com o meu próprio card de tela e o selo Ao vivo, sem assumir o palco" },
+    { "id": "voz-assistindo", "onda": 4, "o_que": "assistindo à transmissão de outra pessoa, em destaque no palco com a faixa dos demais embaixo" },
+    { "id": "voz-palco-expandido", "onda": 4, "o_que": "palco expandido numa chamada de conversa direta: ele ocupa a área toda e a conversa fica por baixo" },
+    { "id": "voz-controles-hover", "onda": 4, "o_que": "ponteiro sobre a cápsula de controles do palco: a sobreposição presa no ar e a dica do botão de tela" },
+    { "id": "dm-chamada", "onda": 4, "o_que": "chamada em conversa direta atendida, com a tela compartilhada na faixa sobre a conversa" }
   ]},
   "celular": { "largura": 390, "altura": 844, "telas": [
     { "id": "m-inicio", "onda": 8, "o_que": "aba Início: rail + canais do servidor" },

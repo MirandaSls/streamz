@@ -1,4 +1,17 @@
 fn main() {
+    // `tela_nativa`: alvos em que o módulo `tela` tem backend de captura
+    // (Windows: WGC/DXGI; macOS: ScreenCaptureKit). Linux e celular ficam de
+    // fora e caem no `getDisplayMedia` do webview. É um cfg de conveniência:
+    // sem ele o `tela/mod.rs` repetiria
+    // `any(target_os = "windows", target_os = "macos")` em vinte lugares.
+    println!("cargo::rustc-check-cfg=cfg(tela_nativa)");
+    if matches!(
+        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("windows") | Ok("macos")
+    ) {
+        println!("cargo::rustc-cfg=tela_nativa");
+    }
+
     // O plugin `chamada` (o serviço de primeiro plano do Android) vive **dentro
     // deste crate**, não num crate próprio. O `tauri-build` chama isso de
     // *inlined plugin*, e é ele quem gera a ACL: para cada comando da lista

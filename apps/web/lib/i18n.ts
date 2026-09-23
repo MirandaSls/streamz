@@ -120,13 +120,6 @@ const PT_BR = {
   "voz.ganho": "Controle automático de ganho",
   "voz.ganhoAjuda":
     "Nivela o seu volume quando você fala perto ou longe do microfone. Trata só a sua voz.",
-  "voz.tratamento": "Onde tratar o seu microfone",
-  "voz.tratamentoSistema": "Sistema",
-  "voz.tratamentoSistemaAjuda": "trata o eco melhor; não custa CPU",
-  "voz.tratamentoApp": "No app",
-  "voz.tratamentoAppAjuda": "limpa o ruído aqui dentro; usa mais CPU",
-  "voz.tratamentoAjuda":
-    "Escolhe onde a sua voz é tratada. “Sistema” usa o cancelamento de eco e o ganho do seu computador: é o melhor para quem fala no alto-falante e não custa processador. “No app” desliga os dois e deixa a limpeza com a supressão avançada, que roda aqui dentro e usa mais CPU.",
   // ── "por que a música baixa quando eu entro na call?" ──
   // Três textos porque são três mecanismos diferentes, e só um deles tem
   // conserto nesta tela. Ver `sistemaDeAudio` em `lib/microfone.ts` para as
@@ -333,13 +326,6 @@ const EN_US: Dicionario = {
   "voz.ganho": "Automatic gain control",
   "voz.ganhoAjuda":
     "Evens out your volume when you speak close to or far from the microphone. It only processes your voice.",
-  "voz.tratamento": "Where to process your microphone",
-  "voz.tratamentoSistema": "System",
-  "voz.tratamentoSistemaAjuda": "better with echo; costs no CPU",
-  "voz.tratamentoApp": "In the app",
-  "voz.tratamentoAppAjuda": "cleans the noise in here; uses more CPU",
-  "voz.tratamentoAjuda":
-    "This picks where your voice is processed. “System” uses your computer's echo cancellation and gain control: best if you speak through speakers, and it costs no CPU. “In the app” turns both off and hands the clean-up to advanced noise suppression, which runs in here and uses more CPU.",
   "voz.outrosApps": "What about your other apps' sound?",
   "voz.outrosAppsWindows":
     "Windows treats any open microphone as a call and, out of the box, lowers everything else by 80% for as long as it lasts — that, and not the options above, is what makes music and video go quiet. None of them takes the system out of that mode. The setting that does belongs to Windows: Sound ▸ More sound settings ▸ Communications ▸ “Do nothing”.",

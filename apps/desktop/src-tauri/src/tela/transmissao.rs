@@ -31,7 +31,13 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
 
-use super::audio::{self, ErroDeAudio, Loopback};
+use super::audio;
+// `Loopback` e o `ErroDeAudio` que ele devolve só existem onde há backend de
+// som do sistema — hoje, o loopback do WASAPI. Fora do Windows o `audio` não
+// os exporta, e importá-los sem `#[cfg]` era o que impedia o alvo do macOS de
+// compilar. Quem os usa é um só: `transmitir_audio`, logo abaixo.
+#[cfg(windows)]
+use super::audio::{ErroDeAudio, Loopback};
 use super::captura::{self, Capturador, Erro, Quadro};
 use super::fontes;
 
@@ -369,7 +375,12 @@ pub async fn iniciar(
     // O áudio do sistema é uma segunda faixa do mesmo participante. Falhar
     // aqui (sem dispositivo de saída, formato estranho) não derruba o vídeo:
     // a transmissão segue muda, como quando a opção está desligada.
-    let fonte_audio = if pedido.audio {
+    //
+    // `audio::disponivel()` porque nem todo alvo com captura de tela sabe
+    // capturar o som do sistema (o macOS só do 13 em diante). Onde não sabe,
+    // publicar a faixa seria anunciar silêncio para a sala inteira: melhor
+    // não publicar nada e deixar o vídeo seguir.
+    let fonte_audio = if pedido.audio && audio::disponivel() {
         let fonte = NativeAudioSource::new(
             // sem cancelamento de eco nem supressão: a fonte é o próprio
             // sistema, e os processadores de voz achatariam música em mono
@@ -460,12 +471,15 @@ pub async fn parar(estado: &Transmissao) {
 /// thread; 200 ms cobre um engasgo da leitura sem virar atraso audível.
 const FILA_DE_AUDIO_MS: u32 = 200;
 /// Sem pacote novo no mixer, quanto dormir antes de perguntar de novo.
+#[cfg(windows)]
 const PAUSA_SEM_AUDIO: Duration = Duration::from_millis(5);
 /// Tentativas de reabrir o loopback depois de o dispositivo mudar.
+#[cfg(windows)]
 const REABERTURAS: u32 = 10;
 
 /// O laço do áudio do sistema: lê o loopback e empurra para a fonte. Termina
 /// com a bandeira, ou quando o loopback não reabre mais.
+#[cfg(windows)]
 fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
     let mut loopback = match Loopback::abrir() {
         Ok(l) => l,
@@ -510,6 +524,13 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
         }
     }
 }
+
+/// Sem backend de som do sistema neste alvo não há laço nenhum a rodar — e
+/// nem se chega aqui: `audio::disponivel()` é `false`, então a faixa de áudio
+/// não é criada e esta thread nunca chega a ser lançada. O corpo vazio existe
+/// só para o `spawn` lá em cima continuar compilando fora do Windows.
+#[cfg(not(windows))]
+fn transmitir_audio(_fonte: &NativeAudioSource, _parar: &AtomicBool) {}
 
 /// O laço da transmissão. Devolve `None` quando parou a pedido, ou o motivo
 /// quando acabou sozinha.

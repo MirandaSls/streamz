@@ -1,4 +1,5 @@
-//! Ícone do executável de uma janela, como data URL PNG.
+//! Ícone do executável de uma janela, como data URL PNG — a metade Windows
+//! do `icone`, onde a chave é o caminho do `.exe`.
 //!
 //! É enfeite, e o código trata como tal: **toda** falha vira `None` e a web
 //! desenha um genérico. Ícone é o que mais varia entre programas — monocromático

@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import { WS_EVENTS } from "@streamz/shared";
 import { WS_URL } from "./config";
 import { getAccessToken, renovarTokens } from "./session";
+import { ouvirSaidaDoApp } from "@/lib/desktop";
 
 /**
  * Conexão única com o gateway, resiliente a queda de rede e a token expirado.
@@ -88,6 +89,23 @@ export function getSocket(): Socket {
 
   socket = s;
   observarVisibilidade();
+  // Fechar o app tira da chamada **agora**, não em 45 segundos.
+  //
+  // No navegador não dá para pedir isso: o único evento de saída (`pagehide`)
+  // dispara igual num F5, e sair na hora ali derrubaria da chamada quem só
+  // recarregou a página — em conversa direta, encerrando a chamada para os dois
+  // lados. Por isso o navegador fica com a carência do gateway, que é o que a
+  // retomada depois do reload (`stores/voice-retomada.ts`) precisa.
+  //
+  // Aqui é diferente: o Rust avisa que o processo está morrendo e espera meio
+  // segundo (ver `ouvirSaidaDoApp`), então a intenção é **conhecida**. Em vez de
+  // deixar o servidor adivinhar pela desconexão, declaramos: `voice.leave` é o
+  // mesmo evento do botão "Sair", e o gateway já remove na hora, sem carência.
+  // O `disconnect()` vem depois só para fechar o socket de propósito.
+  ouvirSaidaDoApp(() => {
+    socket?.emit(WS_EVENTS.VOICE_LEAVE);
+    socket?.disconnect();
+  });
   return s;
 }
 

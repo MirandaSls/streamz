@@ -34,7 +34,8 @@ use windows_capture::dxgi_duplication_api::{
 };
 use windows_capture::monitor::Monitor;
 
-use super::{copiar_sem_padding, escala, Alvo, Capturador, Erro, Quadro, Ritmo};
+use super::super::{copiar_sem_padding, escala, Alvo, Capturador, Erro, Quadro, Ritmo};
+use super::{hmonitor_de, hwnd_de};
 
 /// Quanto uma miniatura espera por um quadro. A primeira chamada depois de
 /// criar a duplicação devolve a tela inteira quase na hora; a folga é para
@@ -70,16 +71,17 @@ struct Leitor {
     entregou: bool,
 }
 
-// SAFETY: `HMONITOR` é um identificador opaco do sistema (ver `Alvo`), e a
-// duplicação DXGI é usada por uma thread de cada vez — a que chama
-// `proximo_quadro`. O D3D11 é livre de thread por contrato.
+// SAFETY: `HMONITOR` é um identificador opaco do sistema (ver `hmonitor_de`,
+// em `win/mod.rs`), e a duplicação DXGI é usada por uma thread de cada vez — a
+// que chama `proximo_quadro`. O D3D11 é livre de thread por contrato.
 unsafe impl Send for Duplicacao {}
 
 impl Duplicacao {
     pub fn abrir(alvo: Alvo, ritmo: Ritmo) -> Result<Self, Erro> {
         let monitor = match alvo {
-            Alvo::Monitor(hmonitor) => hmonitor,
-            Alvo::Janela(hwnd) => {
+            Alvo::Monitor(bruto) => hmonitor_de(bruto),
+            Alvo::Janela(bruto) => {
+                let hwnd = hwnd_de(bruto);
                 validar(hwnd)?;
                 unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) }
             }
@@ -195,7 +197,8 @@ impl Capturador for Duplicacao {
 
         let recorte = match self.alvo {
             Alvo::Monitor(_) => None,
-            Alvo::Janela(hwnd) => {
+            Alvo::Janela(bruto) => {
+                let hwnd = hwnd_de(bruto);
                 validar(hwnd)?;
                 // Minimizada não tem retângulo na tela. Não é erro: o usuário
                 // vai restaurá-la; até lá quem transmite repete o último
@@ -322,8 +325,9 @@ pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>>
             break;
         }
         let monitor = match *alvo {
-            Alvo::Monitor(hmonitor) => hmonitor,
-            Alvo::Janela(hwnd) => {
+            Alvo::Monitor(bruto) => hmonitor_de(bruto),
+            Alvo::Janela(bruto) => {
+                let hwnd = hwnd_de(bruto);
                 if validar(hwnd).is_err() || unsafe { IsIconic(hwnd) }.as_bool() {
                     continue;
                 }
@@ -342,7 +346,7 @@ pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>>
         };
         saida[i] = match *alvo {
             Alvo::Monitor(_) => escala::jpeg(quadro),
-            Alvo::Janela(hwnd) => recorte_da_janela(hwnd, monitor)
+            Alvo::Janela(bruto) => recorte_da_janela(hwnd_de(bruto), monitor)
                 .and_then(|(x0, y0, x1, y1)| escala::recortar(quadro, x0, y0, x1, y1))
                 .and_then(|parte| escala::jpeg(&parte)),
         };
@@ -351,7 +355,9 @@ pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>>
 }
 
 fn um_quadro_do_monitor(monitor: HMONITOR) -> Option<Quadro> {
-    let mut dup = Duplicacao::abrir(Alvo::Monitor(monitor), Ritmo::livre()).ok()?;
+    // De volta ao número opaco do `Alvo` para reusar a abertura de sempre.
+    let alvo = Alvo::Monitor(monitor.0 as usize as u64);
+    let mut dup = Duplicacao::abrir(alvo, Ritmo::livre()).ok()?;
     // A primeira leitura pode voltar vazia enquanto a duplicação assenta; a
     // segunda é a que traz a tela.
     for _ in 0..2 {
