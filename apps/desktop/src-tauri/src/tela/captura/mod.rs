@@ -19,6 +19,16 @@
 //! mesmo caminho da transmissão) é a do plano da sessão anterior, que também
 //! escreveu a enumeração.
 
+// **Temporário, e só fora do Windows.** A metade neutra deste módulo — a
+// `Caixa`, o `Ritmo`, o `copiar_sem_padding` e o `intervalo_do_fps` — existe
+// para os backends usarem, e hoje quem os usa é só o `win`: o `mac` é um
+// esqueleto que recusa todo `abrir`. Sem isto, o build do macOS sai com uma
+// dúzia de avisos de `dead_code` a cada compilação, e aviso que se aprende a
+// ignorar esconde o aviso que importa. Sai quando o ScreenCaptureKit entrar,
+// porque aí o `mac` consome tudo isto — é o mesmo arranjo, e pelo mesmo
+// motivo, do `#![cfg_attr(...)]` no topo de `tela/audio/mod.rs`.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
@@ -114,21 +124,24 @@ fn copiar_sem_padding(
 /// cópia de ~15 MB) para a transmissão aproveitar 30 e jogar o resto fora
 /// depois de pago.
 ///
-/// Dois limiares, conforme o backend:
+/// Dois modos, conforme como o backend entrega o quadro — a escolha entre
+/// eles é dele, não deste tipo:
 ///
-/// - **`descartando`** (WGC, que empurra quadros e o que passa do limite é
-///   perdido): **7/8 do intervalo**. Com o limiar exato, a tremida natural
-///   dos vsyncs faz um monitor de 60 Hz num preset de 30 fps perder o quadro
-///   de 33,3 ms quando ele chega em 33,1 e só aceitar o de 50 ms — 20 fps em
-///   vez de 30. Com 7/8 a tolerância é de ~4 ms em 30 fps, e em 144 Hz o
-///   quadro aceito é o de 34,7 ms (28,8 fps).
-/// - **`puxando`** (DXGI, em que quem chama decide quando pedir): o intervalo
-///   exato. Esperar demais um milissegundo não perde nada — o quadro
-///   acumulado continua lá —, e a folga só faria ler mais que o preset.
+/// - **`descartando`**, para um backend que **empurra** quadros e o que passa
+///   do limite é perdido: **7/8 do intervalo**, não o intervalo exato. Com o
+///   limiar exato, a tremida natural dos vsyncs faz um monitor de 60 Hz num
+///   preset de 30 fps perder o quadro de 33,3 ms quando ele chega em 33,1 e
+///   só aceitar o de 50 ms — 20 fps em vez de 30. Com 7/8 a tolerância é de
+///   ~4 ms em 30 fps, e em 144 Hz o quadro aceito é o de 34,7 ms (28,8 fps).
+/// - **`puxando`**, para um backend em que **quem chama decide** quando
+///   pedir: o intervalo exato. Esperar demais um milissegundo não perde
+///   nada — o quadro acumulado continua lá —, e a folga só faria ler mais
+///   que o preset.
 ///
-/// Os instantes são `Duration` desde uma origem qualquer, fixa por sessão: o
-/// WGC passa o carimbo do próprio quadro (o mesmo relógio que o sistema usa
-/// para o `MinUpdateInterval`) e o DXGI passa um `Instant` local.
+/// Os instantes são `Duration` desde uma origem qualquer, fixa por sessão;
+/// cada backend escolhe a sua origem e qual dos dois modos usar — ver
+/// `win/wgc.rs` (empurra, `descartando`) e `win/dxgi.rs` (puxa, `puxando`)
+/// para quem usa qual hoje e por quê.
 #[derive(Debug, Clone, Copy)]
 struct Ritmo {
     /// `None` é sem limite (miniaturas: um quadro só, o primeiro que vier).
@@ -205,6 +218,28 @@ impl Backend {
     pub fn janela_recortada(self) -> bool {
         self == Backend::Dxgi
     }
+
+    /// Este backend **captura de verdade**, ou é só o nome de uma API que
+    /// ainda não tem implementação aqui?
+    ///
+    /// A pergunta existe porque compilar não é funcionar. O módulo `tela`
+    /// compila no macOS desde que passou para o cfg `tela_nativa`, mas o
+    /// `mac` é um esqueleto: o `abrir` recusa com uma frase e o `miniaturas`
+    /// devolve `None` para tudo. Quem responde ao seletor — o
+    /// `capacidades_de_tela`, em `tela/mod.rs` — precisa saber a diferença,
+    /// senão promete a grade de miniaturas nativa e entrega uma lista vazia
+    /// para sempre, em vez de deixar a web cair no `getDisplayMedia`.
+    ///
+    /// O `match` é exaustivo de propósito: backend novo não compila sem
+    /// responder a esta pergunta, e o dia em que `mac::abrir` parar de
+    /// devolver `Erro::Falha` é o dia de o `Sck` virar `true` — uma linha,
+    /// aqui, no mesmo módulo que se está implementando.
+    pub fn implementado(self) -> bool {
+        match self {
+            Backend::Wgc | Backend::Dxgi => true,
+            Backend::Sck => false,
+        }
+    }
 }
 
 /// Decide o backend uma vez por processo. A consulta de capacidade é barata,
@@ -261,18 +296,21 @@ pub fn abrir(alvo: Alvo, fps: u32) -> Result<Box<dyn Capturador>, Erro> {
 /// (janela minimizada, conteúdo protegido, monitor que sumiu, varredura
 /// cancelada): a grade mostra o ícone do app no lugar.
 ///
-/// A lista inteira num comando só porque no DXGI o quadro é do monitor: uma
-/// duplicação por monitor serve todas as janelas dele, em vez de uma por
-/// janela — e o DXGI não deixa duas duplicações do mesmo monitor conviverem.
+/// A lista inteira num comando só, e não uma chamada por fonte, porque um
+/// backend pode precisar agrupar fontes que compartilham a mesma sessão de
+/// captura por baixo — no DXGI, que só sabe duplicar o monitor inteiro, é
+/// exatamente isso: uma duplicação por monitor serve todas as janelas dele,
+/// em vez de uma por janela (ver `win/dxgi.rs`).
 ///
 /// **`cancelar` é o freio de mão**, e ele existe por causa do atraso ao ir ao
 /// ar. Uma varredura é sequencial e cada fonte custa uma sessão de captura
-/// inteira (dispositivo D3D novo, fila de quadros, laço de mensagens, e até
-/// meio segundo esperando a janela repintar): com dez janelas abertas ela
-/// leva mais de um segundo. Quando o usuário clica numa miniatura, a captura
-/// definitiva não pode ficar disputando o mesmo alvo com o resto da
-/// varredura — quem inicia levanta esta bandeira e a varredura desiste na
-/// fonte seguinte, devolvendo `None` para o que faltava.
+/// inteira — o preço exato depende do backend (dispositivo/contexto novo,
+/// fila de quadros, e até meio segundo esperando a fonte repintar; ver
+/// `win/dxgi.rs` e `win/wgc.rs`), mas com dez janelas abertas passa de um
+/// segundo. Quando o usuário clica numa miniatura, a captura definitiva não
+/// pode ficar disputando o mesmo alvo com o resto da varredura — quem inicia
+/// levanta esta bandeira e a varredura desiste na fonte seguinte, devolvendo
+/// `None` para o que faltava.
 pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>> {
     plataforma::miniaturas(alvos, cancelar)
 }

@@ -13,11 +13,15 @@
 //! o que foi capturado na sala do LiveKit, e as três juntas é que substituem
 //! o `getDisplayMedia` no app de desktop.
 //!
-//! Quem tem backend nativo é o cfg `tela_nativa`, posto pelo `build.rs`
+//! Quem **compila** este módulo é o cfg `tela_nativa`, posto pelo `build.rs`
 //! (Windows e macOS). Nos outros alvos a lista sai vazia e
 //! `capacidades_de_tela` responde `nativo: false` de propósito: a web trata
 //! isso como "sem backend nativo" e cai no `getDisplayMedia` de sempre, que é
 //! o caminho do navegador e do desenvolvimento em Linux.
+//!
+//! Compilar, porém, não é funcionar: o backend do macOS ainda é esqueleto, e
+//! por isso `nativo` **não** é o mesmo que `cfg(tela_nativa)` — ver
+//! `capacidades`.
 
 use serde::Serialize;
 
@@ -98,7 +102,8 @@ fn listar() -> Vec<Fonte> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capacidades {
-    /// Há backend nativo (Windows e macOS).
+    /// Há backend de captura que **funciona** nesta máquina — e não "o
+    /// módulo `tela` compilou neste alvo". Ver `capacidades`.
     pub nativo: bool,
     /// `"wgc"` (Windows 11, janela isolada), `"dxgi"` (Windows 10, recorte do
     /// monitor) ou `"sck"` (macOS, ScreenCaptureKit). `None` sem backend.
@@ -140,9 +145,23 @@ pub fn capacidades_de_tela() -> Capacidades {
     capacidades()
 }
 
+/// **O invariante:** `nativo` quer dizer "há backend de captura que funciona",
+/// nunca "o módulo `tela` compilou neste alvo". A web decide por ele entre a
+/// grade de miniaturas nossa e o `getDisplayMedia` do webview, e prometer a
+/// grade onde nada captura é entregar uma lista vazia para sempre — foi o que
+/// o macOS passou a fazer quando este módulo saiu do `#[cfg(windows)]` para o
+/// `tela_nativa` com o `captura::mac` ainda em esqueleto.
+///
+/// Por isso a resposta vem do backend (`Backend::implementado`), e não do
+/// `cfg`: no dia em que o ScreenCaptureKit entrar, o macOS vira `nativo: true`
+/// com tudo o que vem junto — backend, recorte, som, permissão — sem ninguém
+/// precisar lembrar deste arquivo.
 #[cfg(tela_nativa)]
 fn capacidades() -> Capacidades {
     let backend = captura::backend();
+    if !backend.implementado() {
+        return sem_captura_nativa();
+    }
     Capacidades {
         nativo: true,
         backend: Some(backend.nome()),
@@ -173,13 +192,23 @@ fn permissao() -> Permissao {
 
 #[cfg(not(tela_nativa))]
 fn capacidades() -> Capacidades {
+    sem_captura_nativa()
+}
+
+/// A resposta de quem não captura: ou o alvo nem tem o módulo (Linux, celular),
+/// ou tem e o backend dele ainda não funciona (macOS, hoje). É uma só porque
+/// para a web os dois casos são o mesmo caso — e duas cópias dela acabariam
+/// divergindo no campo que a web ainda não lê.
+///
+/// `backend: None` inclusive onde há um nome a dizer: o campo é "qual API está
+/// fazendo a captura", e aqui não há captura. Sem backend também não há som a
+/// levar junto nem autorização a pedir — quem captura neste alvo é o
+/// `getDisplayMedia` do webview, que negocia o consentimento dele por conta.
+fn sem_captura_nativa() -> Capacidades {
     Capacidades {
         nativo: false,
         backend: None,
         janela_recortada: false,
-        // Sem backend não há som a levar junto nem autorização a pedir: quem
-        // captura neste alvo é o `getDisplayMedia` do webview, que negocia o
-        // consentimento dele por conta.
         audio_do_sistema: false,
         permissao: Permissao::NaoPrecisa,
     }

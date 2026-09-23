@@ -17,6 +17,47 @@ mod windows;
 #[cfg(windows)]
 use self::windows as plataforma;
 
+// O macOS entra neste módulo desde que o `tela/mod.rs` passou a compilá-lo sob
+// o cfg `tela_nativa` (Windows **e** macOS), e a enumeração nativa de lá ainda
+// não existe: quem a escreve é o mesmo cartão do `SCShareableContent` que
+// preenche `captura/mac`. Até ele chegar, esta `plataforma` honesta — nada a
+// listar, nada a resolver — é o que faz o alvo do macOS compilar, em vez de a
+// fachada chamar funções de um módulo inexistente.
+//
+// Ninguém transmite por este caminho de qualquer forma: `captura::mac::abrir`
+// recusa com uma frase. O que se vê hoje no app de macOS é o `getDisplayMedia`
+// do webview, como antes deste módulo existir para o alvo: `capacidades_de_tela`
+// consulta `Backend::implementado()` e, com o backend do macOS ainda não
+// implementado, responde `nativo: false` — decisão do `tela/mod.rs`, não deste
+// arquivo.
+#[cfg(target_os = "macos")]
+mod macos {
+    use super::{Alvo, Fonte};
+
+    pub fn monitores() -> Vec<Fonte> {
+        Vec::new()
+    }
+
+    pub fn janelas() -> Vec<Fonte> {
+        Vec::new()
+    }
+
+    pub fn alvo(_id: &str) -> Option<Alvo> {
+        None
+    }
+
+    /// `false` porque nenhum id chega aqui: sem enumeração não há `Fonte` a
+    /// clicar. Responder `true` trocaria a recusa verdadeira — a da captura,
+    /// que diz que o backend do macOS não existe — por uma mentira ("restaure
+    /// a janela") sobre uma janela que ninguém escolheu.
+    pub fn minimizada(_id: &str) -> bool {
+        false
+    }
+}
+
+#[cfg(target_os = "macos")]
+use self::macos as plataforma;
+
 /// Os monitores ligados, com o principal em primeiro lugar.
 pub fn monitores() -> Vec<Fonte> {
     plataforma::monitores()

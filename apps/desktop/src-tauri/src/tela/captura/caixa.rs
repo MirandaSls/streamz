@@ -59,7 +59,9 @@ impl Caixa {
     ///
     /// `viva` é a checagem extra que só a plataforma sabe fazer — no WGC, "a
     /// thread de captura ainda está de pé?" —, e ela é consultada a cada volta
-    /// do laço, não só na entrada.
+    /// do laço, não só na entrada. Ela é chamada **com o mutex do quadro
+    /// seguro**: quem a implementa não pode tocar nesta `Caixa` lá dentro, sob
+    /// pena de travar o processo contra si mesmo.
     pub fn proximo(
         &self,
         limite: Duration,

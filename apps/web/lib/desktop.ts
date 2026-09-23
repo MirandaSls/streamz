@@ -490,9 +490,23 @@ export interface CapacidadesDeTela {
   backend: "wgc" | "dxgi" | null;
   /** Compartilhar uma janela mostra o que estiver por cima dela (DXGI). */
   janelaRecortada: boolean;
+  /** Dá para levar o som do sistema junto (loopback do WASAPI no Windows)? */
+  audioDoSistema: boolean;
+  /**
+   * O sistema exige autorização para capturar a tela, e ela está dada?
+   * `"naoPrecisa"` no Windows, que não tem esse eixo (quem está na sessão
+   * pode capturar a sessão) — ver `Permissao` em `tela/mod.rs`.
+   */
+  permissao: "naoPrecisa" | "concedida" | "faltando";
 }
 
-const SEM_CAPTURA: CapacidadesDeTela = { nativo: false, backend: null, janelaRecortada: false };
+const SEM_CAPTURA: CapacidadesDeTela = {
+  nativo: false,
+  backend: null,
+  janelaRecortada: false,
+  audioDoSistema: false,
+  permissao: "naoPrecisa",
+};
 
 /**
  * A captura nativa existe aqui? Fora do Tauri (ou num desktop sem Windows) a

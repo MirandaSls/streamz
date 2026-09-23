@@ -51,7 +51,10 @@
 	  **Não existe entitlement de captura de tela.** `com.apple.security.
 	  screen-capture` é lenda: a lista de entitlements da Apple não tem esse
 	  par, e por isso o `Entitlements.macos.plist` continua só com áudio e
-	  câmera. Quem controla isto é o TCC, por esta chave.
+	  câmera. Quem controla isto é o TCC — não por esta chave (que, como o
+	  parágrafo acima explica, provavelmente é ignorada), mas pela decisão
+	  binária que ele mantém por app: concedido ou não, sem texto nenhum de
+	  plist no meio.
 
 	  Duas consequências do TCC que o código precisa tratar, e que nenhum texto
 	  de plist resolve: a permissão só vale **depois de reiniciar o app**
