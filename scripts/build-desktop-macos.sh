@@ -49,6 +49,25 @@
 #     --senha-do-certificado-em <arq> lê a senha do `.p12` da primeira linha do
 #                                     arquivo. Sem ela: APPLE_CERTIFICATE_PASSWORD
 #                                     do ambiente, ou pergunta no terminal.
+#     --publicar                      depois de um build BEM-SUCEDIDO, publica a
+#                                     pasta de saída pela API, chamando o
+#                                     `scripts/enviar-macos.sh` (só admin da
+#                                     instância). Build que falha no meio derruba
+#                                     o script antes daqui (`set -e`), então
+#                                     nunca se publica um build quebrado.
+#     --login-em <arq>                arquivo de login do envio, para o
+#                                     `--publicar` rodar sem perguntar nada:
+#                                     1ª linha o e-mail (ou usuário), 2ª linha a
+#                                     senha. Fora do repositório e `chmod 600`,
+#                                     como a senha do `.p12`. Sem ele o envio usa
+#                                     STREAMZ_TOKEN do ambiente ou pergunta o
+#                                     login no fim.
+#     --notas "texto"                 notas da versão, repassadas ao envio.
+#     --api <url>                     base da API do envio (padrão: o do
+#                                     enviar-macos.sh).
+#
+# Tudo num comando só (build assinado + atualizador + publicação, sem digitar
+# nada): ver a seção macOS do apps/desktop/README.md.
 #
 # Ambiente (alternativa ao `--certificado`, é o que o CI usa):
 #     APPLE_CERTIFICATE           o `.p12` em base64
@@ -73,6 +92,11 @@ CHAVE=""
 SEM_FINDER=0
 CERTIFICADO=""
 ARQUIVO_SENHA=""
+PUBLICAR=0
+ARQUIVO_LOGIN=""
+NOTAS=""
+API_ENVIO=""
+ENVIAR="$REPO/scripts/enviar-macos.sh"
 
 # `while`/`shift` em vez de `for arg`: `--assinar-atualizador` consome o
 # argumento seguinte.
@@ -94,8 +118,21 @@ while [ $# -gt 0 ]; do
       if [ "$1" = --certificado ]; then CERTIFICADO="$2"; else ARQUIVO_SENHA="$2"; fi
       shift
       ;;
+    --login-em|--notas|--api)
+      if [ $# -lt 2 ]; then
+        echo "$1 precisa de um valor" >&2
+        exit 2
+      fi
+      case "$1" in
+        --login-em) ARQUIVO_LOGIN="$2" ;;
+        --notas) NOTAS="$2" ;;
+        --api) API_ENVIO="$2" ;;
+      esac
+      shift
+      ;;
+    --publicar) PUBLICAR=1 ;;
     --sem-finder) SEM_FINDER=1 ;;
-    -h|--help) sed -n '2,59p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,78p' "$0"; exit 0 ;;
     -*) echo "opção desconhecida: $1" >&2; exit 2 ;;
     *) REF="$1" ;;
   esac
@@ -104,6 +141,46 @@ done
 
 passo() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 falha() { printf '\033[1;31mERRO:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- publicação
+# Resolvido aqui, no primeiro segundo e antes de qualquer compilação, pelo mesmo
+# motivo do certificado: descobrir que o arquivo de login está errado só depois
+# de meia hora de cargo é o tipo de erro que faz a pessoa desistir de publicar.
+if [ "$PUBLICAR" = 0 ]; then
+  for sobrando in "--login-em:$ARQUIVO_LOGIN" "--notas:$NOTAS" "--api:$API_ENVIO"; do
+    [ -z "${sobrando#*:}" ] || falha "${sobrando%%:*} só faz sentido com --publicar."
+  done
+fi
+
+# O alerta é impresso duas vezes de propósito: agora (dá tempo de cancelar e
+# refazer com a chave) e de novo na hora do envio, quando já se passou meia hora
+# e ninguém lembra do que leu no começo.
+avisar_sem_atualizador() {
+  printf '\n\033[1;33m  ┌──────────────────────────── ATENÇÃO ────────────────────────────┐\033[0m\n'
+  printf '\033[1;33m  │\033[0m --publicar SEM --assinar-atualizador: vai só o .dmg.\n'
+  printf '\033[1;33m  │\033[0m O auto-update do Mac NÃO muda — quem já tem o app instalado\n'
+  printf '\033[1;33m  │\033[0m continua na versão velha, porque o atualizador precisa do\n'
+  printf '\033[1;33m  │\033[0m .app.tar.gz + .sig, que só o --assinar-atualizador gera.\n'
+  printf '\033[1;33m  │\033[0m Quase sempre você quer os dois: --assinar-atualizador <chave>.\n'
+  printf '\033[1;33m  └─────────────────────────────────────────────────────────────────┘\033[0m\n'
+}
+
+if [ "$PUBLICAR" = 1 ]; then
+  [ -x "$ENVIAR" ] || falha "não achei o $ENVIAR (é ele quem publica)."
+  if [ -n "$ARQUIVO_LOGIN" ]; then
+    # A conferência (formato, duas linhas, permissão) mora no enviar-macos.sh e
+    # é chamada daqui — duplicar a regra seria ter duas versões dela para
+    # manter, e a senha não é lida por este script em momento nenhum.
+    "$ENVIAR" --login-em "$ARQUIVO_LOGIN" --conferir-login
+  elif [ -z "${STREAMZ_TOKEN:-}" ]; then
+    # Sem arquivo e sem token, o envio termina pedindo login no terminal — o que
+    # só funciona se houver um. Sem terminal, isso morreria no fim do build.
+    [ -t 0 ] || falha "--publicar sem --login-em e sem STREAMZ_TOKEN precisa de um terminal para perguntar o login. Passe --login-em <arquivo> (1ª linha e-mail, 2ª senha, chmod 600)."
+    printf '\033[1;33maviso:\033[0m --publicar sem --login-em: o login vai ser perguntado no FIM do build.\n'
+    printf '        Para não precisar digitar nada: --login-em <arquivo>.\n'
+  fi
+  [ -n "$CHAVE" ] || avisar_sem_atualizador
+fi
 
 # ---------------------------------------------------------------- limpeza
 # Uma função só no `trap`, e armada logo no início: o script mexe em duas
@@ -637,10 +714,31 @@ if [ -n "$CHAVE" ]; then
 fi
 
 # Publicar direto daqui, sem SFTP nem .env (só admin da instância; ver
-# scripts/enviar-macos.sh e docs/PROCESSO-DE-DESENVOLVIMENTO.md §5.5):
-echo
-echo "Publicar pela API (pede login de admin da instância):"
-echo "  scripts/enviar-macos.sh \"$SAIDA\" --notas \"Correções e melhorias.\""
-if [ -z "$CHAVE" ]; then
-  echo "  (sem --assinar-atualizador só vai o .dmg; o auto-update do Mac não muda)"
+# scripts/enviar-macos.sh e docs/PROCESSO-DE-DESENVOLVIMENTO.md §5.5).
+#
+# Este é o ÚLTIMO passo do script, e é só por isso que ele não precisa perguntar
+# "o build deu certo?": com `set -e`, qualquer etapa anterior que falhe (cargo,
+# codesign, as conferências do .app e do .dmg) encerra o script antes de chegar
+# aqui. Nada de publicar um build quebrado.
+if [ "$PUBLICAR" = 1 ]; then
+  [ -n "$CHAVE" ] || avisar_sem_atualizador
+  ARGS_ENVIO=("$SAIDA")
+  [ -z "$ARQUIVO_LOGIN" ] || ARGS_ENVIO+=(--login-em "$ARQUIVO_LOGIN")
+  [ -z "$NOTAS" ] || ARGS_ENVIO+=(--notas "$NOTAS")
+  [ -z "$API_ENVIO" ] || ARGS_ENVIO+=(--api "$API_ENVIO")
+  passo "Publicando pela API"
+  # Sem `|| falha`: o enviar-macos.sh já explica o próprio erro, e o `set -e`
+  # propaga o código de saída. A pasta de saída continua no disco, então
+  # repetir só o envio é `scripts/enviar-macos.sh "$SAIDA" ...`.
+  "$ENVIAR" "${ARGS_ENVIO[@]}"
+else
+  echo
+  echo "Publicar pela API (pede login de admin da instância):"
+  echo "  scripts/enviar-macos.sh \"$SAIDA\" --notas \"Correções e melhorias.\""
+  echo
+  echo "Ou tudo num comando só, sem digitar login: repita este build com"
+  echo "  --publicar --login-em ~/.streamz/certificado-mac/login-da-api.txt"
+  if [ -z "$CHAVE" ]; then
+    echo "  (sem --assinar-atualizador só vai o .dmg; o auto-update do Mac não muda)"
+  fi
 fi
