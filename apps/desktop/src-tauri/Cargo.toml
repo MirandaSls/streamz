@@ -152,7 +152,30 @@ objc2-core-media = "0.3.2"
 objc2-core-video = "0.3.2"
 objc2-core-audio-types = "0.3.2"
 objc2-screen-capture-kit = "0.3.2"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "libc", "objc2-core-graphics", "objc2-core-foundation", "NSRunningApplication", "NSImage", "NSImageRep", "NSGraphicsContext"] }
+# As features de `NSResponder` para baixo são da Touch Bar da call (ver
+# `src/touch_bar.rs`): a barra, o item que embrulha uma view, e o botão com
+# cor de fundo — `NSButton` só existe no binding com `NSControl`, `NSView` e
+# `NSResponder` ligadas, porque é a cadeia de superclasses dele. Nenhuma crate
+# nova: é o mesmo `objc2-app-kit` que já estava aqui, com mais classes
+# geradas.
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "libc",
+    "objc2-core-graphics",
+    "objc2-core-foundation",
+    "NSRunningApplication",
+    "NSImage",
+    "NSImageRep",
+    "NSGraphicsContext",
+    "NSResponder",
+    "NSView",
+    "NSControl",
+    "NSButton",
+    "NSColor",
+    "NSTouchBar",
+    "NSTouchBarItem",
+    "NSCustomTouchBarItem",
+] }
 libc = "0.2"
 
 # Só no Linux: o `permission-request` e os ajustes de mídia do WebKitGTK (ver
