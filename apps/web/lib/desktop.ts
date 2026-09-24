@@ -484,10 +484,13 @@ export async function definirContadorNoIcone(total: number): Promise<void> {
 
 /** O que a captura nativa consegue nesta máquina (`capacidades_de_tela`). */
 export interface CapacidadesDeTela {
-  /** Há backend nativo — hoje, só no Windows. */
+  /** Há backend nativo — Windows e, agora, macOS (`sck`). */
   nativo: boolean;
-  /** `wgc` (Windows 11, janela isolada) ou `dxgi` (Windows 10, recorte do monitor). */
-  backend: "wgc" | "dxgi" | null;
+  /**
+   * `wgc` (Windows 11, janela isolada), `dxgi` (Windows 10, recorte do
+   * monitor) ou `sck` (macOS, ScreenCaptureKit).
+   */
+  backend: "wgc" | "dxgi" | "sck" | null;
   /** Compartilhar uma janela mostra o que estiver por cima dela (DXGI). */
   janelaRecortada: boolean;
   /** Dá para levar o som do sistema junto (loopback do WASAPI no Windows)? */
@@ -520,6 +523,47 @@ export async function capacidadesDeTela(): Promise<CapacidadesDeTela> {
     return await invoke<CapacidadesDeTela>("capacidades_de_tela");
   } catch {
     return SEM_CAPTURA;
+  }
+}
+
+/**
+ * Pede ao macOS a permissão de "Gravação de Tela" (só existe lá — no Windows
+ * `permissao` já vem `"naoPrecisa"`, ver `CapacidadesDeTela`).
+ *
+ * `true` quando a permissão já estava concedida; `false` quando o sistema
+ * **acabou de abrir** os Ajustes (ou o próprio diálogo) — nesse caso só vale
+ * depois de o usuário conceder ali **e reiniciar o app** (`reiniciarApp`),
+ * porque o macOS só relê a permissão no boot do processo.
+ *
+ * Fora do desktop (ou se a ponte falhar) devolve `true`: não há permissão a
+ * negociar, e um `false` aqui prenderia quem chama num aviso que nunca some.
+ */
+export async function pedirPermissaoDeTela(): Promise<boolean> {
+  if (!isTauri()) return true;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<boolean>("pedir_permissao_de_tela");
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Reinicia o app pelo `relaunch()` do `@tauri-apps/plugin-process` — o mesmo
+ * caminho que o auto-update usa depois de instalar a versão nova
+ * (`JanelaSplash.tsx`). Aqui serve para o macOS reler a permissão de
+ * "Gravação de Tela" (`pedirPermissaoDeTela`), que só é conferida no boot.
+ *
+ * Fora do desktop é no-op. Best-effort: se a ponte falhar, o usuário reinicia
+ * na mão.
+ */
+export async function reiniciarApp(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { relaunch } = await import("@tauri-apps/plugin-process");
+    await relaunch();
+  } catch {
+    // best-effort: o usuário reinicia na mão
   }
 }
 

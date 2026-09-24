@@ -174,6 +174,7 @@ pub fn run() {
             #[cfg(desktop)]
             pronto_para_sair,
             tela::capacidades_de_tela,
+            tela::pedir_permissao_de_tela,
             tela::fontes_de_tela,
             tela::miniaturas_de_tela,
             tela::preparar_tela,

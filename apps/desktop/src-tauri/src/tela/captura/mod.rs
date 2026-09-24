@@ -19,16 +19,6 @@
 //! mesmo caminho da transmissão) é a do plano da sessão anterior, que também
 //! escreveu a enumeração.
 
-// **Temporário, e só fora do Windows.** A metade neutra deste módulo — a
-// `Caixa`, o `Ritmo`, o `copiar_sem_padding` e o `intervalo_do_fps` — existe
-// para os backends usarem, e hoje quem os usa é só o `win`: o `mac` é um
-// esqueleto que recusa todo `abrir`. Sem isto, o build do macOS sai com uma
-// dúzia de avisos de `dead_code` a cada compilação, e aviso que se aprende a
-// ignorar esconde o aviso que importa. Sai quando o ScreenCaptureKit entrar,
-// porque aí o `mac` consome tudo isto — é o mesmo arranjo, e pelo mesmo
-// motivo, do `#![cfg_attr(...)]` no topo de `tela/audio/mod.rs`.
-#![cfg_attr(not(windows), allow(dead_code))]
-
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
@@ -164,6 +154,7 @@ impl Ritmo {
         }
     }
 
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn puxando(fps: u32) -> Self {
         Self {
             minimo: Some(intervalo_do_fps(fps)),
@@ -193,10 +184,12 @@ fn intervalo_do_fps(fps: u32) -> Duration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     /// Windows Graphics Capture sem borda (Windows 11).
+    #[cfg_attr(not(windows), allow(dead_code))]
     Wgc,
     /// DXGI Desktop Duplication com recorte por janela (Windows 10).
+    #[cfg_attr(not(windows), allow(dead_code))]
     Dxgi,
-    /// ScreenCaptureKit (macOS 12.3+).
+    /// ScreenCaptureKit (macOS 13+).
     Sck,
 }
 
@@ -220,24 +213,22 @@ impl Backend {
     }
 
     /// Este backend **captura de verdade**, ou é só o nome de uma API que
-    /// ainda não tem implementação aqui?
+    /// não serve nesta máquina?
     ///
-    /// A pergunta existe porque compilar não é funcionar. O módulo `tela`
-    /// compila no macOS desde que passou para o cfg `tela_nativa`, mas o
-    /// `mac` é um esqueleto: o `abrir` recusa com uma frase e o `miniaturas`
-    /// devolve `None` para tudo. Quem responde ao seletor — o
-    /// `capacidades_de_tela`, em `tela/mod.rs` — precisa saber a diferença,
-    /// senão promete a grade de miniaturas nativa e entrega uma lista vazia
-    /// para sempre, em vez de deixar a web cair no `getDisplayMedia`.
+    /// A pergunta existe porque compilar não é funcionar. O ScreenCaptureKit
+    /// só captura de verdade a partir do macOS 13: é dali que o áudio do
+    /// sistema e o `SCStream` ficam estáveis. Abaixo disso `implementado`
+    /// devolve `false`, e quem responde ao seletor — o `capacidades_de_tela`,
+    /// em `tela/mod.rs` — precisa saber a diferença, senão promete a grade de
+    /// miniaturas nativa e entrega uma lista vazia para sempre, em vez de
+    /// deixar a web cair no `getDisplayMedia`.
     ///
     /// O `match` é exaustivo de propósito: backend novo não compila sem
-    /// responder a esta pergunta, e o dia em que `mac::abrir` parar de
-    /// devolver `Erro::Falha` é o dia de o `Sck` virar `true` — uma linha,
-    /// aqui, no mesmo módulo que se está implementando.
+    /// responder a esta pergunta.
     pub fn implementado(self) -> bool {
         match self {
             Backend::Wgc | Backend::Dxgi => true,
-            Backend::Sck => false,
+            Backend::Sck => plataforma::sistema_atende(),
         }
     }
 }

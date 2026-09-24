@@ -191,13 +191,26 @@ scripts/build-desktop-macos.sh [<ref>] … --publicar [--login-em <arquivo>] [--
 ```
 
 Roda **num Mac** — o `.app` precisa de `codesign`, `lipo` e `hdiutil`, que só o
-macOS tem; não há caminho a partir do servidor Linux. Pré-requisitos: Command
-Line Tools do Xcode, rustup com Rust ≥ 1.85 (o `Cargo.lock` tem `getrandom 0.4`,
-edição 2024), Node ≥ 20, pnpm 9. O app de Mac não compila o
-`livekit`/`webrtc-sys`; quando a captura nativa do macOS (ScreenCaptureKit)
-entrar, ele volta, e aí passa a exigir Xcode/Command Line Tools 15 ou mais novo
-(Apple clang 15) — com as CLT 14 o build para no `webrtc-sys`. Usa uma
-worktree própria (`.claude/worktrees/build-desktop-macos`) e sai em
+macOS tem; não há caminho a partir do servidor Linux. Pré-requisitos: Xcode ou
+Command Line Tools **≥ 15** (Apple clang 15), rustup com Rust ≥ 1.85 (o
+`Cargo.lock` tem `getrandom 0.4`, edição 2024), Node ≥ 20, pnpm 9. O app de Mac
+**compila `livekit`/`webrtc-sys`** — a captura de tela nativa por
+ScreenCaptureKit (`objc2-screen-capture-kit`, ver Cargo.toml/build.rs) só
+existe no SDK do macOS 14+, que só entra com as Command Line Tools 15; com CLT
+14 o build para no meio da compilação sem dizer que a causa é a versão do
+Xcode. `scripts/build-desktop-macos.sh` confere a versão do Apple clang logo no
+início e aborta com a instrução de instalar (`xcode-select --install` ou o
+Xcode pela App Store), em vez de deixar o erro aparecer minutos depois no meio
+do `cargo`. O `.app` gerado continua abrindo a partir do macOS **12.3**
+(`MACOSX_DEPLOYMENT_TARGET`, que o script exporta sozinho quando não vem do
+ambiente — espelha `bundle.macOS.minimumSystemVersion` do
+`tauri.macos.conf.json`): a captura nativa em si só existe a partir do 13, e
+abaixo disso o app cai no `getDisplayMedia` do navegador. No primeiro uso da
+captura de tela o macOS pede a permissão de **Gravação de Tela** (TCC) — ao
+contrário de microfone/câmera, essa permissão só passa a valer depois de
+**reiniciar o app** (comportamento do próprio TCC, não algo que dê para
+contornar daqui). Usa uma worktree própria
+(`.claude/worktrees/build-desktop-macos`) e sai em
 `.claude/saida-desktop/<versão>-<commit>-macos/`.
 
 `--assinar-atualizador <chave>` liga `tauri.release.conf.json`

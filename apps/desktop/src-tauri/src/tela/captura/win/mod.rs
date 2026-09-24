@@ -51,6 +51,11 @@ fn hmonitor_de(bruto: u64) -> HMONITOR {
     HMONITOR(bruto as usize as *mut c_void)
 }
 
+/// Todo Windows com WGC ou DXGI serve; a escolha entre os dois é o `backend()`.
+pub fn sistema_atende() -> bool {
+    true
+}
+
 /// Qual dos dois backends esta máquina usa (ver o cabeçalho). Quem guarda a
 /// resposta por processo é o `captura::backend()`.
 pub fn backend() -> Backend {
