@@ -6,17 +6,11 @@ import {
   Eye,
   EyeOff,
   HeadphoneOff,
-  Maximize,
-  Maximize2,
   MicOff,
-  Minimize2,
   Monitor,
   MonitorX,
-  MoreHorizontal,
   Play,
   UserPlus,
-  Volume2,
-  VolumeX,
 } from "@/components/ui/icones";
 import type { TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
@@ -31,13 +25,12 @@ import {
   suportaTelaCheia,
 } from "@/components/voice/fullscreen";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
-import { abrirMenuDeParticipante, abrirVolumeDe } from "@/components/voice/participant-menu";
+import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
 import { usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
-import { useVoice } from "@/stores/voice";
 
 /**
  * **Um** participante do palco: o tile com vídeo/avatar, o avatar solto da
@@ -180,7 +173,7 @@ export function AvatarDeChamada({
         aria-label={nome}
         onContextMenu={(e) => {
           e.preventDefault();
-          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
+          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
         }}
         className={`relative inline-grid rounded-full transition ${
           state.reconnecting ? "opacity-50" : ""
@@ -333,8 +326,6 @@ export function VoiceTile({
   /** clique simples segurado à espera do segundo (ver `ESPERA_DO_DUPLO_CLIQUE`). */
   const cliquePendente = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(cliquePendente.current), []);
-  const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
-  const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
   // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
   // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
@@ -404,9 +395,14 @@ export function VoiceTile({
       }
       onContextMenu={(e) => {
         e.preventDefault();
+        if (tela && sou) {
+          abrirMenuDaMinhaTela(e.clientX, e.clientY);
+          return;
+        }
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, {
           sou,
           channelId,
+          noPalco: true,
           tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
         });
       }}
@@ -726,81 +722,18 @@ export function VoiceTile({
         {state.user.bot && <TagDeBot caixaEstreita={rotuloPequeno} />}
       </span>
 
-      {/* Ações do hover, no canto superior direito — **só no card de pessoa**.
-          Sobre uma transmissão o Discord não desenha fileira nenhuma: nas
-          prints `p2`/`p4`/`p6` o card de tela tem o selo "AO VIVO" e mais
-          nada, e no destaque (`p3`, `p5`) a transmissão fica limpa de ponta a
-          ponta. Seis ícones por cima do que a pessoa abriu para ser lido
-          tapavam justamente o conteúdo.
+      {/* Sem fileira de botões no hover — nem no card de pessoa, nem no de
+          tela. Paridade com o Discord (prints `2.png`/`3.png`): o tile de
+          pessoa não tem NENHUM botão no topo, só o menu de botão direito —
+          igual ao card de tela, que já não desenhava fileira nenhuma (o selo
+          "AO VIVO" é o único elemento fixo dele).
 
-          As funções não sumiram, mudaram de lugar — e é o lugar do Discord:
-          - **Parar transmissão** mora na barra de controles, onde o mesmo
-            botão que iniciou a tela a encerra (`ScreenShareButton`); na `p2`
-            o Discord também põe o "Parar de compartilhar" fora do card;
-          - **Parar de assistir** está no menu de contexto do tile (botão
-            direito), que o `onContextMenu` logo acima já abre com o item;
-          - **Palco** é o clique no próprio card, e **tela cheia** o duplo
-            clique (os dois já eram os gestos, ver `ESPERA_DO_DUPLO_CLIQUE`) —
-            mais o par de ícones do canto do palco, em `CallStage`. */}
-      {!semAcoes && !tela && (
-        // `z-20` acima do `z-10` das faixas do palco (cabeçalho do `CallStage`,
-        // controles): elas são transparentes, mas comem o ponteiro, e sem isto
-        // o clique em "Tela cheia" ia parar no cabeçalho invisível. O tile é
-        // `relative` sem `z-index`, então não abre contexto de empilhamento e
-        // os dois números se comparam de verdade.
-        <div
-          className={`absolute right-1 top-1 z-20 flex items-center gap-1 transition focus-within:opacity-100 ${
-            pairando ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {!sou && (
-            <>
-              <AcaoDoTile
-                label={`Volume de ${nome}`}
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
-                }}
-              >
-                <Volume2 size={14} />
-              </AcaoDoTile>
-              <AcaoDoTile
-                label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
-                onClick={() => toggleSilenciado(state.user.id)}
-              >
-                <VolumeX size={14} className={silenciado ? "text-status-danger" : undefined} />
-              </AcaoDoTile>
-            </>
-          )}
-          <AcaoDoTile
-            label={grande ? "Sair do palco" : "Colocar no palco"}
-            onClick={() => onFocar(tile.key)}
-          >
-            {grande ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </AcaoDoTile>
-          {!compacto && podeTelaCheia && (
-            <AcaoDoTile
-              label="Tela cheia"
-              onClick={() => void alternarTelaCheiaDe(caixa.current)}
-            >
-              <Maximize size={14} />
-            </AcaoDoTile>
-          )}
-          <AcaoDoTile
-            label={`Mais opções de ${nome}`}
-            onClick={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              abrirMenuDeParticipante(r.left, r.bottom + 4, state.user, {
-                sou,
-                channelId,
-                tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
-              });
-            }}
-          >
-            <MoreHorizontal size={14} />
-          </AcaoDoTile>
-        </div>
-      )}
+          As funções não sumiram, mudaram de lugar:
+          - clique simples foca a pessoa no palco, duplo clique alterna tela
+            cheia (os mesmos gestos de sempre, ver `ESPERA_DO_DUPLO_CLIQUE`);
+          - volume, silenciar, colocar/tirar do palco, tela cheia e mais
+            opções migraram para o menu de contexto (`onContextMenu` acima),
+            que agora é o único caminho de ação do card de pessoa. */}
     </div>
   );
 }
