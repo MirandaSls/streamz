@@ -108,7 +108,9 @@ type Compartilhado = Arc<Mutex<Estado>>;
 /// Trava sem entrar em pânico: um callback que tenha caído no meio (não deve,
 /// mas o `catch_unwind` existe por isso) não pode calar o áudio de vez.
 fn travar(estado: &Mutex<Estado>) -> MutexGuard<'_, Estado> {
-    estado.lock().unwrap_or_else(|envenenado| envenenado.into_inner())
+    estado
+        .lock()
+        .unwrap_or_else(|envenenado| envenenado.into_inner())
 }
 
 struct IvarsDaSaida {
