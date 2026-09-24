@@ -12,6 +12,7 @@ import {
   hasPermission,
   VOICE_FLAGS_PADRAO,
   WS_EVENTS,
+  ehIdentidadeDeTela,
   identidadeDeTela,
   type VoiceFlags,
   type VoiceModerarPayload,
@@ -471,7 +472,7 @@ export class VoiceService {
     await this.store.join(channelId, userId, flagsPermitidas);
     await this.broadcast(channelId, channel.guildId, userId, flagsPermitidas, true);
     if (channel.guildId) {
-      this.reaplicarModeracaoSeHouver(channelId, channel.guildId, userId, access.permissions);
+      this.reaplicarModeracao(channelId, channel.guildId, userId, access.permissions);
     }
     return channel;
   }
@@ -584,7 +585,7 @@ export class VoiceService {
     const channel = await this.canal(channelId);
     await this.broadcast(channelId, channel?.guildId ?? null, userId, permitidas, true);
     if (channel?.guildId) {
-      this.reaplicarModeracaoSeHouver(channelId, channel.guildId, userId, access.permissions);
+      this.reaplicarModeracao(channelId, channel.guildId, userId, access.permissions);
     }
     return membro;
   }
@@ -708,28 +709,85 @@ export class VoiceService {
   }
 
   /**
-   * Fecha a corrida do token emitido **antes** do silêncio: quem pediu o token,
-   * foi silenciado e só então entrou chega ao LiveKit com o microfone liberado.
-   * Reaplicar no join/update, quando há algo imposto, corrige isso. Dispara e
-   * esquece — não pode atrasar nem derrubar a entrada na sala.
+   * Fecha a corrida do token emitido **antes** de uma mudança de moderação:
+   * quem pediu o token e só depois foi silenciado (ou liberado) chega ao
+   * LiveKit com a permissão velha. Por isso aplica **sempre** o estado atual,
+   * não só quando há algo imposto — liberar alguém também precisa chegar ao
+   * `updateParticipant`, senão quem foi desmutado no servidor enquanto ainda
+   * não tinha entrado ficaria com o microfone preso até sair e voltar da sala.
+   * Dispara e esquece — não pode atrasar nem derrubar a entrada na sala.
+   *
+   * Cobre quem passa por `voice.join`/`voice.update`. Quem reconecta direto no
+   * LiveKit com o token de 1h ainda válido, sem mandar nenhum dos dois, só é
+   * pego pelo webhook `participant_joined` (`aoEntrarNoLivekit`, abaixo).
    */
-  private reaplicarModeracaoSeHouver(
+  private reaplicarModeracao(
     channelId: string,
     guildId: string,
     userId: string,
     permissions: number,
   ): void {
     void this.moderacaoDe(userId, guildId)
-      .then((moderacao) =>
-        moderacao.serverMute || moderacao.serverDeaf
-          ? this.aplicarPermissaoNaSala(channelId, userId, permissions, moderacao)
-          : undefined,
-      )
+      .then((moderacao) => this.aplicarPermissaoNaSala(channelId, userId, permissions, moderacao))
       .catch((e) =>
         this.logger.warn(
           `Falha ao reaplicar moderação de voz de ${userId}: ${e instanceof Error ? e.message : String(e)}`,
         ),
       );
+  }
+
+  /**
+   * Chamado pelo webhook do LiveKit no evento `participant_joined` (o
+   * controller que decodifica o webhook fica em outro arquivo).
+   *
+   * O token do LiveKit vale 1h e não pode ser a **única** barreira contra
+   * moderação: um cliente alterado guarda o token e reconecta direto no
+   * LiveKit sem nunca mandar `voice.join`/`voice.update`, pulando
+   * `reaplicarModeracao` de vez. E o caminho inverso também vaza — se o
+   * moderador libera alguém enquanto ele ainda não tinha entrado no LiveKit,
+   * `aplicarPermissaoNaSala` bate em `not_found` e a liberação se perde até o
+   * próximo join/update. Este método é a rede que fecha os dois buracos:
+   * roda de novo a mesma checagem de acesso e aplica a permissão **sempre**
+   * (restringe ou libera), a cada entrada real na sala.
+   *
+   * Nunca lança: o controller do webhook responde 200 ao LiveKit de qualquer
+   * forma, e uma falha aqui só atrasa a moderação até o próximo evento.
+   */
+  async aoEntrarNoLivekit(sala: string, identity: string): Promise<void> {
+    // só sala de canal de servidor tem moderação; `dm:` não tem moderador
+    if (!sala.startsWith("voice:")) return;
+    // a ponte de bots (`bot:<snowflake>`) e o participante de tela (`<userId>#tela`)
+    // não assinam nada no LiveKit — nada aqui se aplica a eles
+    if (identity.startsWith("bot:") || ehIdentidadeDeTela(identity)) return;
+    const channelId = sala.slice("voice:".length);
+    try {
+      const channel = await this.canal(channelId);
+      if (!channel || !channel.guildId || channel.type !== "VOICE") return;
+      let access;
+      try {
+        access = await this.guilds.assertCanViewChannel(identity, channelId);
+      } catch (e) {
+        // perdeu o acesso ao canal com o token do LiveKit ainda dentro da 1h:
+        // o webhook é a garantia de que a conexão não sobrevive à perda de acesso
+        this.logger.warn(
+          `${identity} entrou em ${sala} sem mais acesso ao canal — removendo: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+        await this.removerDaSala(sala, identity);
+        return;
+      }
+      const moderacao = await this.moderacaoDe(identity, channel.guildId);
+      // sempre, mesmo sem moderação: é o que libera quem foi desmutado
+      // enquanto ainda não estava conectado ao LiveKit
+      await this.aplicarPermissaoNaSala(channelId, identity, access.permissions, moderacao);
+    } catch (e) {
+      this.logger.warn(
+        `Falha ao processar participant_joined de ${identity} em ${sala}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
   }
 
   /** Sai da sala. Devolve o canal quando havia mesmo o que sair. */

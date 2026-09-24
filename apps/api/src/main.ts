@@ -13,7 +13,15 @@ async function bootstrap() {
     // Log estruturado desde o boot: erro de validação de ambiente também sai
     // no mesmo formato que o agregador entende (ver common/logger.ts).
     logger: new StructuredLogger(),
+    rawBody: true,
   });
+
+  // Substitui o parser JSON padrão do Nest (que só registra o seu se não achar
+  // um middleware `jsonParser` já aplicado) para continuar aceitando
+  // `application/json` e também aceitar `application/webhook+json`, o
+  // content-type que o LiveKit manda no webhook — o `WebhookReceiver` valida o
+  // sha256 do corpo cru, e sem isso `req.rawBody` nunca é preenchido.
+  app.useBodyParser("json", { type: ["application/json", "application/webhook+json"] });
 
   // Atrás de proxy (Caddy, Railway, Fly) o IP visto pelo Node é o do proxy.
   // Sem `trust proxy`, `req.ip` colapsa todo mundo num IP só e o rate limit

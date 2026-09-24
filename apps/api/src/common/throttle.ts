@@ -135,3 +135,13 @@ export function rastreioPorUsuario(req: Record<string, unknown>): string {
 export const AUTOCOMPLETE_THROTTLE = Throttle({
   default: { ttl: seconds(60), limit: 600, getTracker: rastreioPorUsuario },
 });
+
+// ── voz ──
+/**
+ * Webhook do LiveKit: entrada/saída e faixa de cada participante geram um
+ * evento próprio, e tudo chega de poucos IPs (os do servidor de mídia) — uma
+ * sala cheia sozinha estouraria o teto padrão por IP. Quem autentica é a
+ * assinatura do payload, não o IP; este teto só limita quem martela a rota com
+ * assinatura inválida.
+ */
+export const LIVEKIT_WEBHOOK_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 1200 } });

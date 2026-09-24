@@ -285,9 +285,29 @@ describe("VoiceService.moderarVoz", () => {
     expect(updateParticipantMock).not.toHaveBeenCalled();
   });
 
+  it("join de quem não tem nenhuma moderação imposta também chama updateParticipant — libera o microfone", async () => {
+    // `reaplicarModeracao` roda sempre no join, não só quando há mute/deaf
+    // gravado: fecha a corrida de quem pegou o token antes de ser liberado.
+    // Sem moderação nenhuma, o efeito é liberar (microfone continua entrando).
+    const { voice } = servico(0);
+
+    await voice.join("ana", "voz-1");
+
+    await vi.waitFor(() => expect(updateParticipantMock).toHaveBeenCalledTimes(1));
+    const [sala, identity, options] = updateParticipantMock.mock.calls[0];
+    expect(sala).toBe("voice:voz-1");
+    expect(identity).toBe("ana");
+    expect(options.permission.canPublishSources).toContain(TrackSource.MICROPHONE);
+  });
+
   it("alvo em voz: mutar grava no banco e tira o microfone no LiveKit", async () => {
     const { voice, guildMemberUpdate, emitToGuild } = servico(Permission.MUTE_MEMBERS);
     await voice.join("ana", "voz-1");
+    // o join também reaplica moderação (dispara e esquece); espera essa
+    // chamada assentar antes de zerar o mock, senão ela se mistura com a do
+    // moderarVoz abaixo e a contagem de 1 chamada falha por acidente
+    await vi.waitFor(() => expect(updateParticipantMock).toHaveBeenCalledTimes(1));
+    updateParticipantMock.mockClear();
     emitToGuild.mockClear();
 
     await voice.moderarVoz("dono", "g1", { userId: "ana", mute: true });
@@ -310,6 +330,10 @@ describe("VoiceService.moderarVoz", () => {
   it("alvo em voz: ensurdecer tira canSubscribe no LiveKit", async () => {
     const { voice } = servico(Permission.DEAFEN_MEMBERS);
     await voice.join("ana", "voz-1");
+    // mesmo motivo do teste de mutar: isola a chamada do moderarVoz da
+    // reaplicação fire-and-forget que o próprio join dispara
+    await vi.waitFor(() => expect(updateParticipantMock).toHaveBeenCalledTimes(1));
+    updateParticipantMock.mockClear();
 
     await voice.moderarVoz("dono", "g1", { userId: "ana", deaf: true });
 
