@@ -41,6 +41,8 @@ import { useMessages } from "@/stores/messages";
 import { useAutoIdle } from "@/stores/presence";
 import { useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+// carrega o efeito colateral da Touch Bar do Mac (liga só dentro do app Tauri no Mac)
+import "@/stores/touch-bar";
 
 /**
  * Layout de 3 colunas do app (ver `design.md`).

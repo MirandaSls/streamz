@@ -69,21 +69,18 @@ export default function ScreenShareButton({
 
   useEffect(conhecerCapacidades, []);
 
-  // "Alterar a Transmissão" (menu da minha tela no palco). O botão não tinha
-  // caminho de troca — no ar, o clique dele para a tela —, então a troca é
-  // reabrir o mesmo seletor com a transmissão no ar: ir ao ar de novo já
-  // substitui a captura anterior (`publicarTela` encerra a velha; no desktop o
-  // Rust para a atual antes de abrir a nova, e `prepararTelaNativa` não
-  // pré-conecta um segundo `#tela` com `screenOn`). Com a tela fora do ar o
-  // pedido é ignorado: o menu que o dispara só existe sobre a minha tela.
+  // "Alterar a Transmissão" (menu da minha tela no palco) e o botão de tela da
+  // Touch Bar do Mac (`stores/touch-bar.ts`) pedem o mesmo seletor por aqui.
+  // No ar, reabrir substitui a captura anterior (`publicarTela` encerra a
+  // velha; no desktop o Rust para a atual antes de abrir a nova, e
+  // `prepararTelaNativa` não pré-conecta um segundo `#tela` com `screenOn`).
+  // Fora do ar é o caminho de **começar** a transmitir sem clicar no botão —
+  // a Touch Bar só faz este pedido quando `screenOn` é falso (ligada, ela
+  // chama `pararTela()` direto), e o menu só existe sobre a minha tela já no
+  // ar; nenhum dos dois chamadores pede fora de hora, então o guard de
+  // `screenOn` que existia aqui só quebraria o caminho novo.
   // Só um botão atende mesmo com vários montados — ver `pedido-de-troca-de-tela`.
-  useEffect(
-    () =>
-      aoPedirTrocaDeTela(() => {
-        if (useVoice.getState().screenOn) setSeletor(true);
-      }),
-    [],
-  );
+  useEffect(() => aoPedirTrocaDeTela(() => setSeletor(true)), []);
 
   const acionar = () => {
     // `isTauri()` no clique, não na renderização: o valor não muda em runtime e
