@@ -12,6 +12,7 @@
 use std::time::Duration;
 
 use objc2::rc::autoreleasepool;
+use objc2_app_kit::{NSApplicationActivationPolicy, NSRunningApplication};
 use objc2_screen_capture_kit::{SCDisplay, SCWindow};
 
 use crate::tela::captura::Alvo;
@@ -115,10 +116,12 @@ pub fn janelas() -> Vec<Fonte> {
         return Vec::new();
     }
     let mut achadas = autoreleasepool(|_| {
-        // `conteudo` pede só as janelas na tela: minimizada ou em outro Space
-        // não entrega quadro, e oferecer um retângulo preto é pior que não
-        // oferecer.
-        let Some(conteudo) = sck::conteudo(LIMITE) else {
+        // O conteúdo **completo**, e não só o que está na tela: com o
+        // `onScreenWindowsOnly` a lista perdia toda janela que não estivesse
+        // no Space visível agora — a de outro Space, a de um app em tela
+        // cheia noutro monitor, a minimizada —, e o Discord oferece todas.
+        // Quem separa o que vale oferecer é o `descrever_janela`.
+        let Some(conteudo) = sck::conteudo_completo(LIMITE) else {
             return Vec::new();
         };
         // SAFETY: getter sem efeito colateral de um SCShareableContent válido.
@@ -149,9 +152,6 @@ fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
         if j.windowLayer() != 0 {
             return None;
         }
-        if !j.isOnScreen() {
-            return None;
-        }
 
         let frame = j.frame();
         let largura_pt = frame.size.width;
@@ -168,15 +168,20 @@ fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
 
         // Janela sem app dono é do próprio servidor de janelas — não há o que
         // mostrar como "de quem é", e nunca é algo que o usuário escolheria.
+        // O próprio Streamz **entra**, como o Discord faz com ele mesmo: o
+        // espelho infinito só existe ao transmitir a tela inteira, e aí quem
+        // tira o Streamz do quadro é o filtro da captura (`sck::meu_app`).
         let dono = j.owningApplication()?;
         let pid = dono.processID();
-        // Não oferecer o próprio Streamz: transmitir a si mesmo é o túnel de
-        // espelhos, e o usuário nunca quer isso.
-        if i64::from(pid) == i64::from(std::process::id()) {
-            return None;
-        }
         let bundle = dono.bundleIdentifier().to_string();
         if APPS_DO_SISTEMA.contains(&bundle.as_str()) {
+            return None;
+        }
+        // Fora da tela (outro Space, minimizada, app escondido) só a janela de
+        // um app "de Dock". Agentes de barra de menus e serviços de fundo
+        // guardam janelas de camada 0 com título que nunca aparecem — só na
+        // tela elas eram cortadas de graça, e é aqui que continuam cortadas.
+        if !j.isOnScreen() && !app_regular(pid) {
             return None;
         }
 
@@ -199,6 +204,14 @@ fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
             principal: false,
         })
     }
+}
+
+/// O app é dos que têm ícone no Dock e janela de verdade (`Regular`), e não um
+/// agente (`Accessory`) ou processo de fundo (`Prohibited`)? Processo que já
+/// saiu responde `false`: a janela dele vai sumir da lista na próxima volta.
+fn app_regular(pid: libc::pid_t) -> bool {
+    NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
+        .is_some_and(|app| app.activationPolicy() == NSApplicationActivationPolicy::Regular)
 }
 
 /// Pontos × escala, arredondado. Valor negativo ou NaN vira 0 (o `as u32` de
@@ -226,9 +239,10 @@ pub fn alvo(id: &str) -> Option<Alvo> {
 /// A fonte é uma janela que **existe mas não está na tela** — minimizada no
 /// Dock, escondida (⌘H) ou em outro Space?
 ///
-/// A enumeração já esconde essas (não há quadro para capturar), mas entre
-/// listar e clicar cabe um ⌘M. Pergunta-se ao `conteudo_completo` — o que
-/// inclui janelas fora da tela — e lê-se o `isOnScreen` da janela: o mesmo
+/// A enumeração **oferece** essas (o Discord oferece, e o usuário procura a
+/// janela onde quer que ela esteja), mas elas não desenham: é na hora de
+/// transmitir que a pergunta importa. Pergunta-se ao `conteudo_completo` — o
+/// que inclui janelas fora da tela — e lê-se o `isOnScreen` da janela: o mesmo
 /// framework que vai capturar diz se ela está desenhando. A alternativa (a
 /// janela sumiu do `conteudo` só-na-tela) confundiria "minimizada" com
 /// "fechada", e fechada é outra recusa — a do `alvo`, que devolve `None`.
@@ -250,10 +264,6 @@ pub fn minimizada(id: &str) -> bool {
         let Some(conteudo) = sck::conteudo_completo(LIMITE) else {
             return false;
         };
-        match sck::achar_janela(&conteudo, janela) {
-            // SAFETY: getter sem efeito colateral de um SCWindow válido.
-            Some(j) => !unsafe { j.isOnScreen() },
-            None => false,
-        }
+        sck::janela_fora_da_tela(&conteudo, janela)
     })
 }

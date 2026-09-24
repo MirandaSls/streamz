@@ -10,7 +10,7 @@ import {
   type PublicUser,
 } from "@streamz/shared";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
-import { AppWindow, Monitor, MonitorX, MoreHorizontal } from "@/components/ui/icones";
+import { ExternalLink, MonitorX, RefreshCw } from "@/components/ui/icones";
 import { silencioDoServidorDe } from "@/hooks/useSilencioDoServidor";
 import { abrirJanelaSolta, podeAbrirJanelaSolta } from "@/lib/janela-solta";
 import { mencionar as entregarMencao } from "@/lib/mencoes";
@@ -42,6 +42,7 @@ import { useGuilds } from "@/stores/guilds";
 import { chaveDaJanela, type TipoDeJanelaDeVoz } from "@/stores/janelas-de-voz";
 import { useNotas } from "@/stores/notas";
 import { minhasRegrasNoCanalAgora, usePermissions } from "@/stores/permissions";
+import { usePreferenciasDeTransmissao } from "@/stores/preferencias-de-transmissao";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui, type MenuItem } from "@/stores/ui";
@@ -288,7 +289,7 @@ export function abrirMenuDeParticipante(
  * Discord.
  */
 export function abrirMenuDaMinhaTela(x: number, y: number): void {
-  const voz = useVoice.getState();
+  const prefs = usePreferenciasDeTransmissao.getState();
   const itens: MenuItem[] = [
     {
       label: "Parar de transmitir",
@@ -300,67 +301,66 @@ export function abrirMenuDaMinhaTela(x: number, y: number): void {
       // o seletor é estado do `ScreenShareButton`; o pedido chega a ele por
       // `lib/pedido-de-troca-de-tela`
       label: "Alterar a Transmissão",
-      icon: <Monitor size={18} />,
+      icon: <RefreshCw size={18} />,
       onSelect: pedirTrocaDeTela,
     },
   ];
 
   // a chave é a do meu tile de tela (`<meuId>:tela`), a mesma que o palco usa
   const eu = useAuth.getState().user;
+  itens.push({ separator: true });
   if (eu && podeAbrirJanelaSolta()) {
     itens.push({
-      label: "Transmissão em nova janela",
-      icon: <AppWindow size={18} />,
+      label: "Transmissão em Nova Janela",
+      icon: <ExternalLink size={18} />,
       onSelect: () => abrirJanelaDoTile("tela", eu),
     });
+    itens.push({ separator: true });
   }
 
-  // "Mais opções" só leva o que tem estado de verdade por trás.
-  const maisOpcoes: MenuItem[] = [
-    {
-      // Trocar a qualidade no ar exige republicar a faixa; `setScreenQuality`
-      // sozinho só grava a preferência para a próxima vez (e o selo do palco
-      // passaria a mentir o fps). O seletor já tem resolução e taxa no rodapé
-      // e, ao escolher, republica com elas — então o item abre o seletor.
-      label: "Qualidade da transmissão",
-      onSelect: pedirTrocaDeTela,
-    },
-  ];
-  // o som só existe se a transmissão **subiu** com ele (`telaComSom` é o fato,
-  // `screenAudio` era a intenção); sem som não há o que ligar ou desligar
-  if (voz.screenOn && voz.telaComSom) {
-    maisOpcoes.push({
-      label: "Áudio da transmissão",
-      control: "checkbox",
-      checked: !voz.audioDaTelaMudo,
-      onSelect: () => void useVoice.getState().alternarAudioDaTela(),
-    });
-  }
-  // "Ocultar pré-visualização": o mesmo par "Ver prévia"/"Ocultar prévia" do
-  // tile (`TileDeVoz.tsx`), só que como checkbox — refeito aqui porque este
-  // arquivo abre por `onContextMenu`, fora de render, sem os `tiles` que
-  // `VoiceGrid` já calculou. A chave (`chaveDoTileDeTela`) vem de achar a
-  // publicação de tela da minha própria captura nativa entre os participantes
-  // da sala; sem ela (navegador, ou a faixa ainda não subiu) o item não
-  // aparece — um checkbox sem estado por trás seria um checkbox que mente.
-  const chaveDaMinhaTela = eu ? chaveDaMinhaTelaAtiva(eu.id) : null;
-  if (chaveDaMinhaTela) {
-    const previaChave = usePreviaDaMinhaTela.getState().chave;
-    // "mostrando" é a mesma conta de `mostrando` em `VoiceGrid.tsx`: a prévia
-    // pedida ("Ver prévia") ou a tela posta em destaque no palco (clicar no
-    // tile também tira o aviso, sem passar pelo botão).
-    const mostrando = previaChave === chaveDaMinhaTela || voz.focado === chaveDaMinhaTela;
-    const oculta = !mostrando;
-    maisOpcoes.push({
-      label: "Ocultar pré-visualização",
-      control: "checkbox",
-      checked: oculta,
-      onSelect: () => alternarPreviaDaMinhaTela(chaveDaMinhaTela, oculta),
-    });
-  }
-  itens.push({ label: "Mais opções", icon: <MoreHorizontal size={18} />, submenu: maisOpcoes });
+  // "Mais opções" agora só leva preferências do navegador sobre a prévia da
+  // própria tela (`stores/preferencias-de-transmissao.ts`), não mais estado
+  // por tile — por isso os dois checkboxes aparecem sempre que estou
+  // transmitindo, sem depender de a captura nativa já ter subido.
+  itens.push({
+    label: "Mais opções",
+    submenu: [
+      {
+        label: "Mostrar meu compartilhamento de tela",
+        control: "checkbox",
+        checked: prefs.mostrarMinhaTela,
+        onSelect: () => alternarMostrarMinhaTela(!prefs.mostrarMinhaTela),
+      },
+      {
+        label: "Pausar prévia quando o Streamz não estiver em foco",
+        control: "checkbox",
+        checked: prefs.pausarSemFoco,
+        onSelect: () =>
+          usePreferenciasDeTransmissao.getState().setPausarSemFoco(!prefs.pausarSemFoco),
+      },
+    ],
+  });
 
   ui.openContextMenu(x, y, itens, MENU_WIDTH_WIDE);
+}
+
+/**
+ * Liga/desliga "Mostrar meu compartilhamento de tela"
+ * (`stores/preferencias-de-transmissao.ts`). Ligar só grava a preferência —
+ * quem reassina a faixa em LOW é `aplicarAssinaturas`
+ * (`stores/assinaturas-de-tela.ts`), reaplicado em outro lugar assim que a
+ * store muda. Desligar, se o meu tile estiver em destaque no palco agora,
+ * também tira o foco e a prévia manual pelo mesmo par que o botão "Ver
+ * prévia" usava (`alternarPreviaDaMinhaTela`) — senão o palco continuaria
+ * mostrando o vídeo em tamanho de cinema com a preferência já desligada, em
+ * vez do aviso "Você está compartilhando sua tela".
+ */
+function alternarMostrarMinhaTela(ligar: boolean): void {
+  usePreferenciasDeTransmissao.getState().setMostrarMinhaTela(ligar);
+  if (ligar) return;
+  const eu = useAuth.getState().user;
+  const chave = eu ? chaveDaMinhaTelaAtiva(eu.id) : null;
+  if (chave && useVoice.getState().focado === chave) alternarPreviaDaMinhaTela(chave, false);
 }
 
 /**

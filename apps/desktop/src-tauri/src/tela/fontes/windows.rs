@@ -14,13 +14,14 @@ use std::path::Path;
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, MAX_PATH, RECT};
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
 };
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
@@ -99,8 +100,10 @@ fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
             return None;
         }
 
-        let mut r = RECT::default();
-        GetWindowRect(hwnd, &mut r).ok()?;
+        // Só o tamanho conta, nunca a posição: janela no segundo ou terceiro
+        // monitor tem coordenadas negativas ou além da largura do principal,
+        // e é tão oferecível quanto a do principal.
+        let r = moldura_visivel(hwnd)?;
         let largura = r.right - r.left;
         let altura = r.bottom - r.top;
         if largura < MINIMO_PX || altura < MINIMO_PX {
@@ -109,13 +112,12 @@ fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
 
         let titulo = titulo_da_janela(hwnd)?;
 
+        // O próprio Streamz entra na lista, como o Discord faz com ele mesmo:
+        // mostrar a conversa ou uma janela solta da chamada para a sala é um
+        // uso legítimo. O espelho infinito só existe ao transmitir a *tela*
+        // em que o Streamz está, e quem escolhe isso vê o efeito na prévia.
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
-        // Não oferecer o próprio Streamz: transmitir a si mesmo é o túnel de
-        // espelhos, e o usuário nunca quer isso.
-        if pid == GetCurrentProcessId() {
-            return None;
-        }
 
         let executavel = caminho_do_processo(pid);
         let app = executavel.as_deref().and_then(nome_do_app);
@@ -150,6 +152,30 @@ fn esta_cloaked(hwnd: HWND) -> bool {
         )
     };
     ok.is_ok() && cloaked != 0
+}
+
+/// O retângulo que o usuário vê, sem a borda invisível de redimensionamento, e
+/// **sempre em pixels físicos**: o `DWMWA_EXTENDED_FRAME_BOUNDS` não passa pela
+/// virtualização de DPI, ao contrário do `GetWindowRect`. Hoje o processo é
+/// per-monitor v2 (o `tao` pede isso ao criar o laço de eventos), e aí os dois
+/// concordam; se um dia não for, uma janela num monitor com escala diferente
+/// do principal sairia medida na escala errada só pelo `GetWindowRect`. É o
+/// mesmo retângulo que o recorte do DXGI usa (`captura/win/dxgi.rs`).
+fn moldura_visivel(hwnd: HWND) -> Option<RECT> {
+    let mut r = RECT::default();
+    let ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut c_void,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    };
+    if ok.is_err() {
+        // Sem DWM (sessão remota básica) vale o retângulo clássico.
+        unsafe { GetWindowRect(hwnd, &mut r) }.ok()?;
+    }
+    Some(r)
 }
 
 fn titulo_da_janela(hwnd: HWND) -> Option<String> {

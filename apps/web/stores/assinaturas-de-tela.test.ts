@@ -6,9 +6,11 @@ import {
   assinaturaDaTela,
   chaveDoTileDeTela,
   type EstadoDeAssistir,
+  minhaPreviaVisivel,
   type ParticipanteDeTela,
   usePreviaDaMinhaTela,
 } from "./assinaturas-de-tela";
+import { usePreferenciasDeTransmissao } from "./preferencias-de-transmissao";
 
 /**
  * As duas histórias que este arquivo prende sobre **a minha própria tela no
@@ -20,7 +22,11 @@ import {
  *   sua tela" e não depende da faixa.
  * - **1.2.1:** a correção daquela regressão assinava a minha tela sempre, em
  *   HIGH — 1440p30 devolvidos pelo SFU e decodificados na mesma máquina que
- *   captura e codifica. Agora ela só se assina quando eu peço, e em LOW.
+ *   captura e codifica. Agora ela só se assina em LOW.
+ * - **Paridade Discord:** ela aparece por padrão ("Mostrar meu
+ *   compartilhamento de tela"), pausada com a janela sem foco. Os testes
+ *   antigos desligam a preferência no `beforeEach` e continuam valendo para o
+ *   caminho "Ver prévia"; os de `preferência` a religam.
  */
 
 /** Uma publicação de tela de mentira, que anota o que pediram a ela. */
@@ -58,10 +64,17 @@ function estado(patch: Partial<EstadoDeAssistir> = {}): EstadoDeAssistir {
   return { meuId: EU, assistindo: new Set(), previa: null, focado: null, ...patch };
 }
 
-beforeEach(() => usePreviaDaMinhaTela.setState({ chave: null }));
+beforeEach(() => {
+  usePreviaDaMinhaTela.setState({ chave: null });
+  usePreferenciasDeTransmissao.setState({
+    mostrarMinhaTela: false,
+    pausarSemFoco: true,
+    janelaEmFoco: true,
+  });
+});
 
 describe("assinaturaDaTela", () => {
-  it("não assina a minha própria tela por padrão", () => {
+  it("sem a preferência nem pedido, não assina a minha própria tela", () => {
     const chave = chaveDoTileDeTela(EU, "TR_1");
     expect(assinaturaDaTela(EU, chave, estado())).toEqual({ assinar: false, qualidade: null });
   });
@@ -265,5 +278,82 @@ describe("aplicarAssinaturas", () => {
     );
     expect(a.isSubscribed).toBe(true);
     expect(b.isSubscribed).toBe(false);
+  });
+});
+
+describe("preferência 'Mostrar meu compartilhamento de tela'", () => {
+  const chave = chaveDoTileDeTela(EU, "TR_1");
+
+  it("ligada, assina a minha tela em LOW sem ninguém pedir", () => {
+    expect(assinaturaDaTela(EU, chave, estado({ previaPorPreferencia: true }))).toEqual({
+      assinar: true,
+      qualidade: VideoQuality.LOW,
+    });
+  });
+
+  it("aplicarAssinaturas lê a store: ligada e em foco assina, janela sem foco desassina", () => {
+    const minha = faixa("TR_1", false);
+    const sala = [participante(identidadeDeTela(EU), [minha])];
+    usePreferenciasDeTransmissao.setState({ mostrarMinhaTela: true });
+    aplicarAssinaturas(sala, estado());
+    expect(minha.chamadas.assinaturas).toEqual([true]);
+    expect(minha.chamadas.qualidades).toEqual([VideoQuality.LOW]);
+
+    usePreferenciasDeTransmissao.setState({ janelaEmFoco: false });
+    aplicarAssinaturas(sala, estado());
+    expect(minha.chamadas.assinaturas).toEqual([true, false]);
+  });
+
+  it("sem 'pausar', a janela sem foco não corta a prévia", () => {
+    const minha = faixa("TR_1", false);
+    usePreferenciasDeTransmissao.setState({
+      mostrarMinhaTela: true,
+      pausarSemFoco: false,
+      janelaEmFoco: false,
+    });
+    aplicarAssinaturas([participante(identidadeDeTela(EU), [minha])], estado());
+    expect(minha.isSubscribed).toBe(true);
+  });
+
+  it("pausada pelo foco, o 'Ver prévia' explícito ainda assina", () => {
+    const minha = faixa("TR_1", false);
+    usePreferenciasDeTransmissao.setState({ mostrarMinhaTela: true, janelaEmFoco: false });
+    usePreviaDaMinhaTela.setState({ chave });
+    aplicarAssinaturas([participante(identidadeDeTela(EU), [minha])], estado());
+    expect(minha.isSubscribed).toBe(true);
+    expect(minha.chamadas.qualidades).toEqual([VideoQuality.LOW]);
+  });
+
+  it("não mexe na tela dos outros", () => {
+    const dela = chaveDoTileDeTela(OUTRA, "TR_2");
+    expect(assinaturaDaTela(OUTRA, dela, estado({ previaPorPreferencia: true })).assinar).toBe(false);
+  });
+});
+
+describe("minhaPreviaVisivel", () => {
+  const chave = chaveDoTileDeTela(EU, "TR_1");
+
+  it("segue a preferência, o foco da janela e o 'Ver prévia'", () => {
+    aplicarAssinaturas([participante(identidadeDeTela(EU), [faixa("TR_1")])], estado());
+    expect(minhaPreviaVisivel(chave)).toBe(false);
+
+    usePreferenciasDeTransmissao.setState({ mostrarMinhaTela: true });
+    expect(minhaPreviaVisivel(chave)).toBe(true);
+
+    usePreferenciasDeTransmissao.setState({ janelaEmFoco: false });
+    expect(minhaPreviaVisivel(chave)).toBe(false);
+
+    usePreviaDaMinhaTela.setState({ chave });
+    expect(minhaPreviaVisivel(chave)).toBe(true);
+  });
+
+  it("a minha tela no destaque do palco conta como visível", () => {
+    aplicarAssinaturas(
+      [participante(identidadeDeTela(EU), [faixa("TR_1")])],
+      estado({ focado: chave }),
+    );
+    expect(minhaPreviaVisivel(chave)).toBe(true);
+    aplicarAssinaturas([participante(identidadeDeTela(EU), [faixa("TR_1")])], estado());
+    expect(minhaPreviaVisivel(chave)).toBe(false);
   });
 });

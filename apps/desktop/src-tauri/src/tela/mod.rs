@@ -425,7 +425,7 @@ pub async fn iniciar_tela(
 ) -> Result<transmissao::Tempos, String> {
     if fontes::minimizada(&pedido.fonte_id) {
         return Err(
-            "Restaure a janela antes de transmitir: minimizada, ela não desenha nada para capturar"
+            "Traga a janela para a tela antes de transmitir: minimizada ou em outra área de trabalho, ela não desenha nada para capturar"
                 .to_string(),
         );
     }
