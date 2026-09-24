@@ -5,6 +5,7 @@ import { CALL_RING_TIMEOUT_MS } from "@streamz/shared";
 import AudioRemotoHost from "@/components/voice/AudioRemotoHost";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import JanelasDeVoz from "@/components/voice/JanelasDeVoz";
+import PipDaChamada from "@/components/voice/PipDaChamada";
 import VoiceHotkeys from "@/components/voice/VoiceHotkeys";
 import { VoiceVolumePopoverHost } from "@/components/voice/VoiceGrid";
 import { pararToque, prepararToque, ringbackUrl, tocarToque } from "@/lib/ringtone";
@@ -152,6 +153,9 @@ export default function VoiceLayer() {
       {/* as janelas soltas da chamada vivem aqui, e não no palco: trocar de
           tela na aba principal desmonta o palco, e a janela tem de seguir */}
       <JanelasDeVoz />
+      {/* a miniatura da transmissão fora do palco: mesma razão das janelas —
+          ela existe justamente quando o palco foi desmontado */}
+      <PipDaChamada />
       <VoiceHotkeys />
       <VoiceVolumePopoverHost />
       <IncomingCallModal />
