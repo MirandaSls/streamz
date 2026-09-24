@@ -30,6 +30,7 @@ import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
+import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui } from "@/stores/ui";
 import {
@@ -200,6 +201,10 @@ export default function VoiceGrid({
   // desativado é pequeno e a grade já teria de re-renderizar de qualquer
   // jeito quando alguém entra/sai (mesmo padrão de `s.silenciados` no tile).
   const videosDesativados = usePreferenciasPorParticipante((s) => s.videosDesativados);
+  // menu de vídeo do palco (paridade Discord): prévia da própria câmera e
+  // mostrar/ocultar quem está sem vídeo — ver `preferencias-do-palco.ts`
+  const previaDaCamera = usePreferenciasDoPalco((s) => s.previaDaCamera);
+  const mostrarSemVideo = usePreferenciasDoPalco((s) => s.mostrarSemVideo);
   const ehMobile = useEhMobile();
   // elemento em estado (e não em ref): o palco é desmontado quando alguém sobe
   // ao destaque, e um `ref` não avisaria o observador de que voltou
@@ -220,13 +225,18 @@ export default function VoiceGrid({
   // Quem transmite pelo app de desktop tem **dois** participantes na sala: a
   // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram nos
   // tiles do dono — o `#tela` nunca vira uma pessoa a mais na grade.
-  const tiles: Tile[] = states.flatMap((state): Tile[] => {
+  const tilesBrutos: Tile[] = states.flatMap((state): Tile[] => {
     const meus = participantesDe(state.user.id);
     const sou = state.user.id === me?.id;
     // vídeo desativado por mim: o tile trata como se não houvesse câmera
     // nenhuma (cai no avatar, o mesmo ramo de "sem vídeo" de sempre) — não se
-    // aplica a mim mesmo, que não aparece no próprio menu com este item
-    const camera = videosDesativados[state.user.id] ? null : (meus.flatMap(camerasDe)[0] ?? null);
+    // aplica a mim mesmo, que não aparece no próprio menu com este item.
+    // "Prévia da câmera" desligada some com a câmera só no MEU tile, e só
+    // localmente — os outros continuam me vendo normalmente.
+    const camera =
+      videosDesativados[state.user.id] || (sou && !previaDaCamera)
+        ? null
+        : (meus.flatMap(camerasDe)[0] ?? null);
     const pessoa: Tile = {
       key: state.user.id,
       state,
@@ -262,6 +272,15 @@ export default function VoiceGrid({
     );
     return [pessoa, ...telas];
   });
+
+  // "Mostrar participantes sem vídeo" desligado esconde da grade quem não tem
+  // câmera nem tela — telas ficam sempre, porque quem transmite é o próprio
+  // conteúdo que a preferência quer ver (paridade Discord). Se o filtro
+  // esvaziasse o palco (ninguém com câmera ligada), volta a mostrar todo mundo:
+  // um palco vazio quando há gente na chamada seria pior que a preferência.
+  const semFiltroDeVideo = tilesBrutos.filter((t) => t.tela || t.comVideo);
+  const tiles: Tile[] =
+    mostrarSemVideo || semFiltroDeVideo.length === 0 ? tilesBrutos : semFiltroDeVideo;
 
   const telaAssistida = telaQueAssumeOPalco(tiles, me?.id);
   const chaveDaTela = telaAssistida?.key ?? null;
