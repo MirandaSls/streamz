@@ -49,13 +49,21 @@ function usuario(id: string) {
 function servico(permissoesDoAtor: number) {
   const emitToUser = vi.fn();
   const emitToGuild = vi.fn();
-  const guilds = {
-    async assertCanModerate(_actorId: string, _guildId: string, permission: number) {
+  const assertCanModerate = vi.fn(
+    async (
+      _actorId: string,
+      _guildId: string,
+      permission: number,
+      _channelId?: string | null,
+    ) => {
       if (!hasPermission(permissoesDoAtor, permission)) {
         throw new ForbiddenException("Você não tem permissão para isso");
       }
       return { userId: _actorId };
     },
+  );
+  const guilds = {
+    assertCanModerate,
     async assertMember(userId: string, _guildId: string) {
       return { userId };
     },
@@ -116,7 +124,12 @@ function servico(permissoesDoAtor: number) {
   } as unknown as PrismaService;
 
   const realtime = { emitToGuild, emitToUsers() {}, emitToUser } as unknown as RealtimeService;
-  return { voice: new VoiceService(guilds, prisma, realtime), emitToUser, emitToGuild };
+  return {
+    voice: new VoiceService(guilds, prisma, realtime),
+    emitToUser,
+    emitToGuild,
+    assertCanModerate,
+  };
 }
 
 describe("VoiceService.move", () => {
@@ -204,6 +217,72 @@ describe("VoiceService.move", () => {
     await expect(voice.move("dono", "g1", "bia", "voz-privada")).resolves.toMatchObject({
       to: "voz-privada",
     });
+  });
+
+  it("checa MOVE_MEMBERS na origem e no destino, cada um com seu channelId", async () => {
+    const { voice, assertCanModerate } = servico(Permission.MOVE_MEMBERS);
+    await voice.join("ana", "voz-1");
+    assertCanModerate.mockClear();
+
+    await voice.move("dono", "g1", "ana", "voz-2");
+
+    expect(assertCanModerate).toHaveBeenCalledTimes(2);
+    expect(assertCanModerate).toHaveBeenNthCalledWith(
+      1,
+      "dono",
+      "g1",
+      Permission.MOVE_MEMBERS,
+      "voz-1",
+    );
+    expect(assertCanModerate).toHaveBeenNthCalledWith(
+      2,
+      "dono",
+      "g1",
+      Permission.MOVE_MEMBERS,
+      "voz-2",
+    );
+  });
+
+  it("recusa por override no canal de ORIGEM não mexe no estado — nem join, nem aviso", async () => {
+    const { voice, emitToUser } = servico(Permission.MOVE_MEMBERS);
+    await voice.join("ana", "voz-1");
+    // rejeita só quando o canal perguntado é a origem — como um `deny` de
+    // MOVE_MEMBERS no @everyone daquele canal específico
+    (
+      voice as unknown as { guilds: { assertCanModerate: unknown } }
+    ).guilds.assertCanModerate = vi.fn(
+      async (_a: string, _g: string, _p: number, channelId?: string | null) => {
+        if (channelId === "voz-1") throw new ForbiddenException("sem bit na origem");
+      },
+    );
+
+    await expect(voice.move("dono", "g1", "ana", "voz-2")).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(await voice.membrosDaSala("voz-1")).toEqual(["ana"]);
+    expect(await voice.membrosDaSala("voz-2")).toEqual([]);
+    expect(emitToUser).not.toHaveBeenCalled();
+  });
+
+  it("recusa por override no canal de DESTINO não mexe no estado — nem join, nem aviso", async () => {
+    const { voice, emitToUser } = servico(Permission.MOVE_MEMBERS);
+    await voice.join("ana", "voz-1");
+    // origem passa; só o destino nega — prova que o join ainda não rodou
+    // quando o segundo assert (do destino) recusa
+    (
+      voice as unknown as { guilds: { assertCanModerate: unknown } }
+    ).guilds.assertCanModerate = vi.fn(
+      async (_a: string, _g: string, _p: number, channelId?: string | null) => {
+        if (channelId === "voz-2") throw new ForbiddenException("sem bit no destino");
+      },
+    );
+
+    await expect(voice.move("dono", "g1", "ana", "voz-2")).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(await voice.membrosDaSala("voz-1")).toEqual(["ana"]);
+    expect(await voice.membrosDaSala("voz-2")).toEqual([]);
+    expect(emitToUser).not.toHaveBeenCalled();
   });
 });
 

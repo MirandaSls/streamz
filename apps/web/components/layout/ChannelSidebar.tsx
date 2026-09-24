@@ -36,7 +36,7 @@ import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
 import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
-import { useCan } from "@/stores/permissions";
+import { useCan, possoNoCanalAgora } from "@/stores/permissions";
 import { podeSoltarEm } from "@/stores/voice-mover";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
@@ -117,8 +117,6 @@ export default function ChannelSidebar() {
     passava por ele e via ações que a API recusa com 403.
   */
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
-  /** Arrastar alguém de um canal de voz para outro (bit novo, ver ADR-0002). */
-  const podeMoverMembros = useCan(Permission.MOVE_MEMBERS);
   /**
    * "Ocultar canais silenciados" (print p5 e o cabeçalho do servidor) — por
    * servidor, lida de `stores/canais-ocultos.ts`. Quem liga/desliga é o
@@ -416,7 +414,13 @@ export default function ChannelSidebar() {
     // participante de voz sendo arrastado: o alvo é o canal inteiro, não uma
     // posição entre canais — realce em vez de linha
     if (arrasto?.tipo === "membro-voz") {
-      if (!podeSoltarEm(arrasto, channel, podeMoverMembros)) return;
+      // MOVE_MEMBERS por canal (como no Discord): precisa do bit tanto na
+      // origem quanto no destino do arrasto, cada um com seu próprio override
+      if (!guild) return;
+      const podeMoverAqui =
+        possoNoCanalAgora(Permission.MOVE_MEMBERS, guild.id, arrasto.deChannelId) &&
+        possoNoCanalAgora(Permission.MOVE_MEMBERS, guild.id, channel.id);
+      if (!podeSoltarEm(arrasto, channel, podeMoverAqui)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       setAlvo({ tipo: "membro-voz", channelId: channel.id });
@@ -553,7 +557,6 @@ export default function ChannelSidebar() {
             // nome branco
             conectado={vozAqui === channel.id}
             vozDesde={vozDesde}
-            podeMoverMembros={podeMoverMembros}
             aoEntrar={() => select(channel, "clique")}
             aoAbrirConversa={() => {
               // `"balao"`: abre o canal **sem** entrar — é aqui que a

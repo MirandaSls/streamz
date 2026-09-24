@@ -2,11 +2,12 @@
 
 import type { MouseEvent } from "react";
 import { MessageSquare, Settings, UserPlus, Volume2 } from "@/components/ui/icones";
-import type { Channel } from "@streamz/shared";
+import { Permission, type Channel } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { preaquecerCadeiaDeVoz } from "@/stores/voice";
+import { useCan } from "@/stores/permissions";
 import type { PropsDeArrasto } from "@/components/layout/sidebar/CategoriaEItemDeCanal";
 
 /**
@@ -32,7 +33,6 @@ export function CanalDeVoz({
   conectado,
   vozDesde,
   podeGerenciarCanais,
-  podeMoverMembros,
   arrasto,
   aoAbrirMenu,
   aoEntrar,
@@ -54,8 +54,6 @@ export function CanalDeVoz({
   /** desde quando estou na chamada, para o cronômetro (`null` = fora). */
   vozDesde: number | null;
   podeGerenciarCanais: boolean;
-  /** `MOVE_MEMBERS`: sem ela o participante não é arrastável. */
-  podeMoverMembros: boolean;
   arrasto: PropsDeArrasto;
   aoAbrirMenu: (e: MouseEvent) => void;
   aoEntrar: () => void;
@@ -66,6 +64,10 @@ export function CanalDeVoz({
   aoFimDoArrasto: () => void;
 }) {
   const name = channel.name ?? "canal";
+  // `MOVE_MEMBERS` **deste** canal — origem e destino têm override próprio
+  // (como no Discord), por isso não vem pronto do pai: cada linha de voz
+  // pergunta pelo seu próprio `channel.id`.
+  const podeMover = useCan(Permission.MOVE_MEMBERS, channel.id);
   return (
     <>
       <div
@@ -183,7 +185,7 @@ export function CanalDeVoz({
       <VoiceChannelMembers
         channelId={channel.id}
         guildId={channel.guildId}
-        podeMover={podeMoverMembros}
+        podeMover={podeMover}
         onArrastarMembro={aoArrastarMembro}
         onFimDoArrasto={aoFimDoArrasto}
       />

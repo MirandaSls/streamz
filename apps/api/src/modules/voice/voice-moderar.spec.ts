@@ -98,7 +98,13 @@ function servico(permissoesDoAtor: number) {
   );
 
   const assertCanModerarVoz = vi.fn(
-    async (_actorId: string, _guildId: string, _targetId: string, permission: number) => {
+    async (
+      _actorId: string,
+      _guildId: string,
+      _targetId: string,
+      permission: number,
+      _channelId: string | null,
+    ) => {
       if (!hasPermission(permissoesDoAtor, permission)) {
         throw new ForbiddenException("Você não tem permissão para isso");
       }
@@ -244,9 +250,34 @@ describe("VoiceService.moderarVoz", () => {
       voice.moderarVoz("zé", "g1", { userId: "ana", mute: true }),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    expect(assertCanModerarVoz).toHaveBeenCalledWith("zé", "g1", "ana", Permission.MUTE_MEMBERS);
+    // ana não está em voz aqui — chega `null` — e ainda assim é o 403 do
+    // assert que vence, não o 400 de "não está em voz" (senão o reject acima
+    // seria BadRequestException)
+    expect(assertCanModerarVoz).toHaveBeenCalledWith(
+      "zé",
+      "g1",
+      "ana",
+      Permission.MUTE_MEMBERS,
+      null,
+    );
     expect(guildMemberUpdate).not.toHaveBeenCalled();
     expect(updateParticipantMock).not.toHaveBeenCalled();
+  });
+
+  it("alvo em voz: o canal dele (não null) chega ao assertCanModerarVoz", async () => {
+    const { voice, assertCanModerarVoz } = servico(Permission.MUTE_MEMBERS);
+    await voice.join("ana", "voz-1");
+    assertCanModerarVoz.mockClear();
+
+    await voice.moderarVoz("dono", "g1", { userId: "ana", mute: true });
+
+    expect(assertCanModerarVoz).toHaveBeenCalledWith(
+      "dono",
+      "g1",
+      "ana",
+      Permission.MUTE_MEMBERS,
+      "voz-1",
+    );
   });
 
   it("sem DEAFEN_MEMBERS (só MUTE_MEMBERS) a recusa é a mesma para o campo deaf", async () => {

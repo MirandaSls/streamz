@@ -1,4 +1,4 @@
-import { Permission, type Role } from "@streamz/shared";
+import { Permission, type PermissionOverwrite, type Role } from "@streamz/shared";
 import { describe, expect, it } from "vitest";
 import {
   podeEnsurdecerNoServidor,
@@ -93,6 +93,63 @@ describe("podeSilenciarNoServidor", () => {
     const eu = membro("eu", ["moderador"]);
     const dono = membro("dono", [], true);
     expect(podeSilenciarNoServidor(eu, dono, roles)).toBe(false);
+  });
+});
+
+describe("podeSilenciarNoServidor — override de canal", () => {
+  it("deny de MUTE_MEMBERS no @everyone do canal bloqueia quem tem o bit no servidor", () => {
+    const roles = [everyone, role("moderador", 1, Permission.MUTE_MEMBERS)];
+    const eu = membro("eu", ["moderador"]);
+    const alvo = membro("alvo");
+    const regras: PermissionOverwrite[] = [
+      { roleId: "everyone", userId: null, allow: 0, deny: Permission.MUTE_MEMBERS },
+    ];
+    expect(podeSilenciarNoServidor(eu, alvo, roles, regras)).toBe(false);
+    // sem a regra do canal, o bit do servidor continua valendo
+    expect(podeSilenciarNoServidor(eu, alvo, roles)).toBe(true);
+  });
+
+  it("deny de MUTE_MEMBERS no cargo do canal bloqueia quem tem o bit no servidor", () => {
+    const roles = [everyone, role("moderador", 1, Permission.MUTE_MEMBERS)];
+    const eu = membro("eu", ["moderador"]);
+    const alvo = membro("alvo");
+    const regras: PermissionOverwrite[] = [
+      { roleId: "moderador", userId: null, allow: 0, deny: Permission.MUTE_MEMBERS },
+    ];
+    expect(podeSilenciarNoServidor(eu, alvo, roles, regras)).toBe(false);
+  });
+
+  it("allow de MUTE_MEMBERS só no canal libera quem não tem o bit no servidor", () => {
+    const roles = [everyone, role("sem-bit", 1)];
+    const eu = membro("eu", ["sem-bit"]);
+    const alvo = membro("alvo");
+    const regras: PermissionOverwrite[] = [
+      { roleId: "sem-bit", userId: null, allow: Permission.MUTE_MEMBERS, deny: 0 },
+    ];
+    expect(podeSilenciarNoServidor(eu, alvo, roles, regras)).toBe(true);
+    // sem a regra do canal, ninguém tem o bit no servidor
+    expect(podeSilenciarNoServidor(eu, alvo, roles)).toBe(false);
+  });
+
+  it("override de usuário (allow) conta e vence o deny do @everyone do canal", () => {
+    const roles = [everyone, role("sem-bit", 1)];
+    const eu = membro("eu", ["sem-bit"]);
+    const alvo = membro("alvo");
+    const regras: PermissionOverwrite[] = [
+      { roleId: "everyone", userId: null, allow: 0, deny: Permission.MUTE_MEMBERS },
+      { roleId: null, userId: "eu", allow: Permission.MUTE_MEMBERS, deny: 0 },
+    ];
+    expect(podeSilenciarNoServidor(eu, alvo, roles, regras)).toBe(true);
+  });
+
+  it("override de usuário (deny) conta e bloqueia quem tem o bit no servidor", () => {
+    const roles = [everyone, role("moderador", 1, Permission.MUTE_MEMBERS)];
+    const eu = membro("eu", ["moderador"]);
+    const alvo = membro("alvo");
+    const regras: PermissionOverwrite[] = [
+      { roleId: null, userId: "eu", allow: 0, deny: Permission.MUTE_MEMBERS },
+    ];
+    expect(podeSilenciarNoServidor(eu, alvo, roles, regras)).toBe(false);
   });
 });
 
