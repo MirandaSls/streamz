@@ -33,11 +33,7 @@ pub fn do_pid(pid: i32) -> Option<String> {
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     // Mutex envenenado não é motivo para perder o ícone: o mapa continua
     // coerente (só guarda resultados prontos), então segue com ele.
-    if let Some(pronto) = cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&pid)
-    {
+    if let Some(pronto) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&pid) {
         return pronto.clone();
     }
 

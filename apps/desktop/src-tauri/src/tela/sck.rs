@@ -174,9 +174,8 @@ pub(crate) fn display_ativo(id: u32) -> bool {
     let mut lista = [0u32; 16];
     let mut quantos: u32 = 0;
     // SAFETY: o buffer tem exatamente `max_displays` posições.
-    let erro = unsafe {
-        CGGetActiveDisplayList(lista.len() as u32, lista.as_mut_ptr(), &mut quantos)
-    };
+    let erro =
+        unsafe { CGGetActiveDisplayList(lista.len() as u32, lista.as_mut_ptr(), &mut quantos) };
     if erro != CGError::Success {
         return false;
     }
