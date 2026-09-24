@@ -961,6 +961,22 @@ export function VideoDaFaixa({
       autoPlay
       playsInline
       muted
+      // no WKWebView (app do Mac) um <video> sem `controls` ainda desenha o
+      // botão nativo de play/pause por cima ao passar o mouse — o Discord não
+      // tem esse controle em lugar nenhum da faixa. `disablePictureInPicture`
+      // e `disableRemotePlayback` tiram os outros dois botões nativos do
+      // mesmo menu (AirPlay entra em `disableRemotePlayback`, não há atributo
+      // `x-webkit-airplay` para React). O resto do disfarce (esconder o que
+      // ainda vazar) é CSS global, não daqui.
+      controls={false}
+      disablePictureInPicture
+      disableRemotePlayback
+      // clicar no controle nativo (ou a janela ficar oculta) pausa o
+      // elemento sem passar pelo nosso estado — a faixa ao vivo trava num
+      // quadro parado. Ela nunca representa "pausado", então retoma na hora.
+      onPause={(e) => {
+        e.currentTarget.play().catch(() => {});
+      }}
       className={`h-full w-full bg-black ${ajuste} ${espelhar ? "-scale-x-100" : ""}`}
     />
   );

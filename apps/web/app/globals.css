@@ -322,6 +322,29 @@ textarea:focus-visible:not([data-sem-anel]),
 }
 
 /*
+ * Sem controles nativos do WebKit no tile de vídeo da chamada.
+ *
+ * No app de desktop (Tauri = WKWebView), o WebKit desenha um botão de
+ * pause/play no centro de QUALQUER `<video>` — mesmo sem o atributo
+ * `controls` — assim que ele carrega mídia. É o tile de tela compartilhada
+ * da chamada (`CallStage`/`CallSplit`) que sofre com isso; no Discord esse
+ * botão não existe, quem para o compartilhamento é a própria tela.
+ *
+ * `:not([controls])` deixa de fora o vídeo/áudio de anexo em mensagem
+ * (`components/media/MediaGroup.tsx`, `components/chat/bot/v2/MediaGallery.tsx`),
+ * que usa `controls` de propósito e precisa dos controles nativos.
+ */
+video:not([controls])::-webkit-media-controls,
+video:not([controls])::-webkit-media-controls-panel,
+video:not([controls])::-webkit-media-controls-overlay-play-button,
+video:not([controls])::-webkit-media-controls-start-playback-button,
+video:not([controls])::-webkit-media-controls-play-button,
+video:not([controls])::-webkit-media-controls-enclosure {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
+/*
  * Entrada de modal, tela de configurações, menu e tooltip.
  *
  * O Discord anima tudo que aparece por cima da interface, e a curva é a mesma em
