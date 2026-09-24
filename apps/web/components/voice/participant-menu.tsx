@@ -442,8 +442,9 @@ function itensDeVisualizacao(
   const itens: MenuItem[] = [];
   const ehTela = !!opcoes.tela;
 
-  // no Tauri o webview não abre janela nova: o item some em vez de não fazer
-  // nada ao clicar
+  // no Tauri de celular o `on_new_window` não existe (o de desktop libera
+  // `window.open("about:blank")`, ver `lib.rs`): o item some em vez de não
+  // fazer nada ao clicar
   if (podeAbrirJanelaSolta()) {
     itens.push({
       label: ehTela ? "Transmissão em nova janela" : "Usuário em nova janela",
@@ -512,12 +513,12 @@ function itensDeModeracaoDeVoz(guildId: string | null, channelId: string, alvoId
 }
 
 /**
- * A conta de `usePodeModerarVoz` sem hooks — este arquivo abre por
- * `onContextMenu`, fora de render. Reaproveita as funções puras de
- * `lib/moderacao-de-voz` (bit + hierarquia, "contra mim só o bit"); o que se
- * repete aqui é só a leitura das stores, com a mesma saída conservadora:
- * servidor da sala diferente do carregado → nada, porque sem os cargos na mão
- * não há como saber e esconder é o lado seguro (a API recusaria de todo modo).
+ * A leitura de `podeSilenciarNoServidor`/`podeEnsurdecerNoServidor`
+ * (`lib/moderacao-de-voz`, bit + hierarquia, "contra mim só o bit") sem
+ * hooks — este arquivo abre por `onContextMenu`, fora de render. Vai direto
+ * ao `getState()` das stores, com a mesma saída conservadora: servidor da
+ * sala diferente do carregado → nada, porque sem os cargos na mão não há
+ * como saber e esconder é o lado seguro (a API recusaria de todo modo).
  */
 function moderacaoDeVozSobre(alvoId: string, guildId: string): { silenciar: boolean; ensurdecer: boolean } {
   const NADA = { silenciar: false, ensurdecer: false };

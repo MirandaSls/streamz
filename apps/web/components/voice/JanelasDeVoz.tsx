@@ -243,10 +243,12 @@ function publicacaoDaJanela({ tipo, userId }: JanelaDeVoz): TrackPublication | n
  *
  * **A minha tela pela captura nativa** (`<userId>#tela`, remota para o meu
  * cliente): ela não se assina sozinha, e o caminho é o "Ver prévia" do tile
- * (`usePreviaDaMinhaTela`), sempre em camada baixa. Hoje isso não acontece —
- * o app desktop não abre janela solta (`podeAbrirJanelaSolta`) —, mas se um
- * dia abrir, a janela não nasce preta. A minha tela no navegador é local e não
- * se assina.
+ * (`usePreviaDaMinhaTela`), sempre em camada baixa — inclusive quando a
+ * origem é a janela solta que `abrirMenuDaMinhaTela` oferece para a própria
+ * transmissão (`podeAbrirJanelaSolta`, liberada no desktop pelo
+ * `on_new_window` de `lib.rs`): o efeito abaixo entra nesse caso e a janela
+ * não nasce preta. A minha tela no navegador (sem captura nativa) é local e
+ * não se assina.
  */
 function useAssinaturaDaTela(
   { tipo, userId }: JanelaDeVoz,
