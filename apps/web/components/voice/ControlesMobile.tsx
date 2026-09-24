@@ -13,6 +13,8 @@ import {
   Soundboard,
   Video,
   VideoOff,
+  Volume2,
+  VolumeX,
 } from "@/components/ui/icones";
 import PainelDeSons from "@/components/voice/PainelDeSons";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
@@ -86,6 +88,9 @@ export default function ControlesMobile({
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
   // a faixa ainda não subiu: a sala já me ouviria, mas não há o que ouvir
   const abrindoMicrofone = useVoice(microfoneAbrindo);
+  // só para decidir o padding da cápsula abaixo — o botão em si mora em
+  // `BotaoDeSomDaTelaMobile`, que assina a store de novo (ver o comentário lá)
+  const mostrarMudoDaTela = useVoice((s) => s.screenOn && s.telaComSom);
 
   // só a paisagem esconde a barra; ver o comentário do componente
   const escondida = paisagem && oculto;
@@ -128,9 +133,14 @@ export default function ControlesMobile({
           // home num iPhone — o dobro da folga que o print mostra.
           bottom: 8,
         }}
-        className={`absolute z-20 flex items-center justify-between rounded-full bg-background-surface-higher/95 px-2.5 shadow-popout backdrop-blur transition-opacity duration-200 ${
-          escondida ? "pointer-events-none opacity-0" : "opacity-100"
-        }`}
+        className={`absolute z-20 flex items-center justify-between rounded-full bg-background-surface-higher/95 shadow-popout backdrop-blur transition-opacity duration-200 ${
+          // o sétimo botão (mudo da tela) só aparece transmitindo com som — nesse
+          // estado a cápsula aperta o respiro lateral em vez de encolher o
+          // círculo de 48 (fixo, ver `BotaoDaBarra`): num aparelho de 375 os 7
+          // círculos não cabem nos 20px de `px-2.5` combinados, cabem nos 8 de
+          // `px-1`.
+          mostrarMudoDaTela ? "px-1" : "px-2.5"
+        } ${escondida ? "pointer-events-none opacity-0" : "opacity-100"}`}
       >
         <BotaoDaBarra
           label={abrindoMicrofone ? "Ativando microfone…" : muted ? "Desativar mudo" : "Silenciar"}
@@ -160,6 +170,7 @@ export default function ControlesMobile({
         </BotaoDaBarra>
 
         <BotaoDeTelaMobile />
+        <BotaoDeSomDaTelaMobile />
         <BotaoDeSonsMobile />
 
         <BotaoDaBarra label={leaveLabel} onClick={onLeave} tom="desligar">
@@ -236,6 +247,35 @@ function BotaoDeTelaMobile() {
       apagado={!suporta && !screenOn}
     >
       {screenOn ? <MonitorX size={22} /> : <MonitorUp size={22} />}
+    </BotaoDaBarra>
+  );
+}
+
+/**
+ * Silenciar só o áudio da transmissão, sem mexer no microfone — por isso é um
+ * botão à parte do de mudo, não um estado dele. Existe só enquanto a tela está
+ * no ar **e** subiu com som (nem toda janela/aba tem áudio); mesmo botão do
+ * desktop (`ScreenShareButton.tsx`), mesmas cores do mudo do microfone
+ * (`TOM.mudo`/`TOM.neutro` acima), porque é o mesmo tipo de estado.
+ */
+function BotaoDeSomDaTelaMobile() {
+  const screenOn = useVoice((s) => s.screenOn);
+  const telaComSom = useVoice((s) => s.telaComSom);
+  const audioDaTelaMudo = useVoice((s) => s.audioDaTelaMudo);
+  const alternarAudioDaTela = useVoice((s) => s.alternarAudioDaTela);
+
+  if (!screenOn || !telaComSom) return null;
+
+  const label = audioDaTelaMudo ? "Reativar áudio da transmissão" : "Silenciar áudio da transmissão";
+
+  return (
+    <BotaoDaBarra
+      label={label}
+      onClick={() => void alternarAudioDaTela()}
+      tom={audioDaTelaMudo ? "mudo" : "neutro"}
+      pressionado={audioDaTelaMudo}
+    >
+      {audioDaTelaMudo ? <VolumeX size={22} /> : <Volume2 size={22} />}
     </BotaoDaBarra>
   );
 }
