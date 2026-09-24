@@ -43,6 +43,7 @@ import {
 import { api } from "@/lib/api";
 import {
   abrirNoSistema,
+  capacidadesDeTela,
   descartarTelaNativa as ponteDescartarTela,
   ehAndroidNoTauri,
   iniciarServicoDeChamada,
@@ -54,6 +55,7 @@ import {
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
   restaurarAtenuacaoDoWindows,
+  silenciarAudioDaTela,
   suspenderAtenuacaoDoWindows,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
@@ -168,6 +170,26 @@ const emissorFlags = criarEmissorCoalescido<VoiceFlags>(
   (a, b) =>
     a.muted === b.muted && a.deafened === b.deafened && a.video === b.video && a.screen === b.screen,
 );
+/**
+ * Tópico dos avisos de fala por data message do LiveKit.
+ *
+ * O SFU só aponta quem está falando a cada ~500 ms por participante, no canal
+ * lossy de `activeSpeakers` (ver o comentário de `recomporFalantes`) — limiar
+ * alto e intermitente, os outros só me veem falar quando falo alto. Quem tem o
+ * microfone na mão sabe o próprio nível na hora (é o detector local, ver
+ * `rearmarDetectorLocal`), então cada cliente anuncia esse estado para a sala
+ * por aqui, e quem recebe acende o anel do remetente sem esperar o SFU. O SFU
+ * continua como reserva — `recomporFalantes` soma os dois conjuntos — para
+ * quem ainda não manda o aviso (cliente antigo).
+ */
+const TOPICO_FALA = "fala";
+/**
+ * Quem anunciou estar falando por data message, já por `donoDaIdentidade`.
+ * Entra em `recomporFalantes` como reforço do que o SFU relata. Zerado quando
+ * a sala fecha/desconecta e quando uma sala nova é conectada — o aviso vale só
+ * para a sala em que foi mandado.
+ */
+const falandoPorAviso = new Set<string>();
 /**
  * A transmissão de tela em curso é a **nativa** (captura no Rust, participante
  * `#tela`)? Fora do estado observável como `sala`: é detalhe de transporte, e
@@ -302,6 +324,20 @@ interface VoiceStoreState {
   screenQuality: ScreenQuality;
   screenAudio: boolean;
   /**
+   * A transmissão que está no ar publica som? `screenAudio` é a **intenção**
+   * de antes de ir ao ar; isto é o fato: a aba/janela pode não ter som, o
+   * navegador pode não entregá-lo e a captura nativa pode não ter loopback.
+   * O botão de silenciar o som da tela só faz sentido quando isto é `true`.
+   */
+  telaComSom: boolean;
+  /**
+   * Silenciei o som da **minha** transmissão (não o microfone). A faixa fica
+   * publicada e só é emudecida: tirá-la e republicar custaria uma
+   * renegociação a cada clique e faria o som sumir/voltar como publicação
+   * nova para quem assiste.
+   */
+  audioDaTelaMudo: boolean;
+  /**
    * Taxa de quadros da câmera (persistida no browser). Vale na captura, no
    * teto do encoder e nas camadas do simulcast; mudar com a câmera ligada
    * reinicia a captura dentro da mesma faixa, sem republicar.
@@ -323,6 +359,13 @@ interface VoiceStoreState {
   // ── preferências por participante (locais, não vão para o servidor) ──
   volumes: Record<string, number>;
   silenciados: Record<string, boolean>;
+  /**
+   * Por `userId` do **dono**: silencio só o som da transmissão dele
+   * (`ScreenShareAudio`, venha da conexão dele ou do `<userId>#tela`), e a voz
+   * continua. É outro eixo de `silenciados` de propósito: quem assiste a uma
+   * transmissão com música alta quer calar a música, não a pessoa.
+   */
+  telaSilenciada: Record<string, boolean>;
 
   // ── foco/tela cheia da grade ──
   focado: string | null;
@@ -412,6 +455,8 @@ interface VoiceStoreState {
   /** Desfaz a pré-conexão (seletor fechado sem escolha). */
   descartarTelaNativa: () => Promise<void>;
   pararTela: () => Promise<void>;
+  /** Emudece/devolve o som da minha transmissão (navegador ou nativa). */
+  alternarAudioDaTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
   setCameraFps: (fps: CameraFps) => void;
@@ -419,6 +464,8 @@ interface VoiceStoreState {
 
   setVolume: (userId: string, volume: number) => void;
   toggleSilenciado: (userId: string) => void;
+  /** Silencia/devolve só o som da transmissão deste dono, para mim. */
+  alternarTelaSilenciada: (userId: string) => void;
   /**
    * Põe um tile no palco, ou tira o que está lá (clicar no focado volta à
    * grade). A chave é a do tile, não o id da pessoa: quem assiste a duas telas
@@ -653,6 +700,8 @@ function desmontarSala() {
   // rodaria num contexto morto na próxima entrada
   void fecharMicrofone();
   desarmarDetectorLocal(() => {});
+  // avisos da sala que está fechando não valem para a próxima
+  falandoPorAviso.clear();
   sala.removeAllListeners();
   void sala.disconnect().catch(() => {});
   sala = null;
@@ -759,6 +808,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       testandoMicrofone: false,
       camOn: false,
       screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
       focado: null,
       focoAutomatico: true,
       telaCheia: false,
@@ -786,11 +837,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     screenOn: false,
     screenQuality: lerScreenQuality(lerDoStorage(SCREEN_QUALITY_KEY)),
     screenAudio: true,
+    telaComSom: false,
+    audioDaTelaMudo: false,
     cameraFps: lerCameraFps(lerDoStorage(CAMERA_FPS_KEY)),
     audio: carregarAudio(),
     erroDeSupressao: null,
     volumes: {},
     silenciados: {},
+    telaSilenciada: {},
     focado: null,
     focoAutomatico: true,
     telaCheia: false,
@@ -991,6 +1045,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         falando: NINGUEM,
         camOn: false,
         screenOn: false,
+        telaComSom: false,
+        audioDaTelaMudo: false,
         focado: null,
         focoAutomatico: true,
         assistindo: new Set<string>(),
@@ -1034,8 +1090,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
       // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
-      // conexão nova da conta. A coluna fecha — o painel mostraria uma sala em
-      // que não estou mais
+      // conexão nova da conta. Em servidor, o painel fica no Vista do canal com
+      // o botão "entrar" (como Discord); em DM, a coluna fecha. Toast explica.
       sairDaSalaAtual("expulso");
       ui.toast(
         channelId === novoCanalId
@@ -1235,6 +1291,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // passa a preservar nitidez em vez de suavizar o quadro (o que faria com
       // uma câmera). É o ganho de legibilidade mais barato que existe aqui.
       video.contentHint = "detail";
+      // o som pode não subir (faixa encerrada no meio): `telaComSom` diz o que
+      // foi ao ar, não o que se pediu
+      let somNoAr = false;
       try {
         await lp.publishTrack(new LocalVideoTrack(video), {
           source: Track.Source.ScreenShare,
@@ -1261,6 +1320,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
             dtx: false,
             red: false,
           });
+          somNoAr = true;
         }
         const valeAinda =
           sala === salaNoInicio &&
@@ -1278,7 +1338,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           encerrarFaixas(stream.getTracks());
           await despublicarTela(lp);
         } else {
-          set({ screenOn: true });
+          // faixa nova sobe com som: um "mudo" de uma transmissão anterior
+          // não vale para esta
+          set({ screenOn: true, telaComSom: somNoAr, audioDaTelaMudo: false });
           tocarSom("transmissao-iniciada");
           // **Sem mexer no palco.** Ir ao ar pelo navegador já põe a minha tela
           // na grade como mais um card, que é o que a print `p2` mostra o
@@ -1291,7 +1353,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         encerrarFaixas(stream.getTracks());
         // o vídeo pode ter subido e o som falhado: nada da tela fica no ar
         await despublicarTela(lp);
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1354,6 +1416,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       geracaoDeTela += 1;
       const salaNoInicio = sala;
       const inicio = { geracao: ++geracaoDaTransmissao, canal: channelId };
+      // Pedir som não garante som: sem loopback nesta máquina o Rust sobe só o
+      // vídeo. Perguntado em paralelo com a subida para não somar ao clique;
+      // `capacidadesDeTela` nunca lança
+      const somPossivel = screenAudio
+        ? capacidadesDeTela().then((c) => c.audioDoSistema)
+        : Promise.resolve(false);
       try {
         // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
         // o mesmo par url+token e reaproveita a sala já conectada.
@@ -1364,6 +1432,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         );
         // a sala pré-conectada foi consumida (ou descartada) pelo Rust
         telaPreparada = null;
+        // esperado **antes** da checagem abaixo: um `await` entre ela e o
+        // `set` deixaria um "parar" no meio ser atropelado por `screenOn: true`
+        const comSom = await somPossivel;
         const valeAinda =
           sala === salaNoInicio &&
           inicioAindaVale({
@@ -1379,7 +1450,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           return;
         }
         telaNativa = true;
-        set({ screenOn: true });
+        set({ screenOn: true, telaComSom: comSom, audioDaTelaMudo: false });
         tocarSom("transmissao-iniciada");
         // O tempo por etapa, para o dia em que alguém disser "demorou": sem
         // isto a única medida é a impressão de quem clicou.
@@ -1390,7 +1461,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch (e) {
         telaPreparada = null;
         telaNativa = false;
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1413,7 +1484,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       const estava = get().screenOn;
       // uma tela que ainda estava subindo desiste ao terminar (`inicioAindaVale`)
       geracaoDaTransmissao += 1;
-      set({ screenOn: false });
+      set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
       if (estava) tocarSom("transmissao-encerrada");
       encerrarCapturaDaTela();
       const nativa = telaNativa;
@@ -1423,6 +1494,44 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         lp ? despublicarTela(lp) : Promise.resolve(),
       ]);
       get().syncFlags();
+      rerender();
+    },
+
+    /**
+     * O estado só muda depois de o transporte obedecer: marcar "mudo" com o
+     * som ainda saindo para a sala é pior do que o clique não fazer nada.
+     */
+    alternarAudioDaTela: async () => {
+      const { screenOn, telaComSom, audioDaTelaMudo } = get();
+      if (!screenOn || !telaComSom) return;
+      const mudo = !audioDaTelaMudo;
+      if (telaNativa) {
+        try {
+          await silenciarAudioDaTela(mudo);
+        } catch {
+          // app de desktop anterior ao comando: o som segue como estava
+          ui.toast("Atualize o app para silenciar o som da transmissão.", "error");
+          return;
+        }
+      } else {
+        const faixa = Array.from(sala?.localParticipant.trackPublications.values() ?? []).find(
+          (pub) => pub.source === Track.Source.ScreenShareAudio,
+        )?.track;
+        if (!faixa) return;
+        try {
+          // `mute()` e não despublicar: a faixa segue na sala e voltar é
+          // instantâneo, sem renegociar nem reaparecer como publicação nova
+          if (mudo) await faixa.mute();
+          else await faixa.unmute();
+        } catch (e) {
+          ui.toast(errorMessage(e, "Não foi possível silenciar o som da tela"), "error");
+          return;
+        }
+      }
+      // a transmissão pode ter parado enquanto o pedido ia: não ressuscitar o
+      // "mudo" de uma tela que já saiu do ar
+      if (!get().screenOn) return;
+      set({ audioDaTelaMudo: mudo });
       rerender();
     },
 
@@ -1482,6 +1591,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
+    // mesmo tratamento de `silenciados`: vale enquanto a página estiver aberta,
+    // sem storage e sem zerar ao sair da sala
+    alternarTelaSilenciada: (userId) =>
+      set((s) => ({ telaSilenciada: { ...s.telaSilenciada, [userId]: !s.telaSilenciada[userId] } })),
 
 
     // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
@@ -1976,6 +2089,8 @@ async function entrarNaSala(
   });
   sala = room;
   cameraSobCpu = false;
+  // sala nova, avisos novos — o que sobrou da sala anterior não é desta gente
+  falandoPorAviso.clear();
 
   // O navegador mede a própria codificação (`qualityLimitationReason`) e o SDK
   // avisa quando a CPU virou o gargalo. A câmera recebe o mesmo alívio da tela
@@ -2004,6 +2119,16 @@ async function entrarNaSala(
     // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
     const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
     const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    // reforço dos avisos por data message (ver `TOPICO_FALA`): quem saiu no
+    // meio da frase não manda um "parei de falar", então tira daqui quem já
+    // não está mais na sala antes de somar — senão o anel dele ficava preso
+    const presentes = new Set(
+      Array.from(room.remoteParticipants.values()).map((p) => donoDaIdentidade(p.identity)),
+    );
+    for (const dono of falandoPorAviso) {
+      if (presentes.has(dono)) proximo.add(dono);
+      else falandoPorAviso.delete(dono);
+    }
     if (useVoice.getState().falando.has(eu)) proximo.add(eu);
     set((s) => ({ falando: proximoConjunto(s.falando, proximo) }));
   };
@@ -2013,7 +2138,11 @@ async function entrarNaSala(
       recomporFalantes();
       rerender();
     })
-    .on(RoomEvent.ParticipantDisconnected, () => {
+    .on(RoomEvent.ParticipantDisconnected, (participant) => {
+      // explícito, embora `recomporFalantes` já limpe quem não está mais na
+      // sala: sem esperar o próximo recálculo para descartar o aviso de quem
+      // acabou de sair
+      falandoPorAviso.delete(donoDaIdentidade(participant.identity));
       recomporFalantes();
       rerender();
     })
@@ -2045,6 +2174,19 @@ async function entrarNaSala(
       rerender();
     })
     .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
+    .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      // aviso de fala de outro cliente (ver `TOPICO_FALA`); qualquer outro
+      // tópico não é deste anel, e sem `participant` não há de quem acender
+      if (topic !== TOPICO_FALA || !participant) return;
+      const dono = donoDaIdentidade(participant.identity);
+      // o meu próprio anel vem do detector local (`rearmarDetectorLocal`), não
+      // do aviso que eu mesmo publiquei — o LiveKit não ecoa para o remetente,
+      // mas a guarda fica pelo mesmo motivo do filtro em `recomporFalantes`
+      if (dono === donoDaIdentidade(room.localParticipant.identity ?? "")) return;
+      if (new TextDecoder().decode(payload) === "1") falandoPorAviso.add(dono);
+      else falandoPorAviso.delete(dono);
+      recomporFalantes();
+    })
     .on(RoomEvent.Disconnected, () => {
       // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
       // quem chegou depois manda, e uma sala aposentada não tem o direito de
@@ -2055,6 +2197,8 @@ async function entrarNaSala(
       sala = null;
       pararMedicaoDePing();
       desarmarDetectorLocal(() => {});
+      // idem: sala caiu, os avisos dela não valem mais
+      falandoPorAviso.clear();
       set({
         midiaDisponivel: false,
         microfonePronto: false,
@@ -2195,6 +2339,15 @@ function rearmarDetectorLocal() {
     useVoice.setState((s) => ({
       falando: comFalante(s.falando, donoDaIdentidade(eu), falando),
     }));
+    // avisa a sala pelo mesmo caminho (ver `TOPICO_FALA`): é isto que acende o
+    // anel dos outros sem esperar o limiar do SFU. Falha de envio não pode
+    // derrubar o anel local, que já foi aplicado na linha de cima
+    room.localParticipant
+      .publishData(new TextEncoder().encode(falando ? "1" : "0"), {
+        reliable: true,
+        topic: TOPICO_FALA,
+      })
+      .catch(() => {});
   });
 }
 
@@ -2690,7 +2843,12 @@ if (typeof window !== "undefined" && isTauri()) {
   ouvirTelaEncerrada((motivo) => {
     if (!telaNativa) return;
     telaNativa = false;
-    useVoice.setState((s) => ({ screenOn: false, tick: s.tick + 1 }));
+    useVoice.setState((s) => ({
+      screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
+      tick: s.tick + 1,
+    }));
     tocarSom("transmissao-encerrada");
     useVoice.getState().syncFlags();
     ui.toast(

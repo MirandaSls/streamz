@@ -60,6 +60,29 @@ export const TAXAS: ("30" | "60")[] = [...new Set(CHAVES.map((q) => separarPrese
 // ── captura do navegador ───────────────────────────────────────────────────
 
 /**
+ * `getDisplayMedia` não tem essas chaves no `lib.dom` do TS ainda (Chrome
+ * 139+); tipar local em vez de `any` — e navegador sem suporte simplesmente
+ * ignora a chave que não conhece.
+ */
+type OpcoesDeCapturaComRestricaoDeEco = Omit<DisplayMediaStreamOptions, "audio"> & {
+  /** A própria aba do Streamz some da lista do seletor do navegador. */
+  selfBrowserSurface?: "include" | "exclude";
+  /** Só com `audio: true` — mantém o áudio do sistema disponível para "tela inteira". */
+  systemAudio?: "include" | "exclude";
+  audio?: boolean | RestricaoDeAudioComEco;
+};
+
+type RestricaoDeAudioComEco = MediaTrackConstraints & {
+  /**
+   * Tira do áudio capturado o que a própria página está tocando — Chrome
+   * 139+. É isto que corta o eco, não `echoCancellation`.
+   */
+  restrictOwnAudio?: boolean;
+  /** Explícito: não queremos calar nada na reprodução local. */
+  suppressLocalAudioPlayback?: boolean;
+};
+
+/**
  * O que `getDisplayMedia` recebe no navegador. `displaySurface` é só uma
  * **dica** de qual painel do diálogo abrir primeiro (o navegador lista tudo de
  * qualquer jeito, e pode ignorar a dica): a aba "Tela Inteira" do nosso
@@ -69,15 +92,23 @@ export const TAXAS: ("30" | "60")[] = [...new Set(CHAVES.map((q) => separarPrese
  *
  * O áudio vai com os três processadores de voz desligados e dois canais de
  * propósito: eles são feitos para microfone e achatam música/jogo em mono
- * abafado. Aqui a fonte é o próprio sistema, então não há eco a cancelar.
+ * abafado. O eco aqui não vem de microfone — vem do próprio áudio da chamada
+ * (vozes que o usuário está ouvindo) voltando pelo loopback do sistema ao
+ * compartilhar a tela inteira com áudio. Quem corta isso é `restrictOwnAudio`
+ * (tira da captura o que a própria aba do Streamz está tocando), não o AEC —
+ * por isso `echoCancellation` continua `false`. `selfBrowserSurface: "exclude"`
+ * soma a isso escondendo a própria aba do seletor; `systemAudio: "include"`
+ * garante que o áudio do sistema continue disponível para "tela inteira".
  */
 export function restricoesDeCaptura(
   q: ScreenQuality,
   audio: boolean,
   aba: Aba = "telas",
-): DisplayMediaStreamOptions {
+): OpcoesDeCapturaComRestricaoDeEco {
   const p = SCREEN_QUALITY[q];
   return {
+    selfBrowserSurface: "exclude",
+    ...(audio ? { systemAudio: "include" as const } : {}),
     video: {
       displaySurface: aba === "telas" ? "monitor" : "window",
       width: p.width,
@@ -90,7 +121,9 @@ export function restricoesDeCaptura(
           noiseSuppression: false,
           autoGainControl: false,
           channelCount: 2,
-        } as MediaTrackConstraints)
+          restrictOwnAudio: true,
+          suppressLocalAudioPlayback: false,
+        } satisfies RestricaoDeAudioComEco)
       : false,
   };
 }

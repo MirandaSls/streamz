@@ -10,7 +10,10 @@ fn main() {
     // Continua um cfg próprio, e não `windows` direto nos vinte lugares do
     // `tela/mod.rs`, para o macOS voltar mexendo só nesta linha.
     println!("cargo::rustc-check-cfg=cfg(tela_nativa)");
-    if matches!(std::env::var("CARGO_CFG_TARGET_OS").as_deref(), Ok("windows")) {
+    if matches!(
+        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("windows")
+    ) {
         println!("cargo::rustc-cfg=tela_nativa");
     }
 

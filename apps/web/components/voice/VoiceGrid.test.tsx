@@ -85,7 +85,10 @@ vi.mock("@/stores/auth", () => ({
 }));
 
 vi.mock("@/stores/presence", () => ({
-  usePresence: <T,>(sel: (s: { profiles: Record<string, unknown> }) => T) => sel({ profiles: {} }),
+  usePresence: <T,>(sel: (s: { profiles: Record<string, unknown>; statuses: Record<string, unknown> }) => T) =>
+    sel({ profiles: {}, statuses: {} }),
+  resolveStatus: (statuses: Record<string, unknown>, user: { id: string; status?: unknown }) =>
+    statuses[user.id] ?? user.status,
 }));
 
 vi.mock("@/stores/preferencias-por-participante", () => ({
@@ -190,8 +193,10 @@ describe("a minha tela no navegador", () => {
       expect(cardDaTela).not.toContain(rotulo);
     }
     expect(cardDaTela).toContain("Ao vivo");
-    // e o card da pessoa continua com as ações dele
-    expect(html).toContain("Colocar no palco");
+    // paridade com o Discord: o card da pessoa também não leva ação nenhuma
+    // por cima — só o menu do botão direito
+    expect(html).not.toContain("Colocar no palco");
+    expect(html).not.toContain("Mais opções");
   });
 });
 

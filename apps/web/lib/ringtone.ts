@@ -143,6 +143,32 @@ const FATOR: Record<NomeDeSom, number> = {
 /** Dois pedidos do mesmo arquivo dentro desta janela viram um (a do Discord). */
 export const JANELA_SEM_REPETIR_MS = 300;
 
+// ── ensurdecer cala tudo ────────────────────────────────────────────────────
+
+/**
+ * `stores/voicePrefs` importa `tocarSom` daqui (para os próprios avisos de
+ * mudo/surdo) — um import direto de `useVoicePrefs` neste arquivo fecharia um
+ * ciclo. Por isso o estado de `deafened` chega por registro, não por import:
+ * quem sabe o valor chama `definirSurdoParaSons` uma vez, e até isso acontecer
+ * `estaSurdo()` responde `false` (nunca surdo por omissão).
+ *
+ * Precisa ser registrado perto do módulo de `stores/voicePrefs.ts` — por
+ * exemplo `definirSurdoParaSons(() => useVoicePrefs.getState().deafened)`
+ * chamado no topo daquele arquivo, ou por quem o importa cedo (ex.: o layout
+ * raiz do app) — para valer antes do primeiro som tocado.
+ */
+let leitorDeSurdo: (() => boolean) | null = null;
+
+/** Registra o leitor de `deafened` usado por `tocarSom` e `prepararToque`. */
+export function definirSurdoParaSons(fn: () => boolean): void {
+  leitorDeSurdo = fn;
+}
+
+/** A pessoa está com o áudio da chamada desligado agora? */
+function estaSurdo(): boolean {
+  return leitorDeSurdo !== null && leitorDeSurdo();
+}
+
 // ── volume: o único lugar que decide ───────────────────────────────────────
 
 /** Volume de saída das configurações, de 0 a 1 — o mesmo do resto do app. */
@@ -224,6 +250,8 @@ export function ringbackUrl(): string {
  */
 export function prepararToque(el: HTMLAudioElement | null): boolean {
   if (!el) return false;
+  // ensurdecido cala também o toque: é a mesma promessa do botão — nada sai
+  if (estaSurdo()) return false;
   el.volume = volumeDoSom("chamada");
   aplicarSaidaEscolhida(el);
   return useSettings.getState().notificationSound && somLigado("chamada");
@@ -321,6 +349,10 @@ function tocarArquivo(url: string, volume: number): void {
  */
 export function tocarSom(nome: NomeDeSom, opcoes: { forcar?: boolean } = {}): void {
   if (!opcoes.forcar && (!useSettings.getState().notificationSound || !somLigado(nome))) return;
+  // ensurdecido cala tudo, inclusive notificação — exceto o próprio aviso de
+  // ensurdecer/desensurdecer: é o retorno do clique que causou o estado, e
+  // sem ele o botão pareceria não ter feito nada
+  if (nome !== "surdo" && nome !== "nao-surdo" && estaSurdo()) return;
   tocarArquivo(ARQUIVOS[nome], volumeDoSom(nome));
 }
 

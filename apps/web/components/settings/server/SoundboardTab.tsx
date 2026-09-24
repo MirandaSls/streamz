@@ -59,17 +59,13 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  *
  * **Por que a prévia não usa `useSoundboard().tocarLocalmente`:** aquela
  * função é para quem **ouve o `soundboard.play` de outra pessoa na chamada**
- * (`hooks/useRealtime.ts:384`) e por isso checa `deafened` — corretíssimo lá
- * (quem se ensurdeceu na call não deve ouvir o som que ela dispara), errado
- * aqui: apertar "tocar" nas configurações é um gesto deliberado, sem call
- * nenhuma envolvida, e não devia falhar em silêncio só porque a pessoa está
- * ensurdecida numa chamada de outra aba. Por isso esta prévia chama
- * `tocarNaSaida` (`lib/soundboard-audio.ts`), a metade de `tocarEfeitoSonoro`
- * sem a guarda de `deafened`, com o volume de `volumeDoEfeito` (volume dos
- * efeitos vezes o de referência do arquivo — a mesma conta do painel da
- * chamada). Antes a prévia criava um `Audio` próprio e por isso tocava no
- * alto-falante do sistema mesmo com um fone escolhido em "Voz e vídeo"; agora
- * sai no mesmo dispositivo dos efeitos da chamada.
+ * (`hooks/useRealtime.ts:384`). Esta prévia chama `tocarNaSaida`
+ * (`lib/soundboard-audio.ts`) direto, com o volume de `volumeDoEfeito` (volume
+ * dos efeitos vezes o de referência do arquivo — a mesma conta do painel da
+ * chamada); `tocarNaSaida` também respeita `deafened`, então surdo cala a
+ * prévia igual cala o resto. Antes a prévia criava um `Audio` próprio e por
+ * isso tocava no alto-falante do sistema mesmo com um fone escolhido em "Voz e
+ * vídeo"; agora sai no mesmo dispositivo dos efeitos da chamada.
  *
  * **Estados cobertos** (o pedido do cartão 6p-sons):
  * - **carregando** — `useSoundboard().carregado` começa `false`; enquanto isso
@@ -115,8 +111,8 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
   function tocarPreview(som: SoundboardSound) {
     // um segundo clique rápido em outro som não deve somar às duas prévias
     previaRef.current?.pause();
-    // autoplay bloqueado ou arquivo fora do ar: `tocarNaSaida` fica em
-    // silêncio — é só uma prévia, sem toast
+    // autoplay bloqueado, arquivo fora do ar ou ensurdecido: `tocarNaSaida`
+    // fica em silêncio — é só uma prévia, sem toast
     previaRef.current = tocarNaSaida(som.url, volumeDoEfeito(som, volume));
   }
 
