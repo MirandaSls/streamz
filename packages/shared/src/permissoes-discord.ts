@@ -117,6 +117,7 @@ export const PAR_NO_DISCORD: Record<PermissionName, PermissaoDoDiscord> = {
   CONNECT: "CONNECT",
   SPEAK: "SPEAK",
   MUTE_MEMBERS: "MUTE_MEMBERS",
+  DEAFEN_MEMBERS: "DEAFEN_MEMBERS",
   MODERATE_MEMBERS: "MODERATE_MEMBERS",
   // não temos "expressões" separadas de emoji: o nosso MANAGE_EMOJIS é o guarda-chuva
   MANAGE_EMOJIS: "MANAGE_GUILD_EXPRESSIONS",
