@@ -98,7 +98,31 @@ const SIZE = {
 } as const;
 
 /** Estado de voz que o avatar mostra no lugar da bolinha de status. */
-export type VozNoAvatar = "mudo" | "surdo";
+export type VozNoAvatar = "mudo" | "surdo" | "mudo-servidor" | "surdo-servidor";
+
+/**
+ * Ícone, rótulo e cor do selo por estado — `Record` sobre `VozNoAvatar` para o
+ * TypeScript acusar se um estado novo ficar sem entrada aqui.
+ *
+ * O ícone é o mesmo do par (mic/headphone) tanto no silêncio próprio quanto no
+ * imposto pelo servidor; a cor do disco é sempre `--status-danger` — o mesmo
+ * vermelho que `VoiceChannelMembers.tsx` e `TileDeVoz.tsx` já usam para o
+ * glifo de mudo/surdo imposto por um moderador. A diferença entre "eu me
+ * mutei" e "o servidor me mutou" está no contexto (o `aria-label` já separa
+ * os dois: "Mudo" vs. "Mudo pelo servidor"), não no tom do vermelho — dois
+ * vermelhos aqui só fariam a pessoa procurar uma distinção visual que o resto
+ * da voz não tem.
+ */
+const VOZ_NO_AVATAR: Record<VozNoAvatar, { rotulo: string; Icone: typeof MicOff; bg: string }> = {
+  mudo: { rotulo: "Mudo", Icone: MicOff, bg: "bg-status-danger" },
+  surdo: { rotulo: "Sem áudio", Icone: HeadphoneOff, bg: "bg-status-danger" },
+  "mudo-servidor": { rotulo: "Mudo pelo servidor", Icone: MicOff, bg: "bg-status-danger" },
+  "surdo-servidor": {
+    rotulo: "Sem áudio pelo servidor",
+    Icone: HeadphoneOff,
+    bg: "bg-status-danger",
+  },
+};
 
 /**
  * Avatar circular com a foto do usuário — ou, quando não há foto, o símbolo do
@@ -185,15 +209,20 @@ export default function Avatar({
         </span>
       )}
       {voz ? (
-        // surdo implica mudo: um selo só, e o de baixo é o que informa mais
+        // surdo implica mudo: um selo só, e o de baixo é o que informa mais.
+        // Cor do disco vem de `VOZ_NO_AVATAR`, `status-danger` nos quatro
+        // estados; o ícone continua branco por cima — mesmo raciocínio do
+        // papel "overlay": é ícone sobre mancha de cor saturada, não texto de
+        // botão.
         <span
           role="img"
-          aria-label={voz === "surdo" ? "Sem áudio" : "Mudo"}
-          // ícone branco sobre o disco de perigo — mesmo raciocínio do papel
-          // "overlay": é ícone sobre mancha de cor saturada, não texto de botão
-          className={`absolute grid place-items-center rounded-full bg-status-danger text-icon-overlay-light ${surface} ${s.dot}`}
+          aria-label={VOZ_NO_AVATAR[voz].rotulo}
+          className={`absolute grid place-items-center rounded-full ${VOZ_NO_AVATAR[voz].bg} text-icon-overlay-light ${surface} ${s.dot}`}
         >
-          {voz === "surdo" ? <HeadphoneOff size={s.icone} /> : <MicOff size={s.icone} />}
+          {(() => {
+            const Icone = VOZ_NO_AVATAR[voz].Icone;
+            return <Icone size={s.icone} />;
+          })()}
         </span>
       ) : (
         status && (

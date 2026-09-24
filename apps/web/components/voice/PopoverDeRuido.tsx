@@ -57,19 +57,31 @@ export default function PopoverDeRuido() {
             <BarraDeNivel nivel={nivel} />
           </span>
         </div>
-        <p className="text-xs text-text-muted">
-          {testando
-            ? "Fale: você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
-            : "Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você. Testar te deixa mudo e surdo até você parar."}
-        </p>
+        {testando && (
+          <p className="text-xs text-text-muted">
+            Fale: você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a
+            sala não te ouve e você não ouve ninguém.
+          </p>
+        )}
         {erro && <p className="text-xs text-status-danger">{erro}</p>}
       </div>
 
       {/* Crédito honesto: o motor é o RNNoise, o mesmo que o Jitsi usa. Sem ele
           esta caixa insinuaria tecnologia própria que não é nossa. */}
-      <p className="border-t border-border-subtle pt-2 text-xs text-channels-default">
-        Supressão avançada por RNNoise
-      </p>
+      <div className="border-t border-border-subtle pt-2">
+        <p className="text-xs text-text-muted">Fornecido por</p>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-text-strong">RNNoise</span>
+          <a
+            href="https://github.com/xiph/rnnoise"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-text-link hover:underline"
+          >
+            Saiba mais
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

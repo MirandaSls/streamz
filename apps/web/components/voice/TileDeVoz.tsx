@@ -4,19 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   Apps,
   Eye,
+  ExternalLink,
   EyeOff,
   HeadphoneOff,
-  Maximize,
-  Maximize2,
   MicOff,
-  Minimize2,
   Monitor,
   MonitorX,
-  MoreHorizontal,
   Play,
   UserPlus,
-  Volume2,
-  VolumeX,
 } from "@/components/ui/icones";
 import type { TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
@@ -31,13 +26,13 @@ import {
   suportaTelaCheia,
 } from "@/components/voice/fullscreen";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
-import { abrirMenuDeParticipante, abrirVolumeDe } from "@/components/voice/participant-menu";
+import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
-import { usePresence } from "@/stores/presence";
+import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
-import { useVoice } from "@/stores/voice";
 
 /**
  * **Um** participante do palco: o tile com vídeo/avatar, o avatar solto da
@@ -172,6 +167,10 @@ export function AvatarDeChamada({
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
+  const statuses = usePresence((s) => s.statuses);
+  const status = resolveStatus(statuses, state.user);
+  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
+  const ausente = status === "IDLE" && !ativo;
 
   return (
     <Tooltip label={nome}>
@@ -180,10 +179,10 @@ export function AvatarDeChamada({
         aria-label={nome}
         onContextMenu={(e) => {
           e.preventDefault();
-          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
+          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
         }}
         className={`relative inline-grid rounded-full transition ${
-          state.reconnecting ? "opacity-50" : ""
+          state.reconnecting ? "opacity-50" : ausente ? "opacity-60" : ""
         }`}
       >
         <Avatar
@@ -192,8 +191,22 @@ export function AvatarDeChamada({
           // o palco de avatares só existe no `CallStage`, que é `--black`: o
           // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
           surface="border-black"
-          voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
-          className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
+          status={status}
+          // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
+          // um moderador mostra o selo "-servidor" mesmo que também tenha se
+          // silenciado sozinho (ver `useSilencioDoServidor.ts`)
+          voz={
+            state.serverDeaf
+              ? "surdo-servidor"
+              : state.serverMute
+                ? "mudo-servidor"
+                : state.deafened
+                  ? "surdo"
+                  : state.muted
+                    ? "mudo"
+                    : null
+          }
+          className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
         {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
             Desenhado por fora, o avatar crescia quando a pessoa falava e a
@@ -269,6 +282,24 @@ export function VoiceTile({
 }) {
   const { state, publication, tela, assistindo } = tile;
   const sou = state.user.id === meId;
+  /**
+   * A chave da **janela solta**, não `tile.key`: elas divergem para a tela —
+   * `chaveDaJanela` usa `${userId}:tela` (fixa), e `tile.key` usa
+   * `${userId}:${trackSid}` (`chaveDoTileDeTela`, muda a cada nova
+   * transmissão). Assinado com a chave errada, o placeholder nunca casaria com
+   * a janela aberta pelo menu de participante (`abrirJanelaSolta`, que também
+   * registra com `chaveDaJanela`).
+   *
+   * Reativo por seletor, e não `jaAberta()`: aquele muda o store como
+   * efeito colateral de ler (limpa entrada morta), o que não é seguro dentro
+   * do corpo do render. O `pagehide` da janela (`lib/janela-solta.ts`) já
+   * chama `fechar()` sozinho, então o registro do store fica em dia sem
+   * ajuda daqui — só o `!win.closed` cobre a janela que sumiu sem disparar o
+   * evento (aba congelada).
+   */
+  const chaveJanela = chaveDaJanela(tela ? "tela" : "usuario", tile.userId);
+  const janelaDaChave = useJanelasDeVoz((s) => s.janelas[chaveJanela]);
+  const emJanela = !!janelaDaChave && !janelaDaChave.win.closed;
   const caixa = useRef<HTMLDivElement>(null);
   /**
    * **Tela cheia do tile nunca é a da janela sozinha** — e no app desktop ela
@@ -333,13 +364,16 @@ export function VoiceTile({
   /** clique simples segurado à espera do segundo (ver `ESPERA_DO_DUPLO_CLIQUE`). */
   const cliquePendente = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(cliquePendente.current), []);
-  const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
-  const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
   // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
   // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
+  const statuses = usePresence((s) => s.statuses);
+  const status = resolveStatus(statuses, state.user);
+  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
+  // Nunca entra no vídeo — só no avatar (câmera desligada) e no rótulo.
+  const ausente = status === "IDLE" && !ativo;
   const nome = displayNameOf(state.user);
   // a foto ao vivo, pelo mesmo caminho do `Avatar`: quem troca a foto troca
   // também a cor do tile, sem F5
@@ -351,8 +385,13 @@ export function VoiceTile({
    * decide se ela aparece aqui é o "Ver prévia".
    */
   const minhaTelaOculta = !!tile.minhaTelaNativa && !assistindo;
-  /** só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. */
-  const video = publication?.track && !minhaTelaOculta ? publication : null;
+  /**
+   * Só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. E
+   * nunca com `emJanela`: a janela solta já decodifica a mesma faixa
+   * (`JanelasDeVoz.tsx`); colar o `<video>` aqui **também** seria decodificar
+   * duas vezes o quadro que a pessoa já está vendo na outra janela.
+   */
+  const video = publication?.track && !minhaTelaOculta && !emJanela ? publication : null;
   /** ver o comentário do componente: a cor dominante só pinta o tile quando
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
@@ -396,17 +435,25 @@ export function VoiceTile({
           ? undefined
           : (e) => {
               // botão de dentro já tem ação própria: dois cliques nele não são
-              // "dois cliques na transmissão"
-              if ((e.target as HTMLElement).closest("button")) return;
+              // "dois cliques na transmissão". E o placeholder de janela
+              // aberta não tem transmissão nenhuma para colocar em tela
+              // cheia — é o mesmo motivo do botão, só que sem elemento
+              // `<button>` cobrindo a área toda.
+              if ((e.target as HTMLElement).closest("button, [data-placeholder-janela]")) return;
               window.clearTimeout(cliquePendente.current);
               void alternarTelaCheiaDe(caixa.current);
             }
       }
       onContextMenu={(e) => {
         e.preventDefault();
+        if (tela && sou) {
+          abrirMenuDaMinhaTela(e.clientX, e.clientY);
+          return;
+        }
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, {
           sou,
           channelId,
+          noPalco: true,
           tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
         });
       }}
@@ -427,7 +474,9 @@ export function VoiceTile({
         raio === undefined ? "rounded-lg" : ""
       } ${usaFundoDaFoto ? "" : "bg-chat-background-default"}`}
     >
-      {video ? (
+      {emJanela ? (
+        <PlaceholderJanelaAberta chave={chaveJanela} nome={nome} compacto={compacto} />
+      ) : video ? (
         <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
       ) : tela ? (
         // Sem faixa. Ou a tela não se assiste ainda — e aí o convite logo
@@ -451,12 +500,17 @@ export function VoiceTile({
               avatar de 80 num tile de 760×428) e 64 na faixa de miniaturas
               (medido em `203909`: ~68px num tile de 188×106 — o avatar do
               Discord é quase constante, não uma fração do tile). */}
-          <span className="relative inline-grid rounded-full">
+          <span
+            className={`relative inline-grid rounded-full transition-opacity ${
+              ausente ? "opacity-60" : ""
+            }`}
+          >
             <Avatar
               user={state.user}
               size="xl"
               surface="border-chat-background-default"
-              className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""} ${
+              status={status}
+              className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""} ${
                 compacto && rotuloPequeno
                   ? // tira do celular (116×78, só ela passa `rotuloPequeno`): os
                     // 64 da tira do desktop ocupavam 82% da altura e eram
@@ -526,7 +580,11 @@ export function VoiceTile({
           codificar é decodificar 1440p só para se ver — ver
           `assinaturas-de-tela.ts`. O botão reaproveita a pílula de 32px do
           convite ao lado, no cinza secundário: não é um chamado para agir. */}
-      {minhaTelaOculta && (
+      {/* Não junto do `emJanela`: com a janela aberta o placeholder de cima já
+          cobre o mesmo `inset-0` e conta a história certa ("aberto em outra
+          janela"), e não a desta caixa ("Ver prévia"), que não faz sentido
+          para uma tela que já está sendo vista — só noutro lugar. */}
+      {minhaTelaOculta && !emJanela && (
         <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
           {!compacto && (
             <span className="text-sm font-semibold text-text-strong">
@@ -572,7 +630,12 @@ export function VoiceTile({
         </div>
       )}
 
-      {tela && !assistindo && !tile.minhaTelaNativa && (
+      {/* `!emJanela`: abrir a janela solta já assina a transmissão sozinho
+          (`useAssinaturaDaTela` em `JanelasDeVoz.tsx`) — mas entre o clique
+          que abre a janela e esse efeito rodar há um quadro em que
+          `emJanela` já é `true` e `assistindo` ainda não. Sem a checagem, o
+          convite "Assistir" piscaria por cima do placeholder nesse instante. */}
+      {tela && !assistindo && !tile.minhaTelaNativa && !emJanela && (
         <button
           type="button"
           onClick={(e) => {
@@ -676,29 +739,47 @@ export function VoiceTile({
           `.overlayTitle__2f4f7.idle{opacity:0}` — o ponteiro parado, que no
           palco já é a moldura inteira que some. */}
       <span
-        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default ${
+        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default transition-opacity ${
           // o ramo de 20px é o do celular (`PalcoMobile`), medido lá
           rotuloPequeno
             ? "h-[20px] gap-1.5 px-[6px] text-[11px]"
-            : `h-8 gap-1.5 pr-3 text-sm ${tela || state.muted || state.deafened ? "pl-2" : "pl-3"}`
+            : `h-8 gap-1.5 pr-3 text-sm ${
+                tela || state.muted || state.deafened || state.serverMute || state.serverDeaf ? "pl-2" : "pl-3"
+              }`
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
+        } ${
+          // câmera e tela nunca esmaecem — só o rótulo do avatar parado
+          ausente && !video && !tela ? "opacity-60" : ""
         }`}
       >
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
             mesma coisa. "Silenciado por você" não entra — é estado meu, não
             dele, e vive no menu de contexto.
-            Branco, e não vermelho: é o que a print 101857 mostra. Na tela
-            compartilhada o glifo é o monitor (print 123917, tile "Md" com a
-            transmissão), porque o que o rótulo anuncia ali é a tela, não a voz. */}
+            Branco, e não vermelho: é o que a print 101857 mostra — para o
+            mudo por conta própria. O mudo/ensurdecido **pelo servidor**
+            (`serverMute`/`serverDeaf`) é vermelho (`status-danger`), como o
+            selo do avatar em `AvatarDeChamada`, e manda sobre o próprio: quem
+            foi silenciado por um moderador mostra o glifo vermelho mesmo que
+            também tenha se mutado sozinho. Na tela compartilhada o glifo é o
+            monitor (print 123917, tile "Md" com a transmissão), porque o que
+            o rótulo anuncia ali é a tela, não a voz. */}
         {tela ? (
           <span className="grid h-4 w-4 shrink-0 place-items-center">
             <Monitor size={16} role="img" aria-label="Tela compartilhada" />
           </span>
         ) : (
-          (state.deafened || state.muted) && (
-            <span className="grid h-4 w-4 shrink-0 place-items-center">
-              {state.deafened ? (
+          (state.serverDeaf || state.serverMute || state.deafened || state.muted) && (
+            <span
+              className={`grid h-4 w-4 shrink-0 place-items-center ${
+                state.serverDeaf || state.serverMute ? "text-status-danger" : ""
+              }`}
+            >
+              {state.serverDeaf ? (
+                <HeadphoneOff size={16} role="img" aria-label="Áudio desativado pelo servidor" />
+              ) : state.serverMute ? (
+                <MicOff size={16} role="img" aria-label="Silenciado pelo servidor" />
+              ) : state.deafened ? (
                 <HeadphoneOff size={16} role="img" aria-label="Sem áudio" />
               ) : (
                 <MicOff size={16} role="img" aria-label="Mudo" />
@@ -726,81 +807,83 @@ export function VoiceTile({
         {state.user.bot && <TagDeBot caixaEstreita={rotuloPequeno} />}
       </span>
 
-      {/* Ações do hover, no canto superior direito — **só no card de pessoa**.
-          Sobre uma transmissão o Discord não desenha fileira nenhuma: nas
-          prints `p2`/`p4`/`p6` o card de tela tem o selo "AO VIVO" e mais
-          nada, e no destaque (`p3`, `p5`) a transmissão fica limpa de ponta a
-          ponta. Seis ícones por cima do que a pessoa abriu para ser lido
-          tapavam justamente o conteúdo.
+      {/* Sem fileira de botões no hover — nem no card de pessoa, nem no de
+          tela. Paridade com o Discord (prints `2.png`/`3.png`): o tile de
+          pessoa não tem NENHUM botão no topo, só o menu de botão direito —
+          igual ao card de tela, que já não desenhava fileira nenhuma (o selo
+          "AO VIVO" é o único elemento fixo dele).
 
-          As funções não sumiram, mudaram de lugar — e é o lugar do Discord:
-          - **Parar transmissão** mora na barra de controles, onde o mesmo
-            botão que iniciou a tela a encerra (`ScreenShareButton`); na `p2`
-            o Discord também põe o "Parar de compartilhar" fora do card;
-          - **Parar de assistir** está no menu de contexto do tile (botão
-            direito), que o `onContextMenu` logo acima já abre com o item;
-          - **Palco** é o clique no próprio card, e **tela cheia** o duplo
-            clique (os dois já eram os gestos, ver `ESPERA_DO_DUPLO_CLIQUE`) —
-            mais o par de ícones do canto do palco, em `CallStage`. */}
-      {!semAcoes && !tela && (
-        // `z-20` acima do `z-10` das faixas do palco (cabeçalho do `CallStage`,
-        // controles): elas são transparentes, mas comem o ponteiro, e sem isto
-        // o clique em "Tela cheia" ia parar no cabeçalho invisível. O tile é
-        // `relative` sem `z-index`, então não abre contexto de empilhamento e
-        // os dois números se comparam de verdade.
-        <div
-          className={`absolute right-1 top-1 z-20 flex items-center gap-1 transition focus-within:opacity-100 ${
-            pairando ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {!sou && (
-            <>
-              <AcaoDoTile
-                label={`Volume de ${nome}`}
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
-                }}
-              >
-                <Volume2 size={14} />
-              </AcaoDoTile>
-              <AcaoDoTile
-                label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
-                onClick={() => toggleSilenciado(state.user.id)}
-              >
-                <VolumeX size={14} className={silenciado ? "text-status-danger" : undefined} />
-              </AcaoDoTile>
-            </>
-          )}
-          <AcaoDoTile
-            label={grande ? "Sair do palco" : "Colocar no palco"}
-            onClick={() => onFocar(tile.key)}
-          >
-            {grande ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </AcaoDoTile>
-          {!compacto && podeTelaCheia && (
-            <AcaoDoTile
-              label="Tela cheia"
-              onClick={() => void alternarTelaCheiaDe(caixa.current)}
-            >
-              <Maximize size={14} />
-            </AcaoDoTile>
-          )}
-          <AcaoDoTile
-            label={`Mais opções de ${nome}`}
-            onClick={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              abrirMenuDeParticipante(r.left, r.bottom + 4, state.user, {
-                sou,
-                channelId,
-                tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
-              });
-            }}
-          >
-            <MoreHorizontal size={14} />
-          </AcaoDoTile>
-        </div>
+          As funções não sumiram, mudaram de lugar:
+          - clique simples foca a pessoa no palco, duplo clique alterna tela
+            cheia (os mesmos gestos de sempre, ver `ESPERA_DO_DUPLO_CLIQUE`);
+          - volume, silenciar, colocar/tirar do palco, tela cheia e mais
+            opções migraram para o menu de contexto (`onContextMenu` acima),
+            que agora é o único caminho de ação do card de pessoa. */}
+    </div>
+  );
+}
+
+/**
+ * O tile de quem tem a câmera ou a tela numa **janela solta**
+ * (`useJanelasDeVoz` — "Usuário em Nova Janela" / "Transmissão em Nova
+ * Janela" do menu de contexto).
+ *
+ * Nada de vídeo aqui: `VoiceTile` já zera `video` quando `emJanela` (ver o
+ * comentário de lá) para não colar a mesma faixa duas vezes — a janela solta
+ * decodifica o quadro dela sozinha (`JanelasDeVoz.tsx`). No lugar, o mesmo
+ * papel do "Você está compartilhando sua tela" ao lado: ícone discreto,
+ * aviso, e o único caminho de volta.
+ *
+ * O clique na área inteira foca a janela (é a mesma pessoa que clicaria no
+ * tile para focar no palco, só que agora o conteúdo está lá, não aqui); o
+ * botão para o clique nele mesmo e fecha a janela em vez de focar — voltar a
+ * transmissão para o palco, e não trazer a janela para a frente.
+ */
+function PlaceholderJanelaAberta({
+  chave,
+  nome,
+  compacto,
+}: {
+  chave: string;
+  nome: string;
+  compacto: boolean;
+}) {
+  return (
+    <div
+      data-placeholder-janela=""
+      role="button"
+      tabIndex={0}
+      aria-label={`Focar a janela de ${nome}`}
+      className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 px-3 text-center"
+      onClick={(e) => {
+        e.stopPropagation();
+        useJanelasDeVoz.getState().focar(chave);
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        e.stopPropagation();
+        useJanelasDeVoz.getState().focar(chave);
+      }}
+    >
+      <ExternalLink size={20} className="text-text-overlay-light/70" aria-hidden="true" />
+      {!compacto && (
+        <span className="text-sm font-semibold text-text-overlay-light">
+          Aberto em outra janela
+        </span>
       )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          useJanelasDeVoz.getState().fechar(chave);
+        }}
+        className={`flex items-center rounded-full bg-control-overlay-secondary-background-default font-semibold text-control-overlay-secondary-text-default shadow-popout transition hover:bg-control-overlay-secondary-background-hover ${
+          compacto ? "h-6 px-2 text-[10px]" : "h-8 px-3 text-[13px]"
+        }`}
+      >
+        Voltar para cá
+      </button>
     </div>
   );
 }

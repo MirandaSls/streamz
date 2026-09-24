@@ -12,8 +12,10 @@ import {
   hasPermission,
   VOICE_FLAGS_PADRAO,
   WS_EVENTS,
+  ehIdentidadeDeTela,
   identidadeDeTela,
   type VoiceFlags,
+  type VoiceModerarPayload,
   type VoiceMovedEvent,
   type VoiceStateEvent,
   type VoiceTokenResponse,
@@ -113,6 +115,70 @@ export function endpointDaPonte(env: NodeJS.ProcessEnv = process.env): string {
   return semEsquema.replace(/:\d+$/, "") || ENDPOINT_PADRAO_DA_PONTE;
 }
 
+/** Silêncio/surdez impostos por moderador (`GuildMember.voiceMuted`/`voiceDeafened`). */
+export interface ModeracaoDeVoz {
+  serverMute: boolean;
+  serverDeaf: boolean;
+}
+
+const SEM_MODERACAO: ModeracaoDeVoz = { serverMute: false, serverDeaf: false };
+
+/**
+ * A permissão **completa** do participante no LiveKit — a mesma no token e no
+ * `updateParticipant`.
+ *
+ * Tem de ser uma função só porque o `updateParticipant` **substitui** o objeto
+ * de permissão inteiro (não faz merge): se o token e a atualização ao vivo
+ * montassem o objeto cada um do seu jeito, silenciar alguém podia, de quebra,
+ * devolver a câmera a quem não tem `STREAM` ou tirar o canal de dados do
+ * cliente. Por isso `canPublishData: true` vai explícito aqui, mesmo sendo o
+ * padrão do grant.
+ *
+ * O silêncio do servidor tira só o microfone: a câmera e a tela são outra
+ * permissão (`STREAM`), como no Discord. A surdez corta a assinatura inteira —
+ * é o servidor de mídia que para de entregar o áudio, não o cliente que
+ * "promete" não tocar.
+ */
+export function permissaoDoParticipante(p: {
+  podeFalar: boolean;
+  podeTransmitir: boolean;
+  serverMute: boolean;
+  serverDeaf: boolean;
+}): {
+  canPublish: boolean;
+  canPublishSources: TrackSource[];
+  canSubscribe: boolean;
+  canPublishData: boolean;
+} {
+  const fontes: TrackSource[] = [
+    // Desativar áudio no servidor (serverDeaf) também impede falar, como no
+    // Discord: o cliente já trava o microfone sozinho, mas o servidor precisa
+    // garantir isso no grant do LiveKit.
+    ...(p.podeFalar && !p.serverMute && !p.serverDeaf ? [TrackSource.MICROPHONE] : []),
+    ...(p.podeTransmitir
+      ? [TrackSource.CAMERA, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO]
+      : []),
+  ];
+  return {
+    canPublish: fontes.length > 0,
+    canPublishSources: fontes,
+    canSubscribe: !p.serverDeaf,
+    canPublishData: true,
+  };
+}
+
+/**
+ * `SPEAK`/`STREAM` efetivos no canal. `permissions` ausente = conversa direta
+ * ou grupo (`DM_PERMISSIONS` já traz os dois). Compartilhado pelo token e pela
+ * atualização ao vivo, para os dois nunca discordarem.
+ */
+function capacidadesDeMidia(permissions?: number): { podeFalar: boolean; podeTransmitir: boolean } {
+  return {
+    podeFalar: permissions === undefined || hasPermission(permissions, Permission.SPEAK),
+    podeTransmitir: permissions === undefined || hasPermission(permissions, Permission.STREAM),
+  };
+}
+
 /**
  * Voz: token do LiveKit e o **estado de quem está em cada sala**.
  *
@@ -133,6 +199,19 @@ export class VoiceService {
 
   /** Cliente de sala do LiveKit, criado na primeira revogação (ver `roomService`). */
   private roomClient: RoomServiceClient | null = null;
+
+  /**
+   * Fila de `update` por usuário — mudo/desmudo em rajada.
+   *
+   * `update` é assíncrono em vários pontos (`assertCanViewChannel`, `store.update`,
+   * busca do canal, broadcast); duas chamadas do mesmo usuário disparadas em
+   * sequência rápida (rajada de mudo/desmudo) intercalam essas etapas e podem
+   * gravar/transmitir fora de ordem — a mais lenta termina depois e o estado
+   * final no servidor fica o antigo. Cada entrada aqui é a promise da última
+   * chamada em curso para aquele `userId`; a próxima encadeia depois dela, na
+   * ordem de chegada. Por processo (voz já é single-process, ver CLAUDE.md).
+   */
+  private readonly filaUpdatePorUsuario = new Map<string, Promise<void>>();
 
   constructor(
     private readonly guilds: GuildsService,
@@ -170,11 +249,17 @@ export class VoiceService {
     }
     // c-cargos: ver o canal de voz não é poder entrar nele
     this.assertPodeConectar(access.permissions);
+    // o silêncio do moderador entra já no token: sem isto, quem foi silenciado
+    // e sai e volta da sala receberia um token novo com microfone liberado
+    const moderacao = channel.guildId
+      ? await this.moderacaoDe(userId, channel.guildId)
+      : SEM_MODERACAO;
     return this.assinarToken(
       this.salaDe(channel.type, channelId),
       userId,
       username,
       access.permissions,
+      moderacao,
     );
   }
 
@@ -266,6 +351,7 @@ export class VoiceService {
     userId: string,
     username: string,
     permissions?: number,
+    moderacao: ModeracaoDeVoz = SEM_MODERACAO,
   ): Promise<VoiceTokenResponse> {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException(
@@ -277,20 +363,10 @@ export class VoiceService {
       name: username,
       ttl: "1h",
     });
-    const podeFalar = permissions === undefined || hasPermission(permissions, Permission.SPEAK);
-    const podeVideo = permissions === undefined || hasPermission(permissions, Permission.STREAM);
-    const fontes: TrackSource[] = [
-      ...(podeFalar ? [TrackSource.MICROPHONE] : []),
-      ...(podeVideo
-        ? [TrackSource.CAMERA, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO]
-        : []),
-    ];
     at.addGrant({
       room,
       roomJoin: true,
-      canPublish: fontes.length > 0,
-      canPublishSources: fontes,
-      canSubscribe: true,
+      ...permissaoDoParticipante({ ...capacidadesDeMidia(permissions), ...moderacao }),
     });
     return { token: await at.toJwt(), url: process.env.LIVEKIT_URL!, room };
   }
@@ -408,6 +484,9 @@ export class VoiceService {
     await this.leaveAllExcept(userId, channelId);
     await this.store.join(channelId, userId, flagsPermitidas);
     await this.broadcast(channelId, channel.guildId, userId, flagsPermitidas, true);
+    if (channel.guildId) {
+      this.reaplicarModeracao(channelId, channel.guildId, userId, access.permissions);
+    }
     return channel;
   }
 
@@ -507,8 +586,36 @@ export class VoiceService {
     return null;
   }
 
-  /** Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala. */
+  /**
+   * Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala.
+   *
+   * Serializado por `userId` (ver `filaUpdatePorUsuario`): a chamada só começa a
+   * de fato rodar depois que a anterior do mesmo usuário terminou, então duas
+   * em rajada não intercalam `assertCanViewChannel`/`store.update`/broadcast.
+   * O erro de uma chamada continua indo para quem a fez — só não derruba a fila
+   * para a próxima.
+   */
   async update(userId: string, channelId: string, flags: VoiceFlags) {
+    const anterior = this.filaUpdatePorUsuario.get(userId) ?? Promise.resolve();
+    const resultado = anterior.then(() => this.updateSerializado(userId, channelId, flags));
+    // a entrada da fila nunca rejeita — senão a próxima chamada encadeada
+    // herdaria a rejeição e nunca chegaria a rodar `updateSerializado`
+    const proximo = resultado.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.filaUpdatePorUsuario.set(userId, proximo);
+    proximo.finally(() => {
+      // só remove se ninguém encadeou depois — senão apagaria a fila de uma
+      // chamada mais nova que já está esperando por esta
+      if (this.filaUpdatePorUsuario.get(userId) === proximo) {
+        this.filaUpdatePorUsuario.delete(userId);
+      }
+    });
+    return resultado;
+  }
+
+  private async updateSerializado(userId: string, channelId: string, flags: VoiceFlags) {
     // c-cargos: desmutar sem SPEAK, ou ligar câmera/tela sem STREAM, não passa.
     // Vale o mesmo caminho do join — quem entrou com permissão e a perdeu no
     // meio (cargo removido) é corrigido no primeiro update que mandar.
@@ -518,7 +625,210 @@ export class VoiceService {
     if (!membro) return null;
     const channel = await this.canal(channelId);
     await this.broadcast(channelId, channel?.guildId ?? null, userId, permitidas, true);
+    if (channel?.guildId) {
+      this.reaplicarModeracao(channelId, channel.guildId, userId, access.permissions);
+    }
     return membro;
+  }
+
+  // ── moderação de voz do servidor (mute/deafen por moderador) ─
+
+  /**
+   * Silencia ou tira o áudio de alguém **no servidor** — o "Silenciar voz no
+   * servidor" / "Desativar áudio no servidor" do Discord.
+   *
+   * É outro eixo do `muted`/`deafened` do `voice.update`: aqueles são escolha
+   * da pessoa e vivem no estado efêmero; este é imposto por um moderador, mora
+   * no `GuildMember` e sobrevive a sair e voltar. A regra de verdade é o
+   * LiveKit (o microfone sai do `canPublishSources`, a assinatura é cortada);
+   * o cliente travar o botão é só a tela acompanhando.
+   *
+   * Ordem: autorização de **todos** os campos antes de gravar qualquer um —
+   * um pedido com `mute` permitido e `deaf` recusado não pode aplicar metade.
+   */
+  async moderarVoz(actorId: string, guildId: string, input: VoiceModerarPayload): Promise<void> {
+    const { userId } = input;
+    if (input.mute !== undefined) {
+      await this.guilds.assertCanModerarVoz(actorId, guildId, userId, Permission.MUTE_MEMBERS);
+    }
+    if (input.deaf !== undefined) {
+      await this.guilds.assertCanModerarVoz(actorId, guildId, userId, Permission.DEAFEN_MEMBERS);
+    }
+
+    const emVoz = await this.canalDeVozNoServidor(userId, guildId);
+    // Ligar exige a pessoa em voz (é o que o menu oferece e o que o Discord
+    // faz); desligar vale sempre, senão quem saiu silenciado ficaria preso
+    // nesse estado até voltar para a sala.
+    if ((input.mute === true || input.deaf === true) && !emVoz) {
+      throw new BadRequestException("Essa pessoa não está em um canal de voz");
+    }
+
+    const atualizado = await this.prisma.guildMember.update({
+      where: { userId_guildId: { userId, guildId } },
+      data: {
+        ...(input.mute !== undefined ? { voiceMuted: input.mute } : {}),
+        ...(input.deaf !== undefined ? { voiceDeafened: input.deaf } : {}),
+      },
+      select: { voiceMuted: true, voiceDeafened: true },
+    });
+    if (!emVoz) return;
+
+    const moderacao: ModeracaoDeVoz = {
+      serverMute: atualizado.voiceMuted,
+      serverDeaf: atualizado.voiceDeafened,
+    };
+    // A permissão do alvo no canal (não a do moderador): o objeto do LiveKit é
+    // substituído inteiro, então SPEAK/STREAM do alvo têm de ir junto.
+    try {
+      const access = await this.guilds.assertCanViewChannel(userId, emVoz.channelId);
+      await this.aplicarPermissaoNaSala(emVoz.channelId, userId, access.permissions, moderacao);
+    } catch (e) {
+      // o banco já é a fonte da verdade; o próximo token/join reaplica
+      this.logger.warn(
+        `Moderação de voz de ${userId} gravada, mas não aplicada no LiveKit: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+
+    const m = emVoz.membro;
+    await this.broadcast(
+      emVoz.channelId,
+      guildId,
+      userId,
+      { muted: m.muted, deafened: m.deafened, video: m.video, screen: m.screen },
+      true,
+      m.reconnecting ?? false,
+    );
+  }
+
+  /** `voiceMuted`/`voiceDeafened` do membro; sem linha (não é membro) = nada imposto. */
+  private async moderacaoDe(userId: string, guildId: string): Promise<ModeracaoDeVoz> {
+    const membro = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId, guildId } },
+      select: { voiceMuted: true, voiceDeafened: true },
+    });
+    return {
+      serverMute: membro?.voiceMuted ?? false,
+      serverDeaf: membro?.voiceDeafened ?? false,
+    };
+  }
+
+  /**
+   * Troca a permissão do participante que **já está** na sala do LiveKit.
+   *
+   * Só a identidade principal: a de tela (`#tela`) só publica tela e não
+   * assina nada, então nem o silêncio nem a surdez mudam o que ela pode.
+   *
+   * **Nunca lança** pelo LiveKit, como `removerDaSala`: `not_found` é o caso
+   * comum (o estado do Streamz à frente da conexão de mídia) e o resto fica no
+   * log — o banco já registrou, e o token seguinte sai com a regra certa.
+   */
+  private async aplicarPermissaoNaSala(
+    channelId: string,
+    userId: string,
+    permissions: number,
+    moderacao: ModeracaoDeVoz,
+  ): Promise<void> {
+    const client = this.roomService();
+    if (!client) return;
+    const sala = this.salaDe("VOICE", channelId);
+    try {
+      await client.updateParticipant(sala, userId, {
+        permission: permissaoDoParticipante({ ...capacidadesDeMidia(permissions), ...moderacao }),
+      });
+    } catch (e) {
+      const erro = e as { code?: string; message?: string };
+      if (erro?.code === "not_found") {
+        this.logger.debug(`LiveKit: ${userId} ainda não está em ${sala}`);
+      } else {
+        this.logger.warn(
+          `LiveKit não atualizou a permissão de ${userId} em ${sala}: ${erro?.message ?? String(e)}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Fecha a corrida do token emitido **antes** de uma mudança de moderação:
+   * quem pediu o token e só depois foi silenciado (ou liberado) chega ao
+   * LiveKit com a permissão velha. Por isso aplica **sempre** o estado atual,
+   * não só quando há algo imposto — liberar alguém também precisa chegar ao
+   * `updateParticipant`, senão quem foi desmutado no servidor enquanto ainda
+   * não tinha entrado ficaria com o microfone preso até sair e voltar da sala.
+   * Dispara e esquece — não pode atrasar nem derrubar a entrada na sala.
+   *
+   * Cobre quem passa por `voice.join`/`voice.update`. Quem reconecta direto no
+   * LiveKit com o token de 1h ainda válido, sem mandar nenhum dos dois, só é
+   * pego pelo webhook `participant_joined` (`aoEntrarNoLivekit`, abaixo).
+   */
+  private reaplicarModeracao(
+    channelId: string,
+    guildId: string,
+    userId: string,
+    permissions: number,
+  ): void {
+    void this.moderacaoDe(userId, guildId)
+      .then((moderacao) => this.aplicarPermissaoNaSala(channelId, userId, permissions, moderacao))
+      .catch((e) =>
+        this.logger.warn(
+          `Falha ao reaplicar moderação de voz de ${userId}: ${e instanceof Error ? e.message : String(e)}`,
+        ),
+      );
+  }
+
+  /**
+   * Chamado pelo webhook do LiveKit no evento `participant_joined` (o
+   * controller que decodifica o webhook fica em outro arquivo).
+   *
+   * O token do LiveKit vale 1h e não pode ser a **única** barreira contra
+   * moderação: um cliente alterado guarda o token e reconecta direto no
+   * LiveKit sem nunca mandar `voice.join`/`voice.update`, pulando
+   * `reaplicarModeracao` de vez. E o caminho inverso também vaza — se o
+   * moderador libera alguém enquanto ele ainda não tinha entrado no LiveKit,
+   * `aplicarPermissaoNaSala` bate em `not_found` e a liberação se perde até o
+   * próximo join/update. Este método é a rede que fecha os dois buracos:
+   * roda de novo a mesma checagem de acesso e aplica a permissão **sempre**
+   * (restringe ou libera), a cada entrada real na sala.
+   *
+   * Nunca lança: o controller do webhook responde 200 ao LiveKit de qualquer
+   * forma, e uma falha aqui só atrasa a moderação até o próximo evento.
+   */
+  async aoEntrarNoLivekit(sala: string, identity: string): Promise<void> {
+    // só sala de canal de servidor tem moderação; `dm:` não tem moderador
+    if (!sala.startsWith("voice:")) return;
+    // a ponte de bots (`bot:<snowflake>`) e o participante de tela (`<userId>#tela`)
+    // não assinam nada no LiveKit — nada aqui se aplica a eles
+    if (identity.startsWith("bot:") || ehIdentidadeDeTela(identity)) return;
+    const channelId = sala.slice("voice:".length);
+    try {
+      const channel = await this.canal(channelId);
+      if (!channel || !channel.guildId || channel.type !== "VOICE") return;
+      let access;
+      try {
+        access = await this.guilds.assertCanViewChannel(identity, channelId);
+      } catch (e) {
+        // perdeu o acesso ao canal com o token do LiveKit ainda dentro da 1h:
+        // o webhook é a garantia de que a conexão não sobrevive à perda de acesso
+        this.logger.warn(
+          `${identity} entrou em ${sala} sem mais acesso ao canal — removendo: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+        await this.removerDaSala(sala, identity);
+        return;
+      }
+      const moderacao = await this.moderacaoDe(identity, channel.guildId);
+      // sempre, mesmo sem moderação: é o que libera quem foi desmutado
+      // enquanto ainda não estava conectado ao LiveKit
+      await this.aplicarPermissaoNaSala(channelId, identity, access.permissions, moderacao);
+    } catch (e) {
+      this.logger.warn(
+        `Falha ao processar participant_joined de ${identity} em ${sala}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
   }
 
   /** Sai da sala. Devolve o canal quando havia mesmo o que sair. */
@@ -737,6 +1047,18 @@ export class VoiceService {
     if (userIds.length === 0) return [];
     const users = await this.prisma.user.findMany({ where: { id: { in: userIds } } });
     const porId = new Map(users.map((u) => [u.id, toPublicUser(u)]));
+    // Uma consulta para todos os canais (todos são do mesmo servidor), não uma
+    // por pessoa. Conversa direta não tem moderador: os campos ficam ausentes.
+    const moderacao = guildId
+      ? new Map(
+          (
+            await this.prisma.guildMember.findMany({
+              where: { guildId, userId: { in: userIds } },
+              select: { userId: true, voiceMuted: true, voiceDeafened: true },
+            })
+          ).map((g) => [g.userId, { serverMute: g.voiceMuted, serverDeaf: g.voiceDeafened }]),
+        )
+      : null;
     const out: VoiceStateEvent[] = [];
     for (const [channelId, membros] of mapa) {
       for (const m of membros) {
@@ -752,6 +1074,7 @@ export class VoiceService {
           video: m.video,
           screen: m.screen,
           reconnecting: m.reconnecting ?? false,
+          ...(moderacao ? (moderacao.get(m.userId) ?? SEM_MODERACAO) : {}),
         });
       }
     }
@@ -780,6 +1103,7 @@ export class VoiceService {
       connected,
       ...flags,
       reconnecting,
+      ...(guildId ? await this.moderacaoDe(userId, guildId) : {}),
     };
     if (guildId) {
       this.realtime.emitToGuild(guildId, WS_EVENTS.VOICE_STATE, evento);

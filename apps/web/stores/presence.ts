@@ -77,6 +77,40 @@ export function useLiveUser(user: PublicUser): PublicUser {
 
 // ── d-social ── presença rica: ausente automático
 
+/** Chave por usuário da marca "fui eu, o auto-idle, que pus IDLE". */
+function chaveAutoIdle(userId: string): string {
+  return `streamz:auto-idle:${userId}`;
+}
+
+// localStorage (não sessionStorage: o app desktop Tauri reabre com sessão
+// nova, e a sessão web comum sobrevive a F5/reload) — tudo em try/catch com
+// fallback ao comportamento em memória, porque o storage pode estar
+// indisponível (aba privada, quota, etc).
+
+function lerPostoArmazenado(userId: string): boolean {
+  try {
+    return localStorage.getItem(chaveAutoIdle(userId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function gravarPostoArmazenado(userId: string): void {
+  try {
+    localStorage.setItem(chaveAutoIdle(userId), "1");
+  } catch {
+    // sem storage disponível: a marca fica só em memória (posto.current)
+  }
+}
+
+function limparPostoArmazenado(userId: string): void {
+  try {
+    localStorage.removeItem(chaveAutoIdle(userId));
+  } catch {
+    // idem
+  }
+}
+
 /**
  * Marca o usuário como **Ausente** depois de `IDLE_APOS_MS` sem interação na
  * aba, e o traz de volta ao primeiro sinal de vida — é o "ausente automático"
@@ -92,6 +126,26 @@ export function useAutoIdle(enabled: boolean): void {
 
   useEffect(() => {
     if (!enabled) return;
+
+    const userId = useAuth.getState().user?.id;
+
+    // A marca `posto.current` vivia só em memória: se o componente remonta
+    // enquanto o status está IDLE (F5, reabrir o app desktop, aba
+    // descartada), ela voltava a `false` e ninguém restaurava o ONLINE nem
+    // reagendava um novo auto-idle — o usuário ficava preso em ausente. Por
+    // isso ela é lida do localStorage no início, mas só é confiável se o
+    // status atual ainda for IDLE; senão a chave é lixo de uma sessão
+    // anterior (ex.: alguém escolheu outro status manual enquanto o app
+    // estava fechado) e é descartada.
+    if (userId) {
+      const armazenado = lerPostoArmazenado(userId);
+      const me = useAuth.getState().user;
+      posto.current = armazenado && me?.status === "IDLE";
+      if (armazenado && !posto.current) limparPostoArmazenado(userId);
+    } else {
+      posto.current = false;
+    }
+
     let timer: number | undefined;
 
     async function aplicar(status: UserStatus | null) {
@@ -109,27 +163,62 @@ export function useAutoIdle(enabled: boolean): void {
       // promovemos a ausente quem está simplesmente online
       if (!me || me.status !== "ONLINE" || posto.current) return;
       posto.current = true;
+      if (userId) gravarPostoArmazenado(userId);
       void aplicar("IDLE");
     }
 
     function voltar() {
       if (posto.current) {
         posto.current = false;
+        if (userId) limparPostoArmazenado(userId);
         void aplicar(null);
       }
       window.clearTimeout(timer);
       timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
     }
 
+    // Esconder a aba (alt-tab, minimizar) também dispara `visibilitychange` —
+    // mas sair da janela não é atividade, é o oposto. Só contamos como volta
+    // quando ela fica `visible` de novo; ao esconder não fazemos nada, e o
+    // timer de ausente já agendado continua correndo (pode marcar ausente com
+    // a aba escondida, igual ao Discord).
+    function aoMudarVisibilidade() {
+      if (document.visibilityState === "visible") voltar();
+    }
+
     const eventos = ["mousemove", "keydown", "mousedown", "wheel", "touchstart", "focus"] as const;
     for (const e of eventos) window.addEventListener(e, voltar, { passive: true });
-    document.addEventListener("visibilitychange", voltar);
+    document.addEventListener("visibilitychange", aoMudarVisibilidade);
     timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
+
+    // Se o usuário escolher um status manual por outro caminho (ex.: menu de
+    // status) enquanto ainda estamos "donos" do IDLE, a marca fica obsoleta
+    // e precisa sumir — senão uma futura interação chamaria `aplicar(null)`
+    // e apagaria a escolha manual dele. Comparamos com o status ANTERIOR
+    // (só dispara quando ele estava IDLE e deixou de estar): `ficarAusente`
+    // marca `posto.current = true` antes do `await` de `aplicar("IDLE")`, e
+    // nessa janela o status ainda é ONLINE — qualquer outra atualização do
+    // useAuth nesse meio-tempo (refresh de token, perfil) não pode ser lida
+    // como "saiu do IDLE" e apagar a marca que acabamos de gravar.
+    const desinscrever = userId
+      ? useAuth.subscribe((state, prev) => {
+          if (
+            posto.current &&
+            prev.user?.status === "IDLE" &&
+            state.user &&
+            state.user.status !== "IDLE"
+          ) {
+            posto.current = false;
+            limparPostoArmazenado(userId);
+          }
+        })
+      : undefined;
 
     return () => {
       window.clearTimeout(timer);
       for (const e of eventos) window.removeEventListener(e, voltar);
-      document.removeEventListener("visibilitychange", voltar);
+      document.removeEventListener("visibilitychange", aoMudarVisibilidade);
+      desinscrever?.();
     };
   }, [enabled]);
 }

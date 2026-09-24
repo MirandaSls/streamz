@@ -43,6 +43,7 @@ import {
 import { api } from "@/lib/api";
 import {
   abrirNoSistema,
+  capacidadesDeTela,
   descartarTelaNativa as ponteDescartarTela,
   ehAndroidNoTauri,
   iniciarServicoDeChamada,
@@ -54,6 +55,7 @@ import {
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
   restaurarAtenuacaoDoWindows,
+  silenciarAudioDaTela,
   suspenderAtenuacaoDoWindows,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
@@ -97,6 +99,7 @@ import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@
 import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { criarEmissorCoalescido } from "@/stores/voice-update-coalescido";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
@@ -110,6 +113,7 @@ import {
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
+import { meuSilencio, microfoneTravado, transicaoDaTrava } from "@/stores/voz-do-servidor";
 import {
   iniciarTeste,
   pararTeste,
@@ -149,6 +153,44 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "error";
 
 /** Sala do canal em que estou — fora da store, ver o comentário acima. */
 let sala: Room | null = null;
+/**
+ * Coalesce as flags (mudo/surdo/câmera/tela) antes de mandar `VOICE_UPDATE`.
+ *
+ * Spammar mudo/desmudo chamava `syncFlags` a cada toggle, e o token bucket do
+ * gateway (WS, "Rate limiting em duas camadas" no CLAUDE.md) descartava o
+ * excesso em silêncio — o último estado podia nunca chegar, e o ícone de mudo
+ * na lista da call (que vem do servidor) ficava atrasado ou errado. Ver
+ * `voice-update-coalescido.ts` para a regra. Um só, no módulo, porque só há
+ * uma sala de voz por vez — as três entradas de sala (`connect`,
+ * `rejoinAposReconexao`, `startCall`) e a saída (`sairDaSalaAtual`) o
+ * zeram, para o coalescedor nunca comparar com o estado de uma sala anterior.
+ */
+const emissorFlags = criarEmissorCoalescido<VoiceFlags>(
+  (f) => emit(WS_EVENTS.VOICE_UPDATE, f),
+  300,
+  (a, b) =>
+    a.muted === b.muted && a.deafened === b.deafened && a.video === b.video && a.screen === b.screen,
+);
+/**
+ * Tópico dos avisos de fala por data message do LiveKit.
+ *
+ * O SFU só aponta quem está falando a cada ~500 ms por participante, no canal
+ * lossy de `activeSpeakers` (ver o comentário de `recomporFalantes`) — limiar
+ * alto e intermitente, os outros só me veem falar quando falo alto. Quem tem o
+ * microfone na mão sabe o próprio nível na hora (é o detector local, ver
+ * `rearmarDetectorLocal`), então cada cliente anuncia esse estado para a sala
+ * por aqui, e quem recebe acende o anel do remetente sem esperar o SFU. O SFU
+ * continua como reserva — `recomporFalantes` soma os dois conjuntos — para
+ * quem ainda não manda o aviso (cliente antigo).
+ */
+const TOPICO_FALA = "fala";
+/**
+ * Quem anunciou estar falando por data message, já por `donoDaIdentidade`.
+ * Entra em `recomporFalantes` como reforço do que o SFU relata. Zerado quando
+ * a sala fecha/desconecta e quando uma sala nova é conectada — o aviso vale só
+ * para a sala em que foi mandado.
+ */
+const falandoPorAviso = new Set<string>();
 /**
  * A transmissão de tela em curso é a **nativa** (captura no Rust, participante
  * `#tela`)? Fora do estado observável como `sala`: é detalhe de transporte, e
@@ -283,6 +325,20 @@ interface VoiceStoreState {
   screenQuality: ScreenQuality;
   screenAudio: boolean;
   /**
+   * A transmissão que está no ar publica som? `screenAudio` é a **intenção**
+   * de antes de ir ao ar; isto é o fato: a aba/janela pode não ter som, o
+   * navegador pode não entregá-lo e a captura nativa pode não ter loopback.
+   * O botão de silenciar o som da tela só faz sentido quando isto é `true`.
+   */
+  telaComSom: boolean;
+  /**
+   * Silenciei o som da **minha** transmissão (não o microfone). A faixa fica
+   * publicada e só é emudecida: tirá-la e republicar custaria uma
+   * renegociação a cada clique e faria o som sumir/voltar como publicação
+   * nova para quem assiste.
+   */
+  audioDaTelaMudo: boolean;
+  /**
    * Taxa de quadros da câmera (persistida no browser). Vale na captura, no
    * teto do encoder e nas camadas do simulcast; mudar com a câmera ligada
    * reinicia a captura dentro da mesma faixa, sem republicar.
@@ -304,6 +360,13 @@ interface VoiceStoreState {
   // ── preferências por participante (locais, não vão para o servidor) ──
   volumes: Record<string, number>;
   silenciados: Record<string, boolean>;
+  /**
+   * Por `userId` do **dono**: silencio só o som da transmissão dele
+   * (`ScreenShareAudio`, venha da conexão dele ou do `<userId>#tela`), e a voz
+   * continua. É outro eixo de `silenciados` de propósito: quem assiste a uma
+   * transmissão com música alta quer calar a música, não a pessoa.
+   */
+  telaSilenciada: Record<string, boolean>;
 
   // ── foco/tela cheia da grade ──
   focado: string | null;
@@ -393,6 +456,8 @@ interface VoiceStoreState {
   /** Desfaz a pré-conexão (seletor fechado sem escolha). */
   descartarTelaNativa: () => Promise<void>;
   pararTela: () => Promise<void>;
+  /** Emudece/devolve o som da minha transmissão (navegador ou nativa). */
+  alternarAudioDaTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
   setCameraFps: (fps: CameraFps) => void;
@@ -400,6 +465,8 @@ interface VoiceStoreState {
 
   setVolume: (userId: string, volume: number) => void;
   toggleSilenciado: (userId: string) => void;
+  /** Silencia/devolve só o som da transmissão deste dono, para mim. */
+  alternarTelaSilenciada: (userId: string) => void;
   /**
    * Põe um tile no palco, ou tira o que está lá (clicar no focado volta à
    * grade). A chave é a do tile, não o id da pessoa: quem assiste a duas telas
@@ -633,7 +700,11 @@ function desmontarSala() {
   // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
   // rodaria num contexto morto na próxima entrada
   void fecharMicrofone();
+  // a trava do servidor era desta sala; a próxima decide a sua na entrada
+  travaDoMicrofone = null;
   desarmarDetectorLocal(() => {});
+  // avisos da sala que está fechando não valem para a próxima
+  falandoPorAviso.clear();
   sala.removeAllListeners();
   void sala.disconnect().catch(() => {});
   sala = null;
@@ -698,6 +769,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
     // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
     encerrarTeste(false);
+    // esquece a janela e o último enviado desta sala: sem isto, um `pedir`
+    // pendente de antes da saída dispararia um `VOICE_UPDATE` depois do
+    // `VOICE_LEAVE` — para um canal em que já não estou
+    emissorFlags.zerar();
     const decisao = decidirSaida(motivo, {
       destinoEmServidor,
       // o canal de voz que estou deixando ainda é o que está na coluna: há uma
@@ -736,6 +811,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       testandoMicrofone: false,
       camOn: false,
       screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
       focado: null,
       focoAutomatico: true,
       telaCheia: false,
@@ -763,11 +840,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     screenOn: false,
     screenQuality: lerScreenQuality(lerDoStorage(SCREEN_QUALITY_KEY)),
     screenAudio: true,
+    telaComSom: false,
+    audioDaTelaMudo: false,
     cameraFps: lerCameraFps(lerDoStorage(CAMERA_FPS_KEY)),
     audio: carregarAudio(),
     erroDeSupressao: null,
     volumes: {},
     silenciados: {},
+    telaSilenciada: {},
     focado: null,
     focoAutomatico: true,
     telaCheia: false,
@@ -877,6 +957,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const lista = evento.connected ? [...semEle, evento] : semEle;
         return { states: { ...s.states, [evento.channelId]: lista } };
       });
+      // o meu próprio estado na minha sala é por onde chega o silêncio imposto
+      // por um moderador (`serverMute`/`serverDeaf`). Depois do `set`: a
+      // reavaliação lê a lista já atualizada
+      if (eu && evento.channelId === meuCanal) reavaliarTravaDoMicrofone();
       // **Outra pessoa** entrou na minha chamada de DM: ela deixou de estar
       // "tocando". O `!eu` é o que fazia o ringback não existir: `startCall`
       // aplica os estados que o `POST /dms/:id/call` devolve, e o primeiro
@@ -968,6 +1052,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         falando: NINGUEM,
         camOn: false,
         screenOn: false,
+        telaComSom: false,
+        audioDaTelaMudo: false,
         focado: null,
         focoAutomatico: true,
         assistindo: new Set<string>(),
@@ -981,7 +1067,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
       emit(WS_EVENTS.VOICE_JOIN, { channelId: channel.id });
-      emit(WS_EVENTS.VOICE_UPDATE, flags());
+      // sala nova: `zerar` esquece o último enviado da sala anterior (senão o
+      // primeiro `syncFlags` daqui poderia ser suprimido por comparar com o
+      // estado de outra sala) antes de `pedir` mandar este direto — a janela
+      // acabou de abrir, então não há nada "em voo" para segurar o envio
+      emissorFlags.zerar();
+      emissorFlags.pedir(flags());
 
       // 2) mídia, se houver
       const r = await conectarMidia(channel, set, rerender, get);
@@ -1006,8 +1097,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
       // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
-      // conexão nova da conta. A coluna fecha — o painel mostraria uma sala em
-      // que não estou mais
+      // conexão nova da conta. Em servidor, o painel fica no Vista do canal com
+      // o botão "entrar" (como Discord); em DM, a coluna fecha. Toast explica.
       sairDaSalaAtual("expulso");
       ui.toast(
         channelId === novoCanalId
@@ -1073,7 +1164,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (!channelId || status === "idle" || status === "connecting") return;
 
       emit(WS_EVENTS.VOICE_JOIN, { channelId });
-      emit(WS_EVENTS.VOICE_UPDATE, flags());
+      // o gateway perdeu o socket antigo e com ele o que sabia das minhas
+      // flags — reentrar é, do lado dele, tão "de novo" quanto um `connect`;
+      // `zerar` evita que o `pedir` seguinte seja suprimido por comparar com
+      // um "último enviado" que já não vale nada para quem está do outro lado
+      emissorFlags.zerar();
+      emissorFlags.pedir(flags());
 
       // A mídia tem reconexão própria: o LiveKit se restabelece quando só a
       // rede oscilou, e refazer a sala por cima publicaria a mesma câmera duas
@@ -1202,6 +1298,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // passa a preservar nitidez em vez de suavizar o quadro (o que faria com
       // uma câmera). É o ganho de legibilidade mais barato que existe aqui.
       video.contentHint = "detail";
+      // o som pode não subir (faixa encerrada no meio): `telaComSom` diz o que
+      // foi ao ar, não o que se pediu
+      let somNoAr = false;
       try {
         await lp.publishTrack(new LocalVideoTrack(video), {
           source: Track.Source.ScreenShare,
@@ -1228,6 +1327,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
             dtx: false,
             red: false,
           });
+          somNoAr = true;
         }
         const valeAinda =
           sala === salaNoInicio &&
@@ -1245,7 +1345,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           encerrarFaixas(stream.getTracks());
           await despublicarTela(lp);
         } else {
-          set({ screenOn: true });
+          // faixa nova sobe com som: um "mudo" de uma transmissão anterior
+          // não vale para esta
+          set({ screenOn: true, telaComSom: somNoAr, audioDaTelaMudo: false });
           tocarSom("transmissao-iniciada");
           // **Sem mexer no palco.** Ir ao ar pelo navegador já põe a minha tela
           // na grade como mais um card, que é o que a print `p2` mostra o
@@ -1258,7 +1360,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         encerrarFaixas(stream.getTracks());
         // o vídeo pode ter subido e o som falhado: nada da tela fica no ar
         await despublicarTela(lp);
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1321,6 +1423,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       geracaoDeTela += 1;
       const salaNoInicio = sala;
       const inicio = { geracao: ++geracaoDaTransmissao, canal: channelId };
+      // Pedir som não garante som: sem loopback nesta máquina o Rust sobe só o
+      // vídeo. Perguntado em paralelo com a subida para não somar ao clique;
+      // `capacidadesDeTela` nunca lança
+      const somPossivel = screenAudio
+        ? capacidadesDeTela().then((c) => c.audioDoSistema)
+        : Promise.resolve(false);
       try {
         // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
         // o mesmo par url+token e reaproveita a sala já conectada.
@@ -1331,6 +1439,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         );
         // a sala pré-conectada foi consumida (ou descartada) pelo Rust
         telaPreparada = null;
+        // esperado **antes** da checagem abaixo: um `await` entre ela e o
+        // `set` deixaria um "parar" no meio ser atropelado por `screenOn: true`
+        const comSom = await somPossivel;
         const valeAinda =
           sala === salaNoInicio &&
           inicioAindaVale({
@@ -1346,7 +1457,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           return;
         }
         telaNativa = true;
-        set({ screenOn: true });
+        set({ screenOn: true, telaComSom: comSom, audioDaTelaMudo: false });
         tocarSom("transmissao-iniciada");
         // O tempo por etapa, para o dia em que alguém disser "demorou": sem
         // isto a única medida é a impressão de quem clicou.
@@ -1357,7 +1468,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch (e) {
         telaPreparada = null;
         telaNativa = false;
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1380,7 +1491,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       const estava = get().screenOn;
       // uma tela que ainda estava subindo desiste ao terminar (`inicioAindaVale`)
       geracaoDaTransmissao += 1;
-      set({ screenOn: false });
+      set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
       if (estava) tocarSom("transmissao-encerrada");
       encerrarCapturaDaTela();
       const nativa = telaNativa;
@@ -1390,6 +1501,44 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         lp ? despublicarTela(lp) : Promise.resolve(),
       ]);
       get().syncFlags();
+      rerender();
+    },
+
+    /**
+     * O estado só muda depois de o transporte obedecer: marcar "mudo" com o
+     * som ainda saindo para a sala é pior do que o clique não fazer nada.
+     */
+    alternarAudioDaTela: async () => {
+      const { screenOn, telaComSom, audioDaTelaMudo } = get();
+      if (!screenOn || !telaComSom) return;
+      const mudo = !audioDaTelaMudo;
+      if (telaNativa) {
+        try {
+          await silenciarAudioDaTela(mudo);
+        } catch {
+          // app de desktop anterior ao comando: o som segue como estava
+          ui.toast("Atualize o app para silenciar o som da transmissão.", "error");
+          return;
+        }
+      } else {
+        const faixa = Array.from(sala?.localParticipant.trackPublications.values() ?? []).find(
+          (pub) => pub.source === Track.Source.ScreenShareAudio,
+        )?.track;
+        if (!faixa) return;
+        try {
+          // `mute()` e não despublicar: a faixa segue na sala e voltar é
+          // instantâneo, sem renegociar nem reaparecer como publicação nova
+          if (mudo) await faixa.mute();
+          else await faixa.unmute();
+        } catch (e) {
+          ui.toast(errorMessage(e, "Não foi possível silenciar o som da tela"), "error");
+          return;
+        }
+      }
+      // a transmissão pode ter parado enquanto o pedido ia: não ressuscitar o
+      // "mudo" de uma tela que já saiu do ar
+      if (!get().screenOn) return;
+      set({ audioDaTelaMudo: mudo });
       rerender();
     },
 
@@ -1449,6 +1598,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
+    // mesmo tratamento de `silenciados`: vale enquanto a página estiver aberta,
+    // sem storage e sem zerar ao sair da sala
+    alternarTelaSilenciada: (userId) =>
+      set((s) => ({ telaSilenciada: { ...s.telaSilenciada, [userId]: !s.telaSilenciada[userId] } })),
 
 
     // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
@@ -1548,8 +1701,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         emit(WS_EVENTS.VOICE_JOIN, { channelId });
         // as flags **reais** logo em seguida: o join do REST entra com
         // `VOICE_FLAGS_PADRAO`, então quem liga com o microfone fechado nasceria
-        // desmutado para os outros até o primeiro `syncFlags`
-        emit(WS_EVENTS.VOICE_UPDATE, flags());
+        // desmutado para os outros até o primeiro `syncFlags`. `zerar` antes:
+        // sala nova para o gateway, o "último enviado" de uma call anterior
+        // não pode suprimir este envio
+        emissorFlags.zerar();
+        emissorFlags.pedir(flags());
 
         if (!r.voice) {
           // sem LiveKit a chamada ainda toca e o estado de voz vale: só não há som
@@ -1585,6 +1741,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // ele, atender no celular deixava o desktop na sala até o LiveKit derrubar
       // a identidade repetida — e lá aparecia "a conexão de voz caiu", como se
       // fosse queda de rede, em vez do aviso de que entrei em outro aparelho
+      // a call anterior pode ter terminado por um caminho que não passa por
+      // `sairDaSalaAtual`, e o último valor enviado lembrado dela suprimiria o primeiro `voice.update` da sala nova
+      emissorFlags.zerar();
       emit(WS_EVENTS.VOICE_JOIN, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
       lembrarSala({ channelId, guildId: null, name: "" });
@@ -1661,15 +1820,26 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     syncFlags: () => {
       const f = flags();
       // durante o teste de microfone as preferências **são** mudo e surdo: o
-      // gateway recebe isso, e os outros me veem como o Discord os mostraria
-      emit(WS_EVENTS.VOICE_UPDATE, f);
+      // gateway recebe isso, e os outros me veem como o Discord os mostraria.
+      // Passa pelo coalescedor (`emissorFlags`) e não por `emit` direto: é
+      // `syncFlags` quem spamma em rajada (todo toggle de mudo/câmera/tela
+      // chama isto), o caminho exato do bug que o token bucket do gateway
+      // expunha — ver o comentário de `emissorFlags`
+      emissorFlags.pedir(f);
       if (!sala) return;
       // NÃO é `setMicrophoneEnabled`: sem publicação, ele criaria uma faixa
       // crua (sem restrições e sem cadeia) por baixo do dono — era isso que
       // "voltava ao normal" alguns segundos depois de entrar. Quem decide se o
       // microfone está aberto é `micAberto()`; quem decide se ele está **na
       // sala** é o teste de microfone, e essa parte mora em `aplicarTesteNaSala`
-      void definirMicrofoneAberto(!f.muted)
+      //
+      // Com o microfone travado pelo servidor a faixa já está fechada e isto não
+      // teria o que abrir; a guarda explícita é para a janela em que o fechamento
+      // ainda está na fila do dono — desmutar, apertar o PTT ou falar não pode
+      // reabrir nada nesse meio-tempo. O `f.muted` que vai ao gateway continua
+      // sendo a escolha da pessoa: o mudo próprio e o do servidor são coisas
+      // separadas, como no Discord
+      void definirMicrofoneAberto(!f.muted && !microfoneTravadoAgora())
         .then(rearmarDetectorLocal)
         .catch(() => {});
     },
@@ -1933,6 +2103,8 @@ async function entrarNaSala(
   });
   sala = room;
   cameraSobCpu = false;
+  // sala nova, avisos novos — o que sobrou da sala anterior não é desta gente
+  falandoPorAviso.clear();
 
   // O navegador mede a própria codificação (`qualityLimitationReason`) e o SDK
   // avisa quando a CPU virou o gargalo. A câmera recebe o mesmo alívio da tela
@@ -1961,6 +2133,16 @@ async function entrarNaSala(
     // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
     const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
     const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    // reforço dos avisos por data message (ver `TOPICO_FALA`): quem saiu no
+    // meio da frase não manda um "parei de falar", então tira daqui quem já
+    // não está mais na sala antes de somar — senão o anel dele ficava preso
+    const presentes = new Set(
+      Array.from(room.remoteParticipants.values()).map((p) => donoDaIdentidade(p.identity)),
+    );
+    for (const dono of falandoPorAviso) {
+      if (presentes.has(dono)) proximo.add(dono);
+      else falandoPorAviso.delete(dono);
+    }
     if (useVoice.getState().falando.has(eu)) proximo.add(eu);
     set((s) => ({ falando: proximoConjunto(s.falando, proximo) }));
   };
@@ -1970,7 +2152,11 @@ async function entrarNaSala(
       recomporFalantes();
       rerender();
     })
-    .on(RoomEvent.ParticipantDisconnected, () => {
+    .on(RoomEvent.ParticipantDisconnected, (participant) => {
+      // explícito, embora `recomporFalantes` já limpe quem não está mais na
+      // sala: sem esperar o próximo recálculo para descartar o aviso de quem
+      // acabou de sair
+      falandoPorAviso.delete(donoDaIdentidade(participant.identity));
       recomporFalantes();
       rerender();
     })
@@ -2002,6 +2188,28 @@ async function entrarNaSala(
       rerender();
     })
     .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
+    // O LiveKit só aceita a republicação do microfone **depois** de liberar a
+    // fonte na minha permissão; o `voice.state` que diz "liberado" pode chegar
+    // antes disso. Reavaliar nos dois eventos, com a trava somando os dois
+    // lados (`microfoneTravado`), faz a faixa voltar só quando ambos concordam
+    .on(RoomEvent.ParticipantPermissionsChanged, (_antes, participante) => {
+      if (sala !== room || participante !== room.localParticipant) return;
+      reavaliarTravaDoMicrofone();
+      rerender();
+    })
+    .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      // aviso de fala de outro cliente (ver `TOPICO_FALA`); qualquer outro
+      // tópico não é deste anel, e sem `participant` não há de quem acender
+      if (topic !== TOPICO_FALA || !participant) return;
+      const dono = donoDaIdentidade(participant.identity);
+      // o meu próprio anel vem do detector local (`rearmarDetectorLocal`), não
+      // do aviso que eu mesmo publiquei — o LiveKit não ecoa para o remetente,
+      // mas a guarda fica pelo mesmo motivo do filtro em `recomporFalantes`
+      if (dono === donoDaIdentidade(room.localParticipant.identity ?? "")) return;
+      if (new TextDecoder().decode(payload) === "1") falandoPorAviso.add(dono);
+      else falandoPorAviso.delete(dono);
+      recomporFalantes();
+    })
     .on(RoomEvent.Disconnected, () => {
       // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
       // quem chegou depois manda, e uma sala aposentada não tem o direito de
@@ -2012,6 +2220,8 @@ async function entrarNaSala(
       sala = null;
       pararMedicaoDePing();
       desarmarDetectorLocal(() => {});
+      // idem: sala caiu, os avisos dela não valem mais
+      falandoPorAviso.clear();
       set({
         midiaDisponivel: false,
         microfonePronto: false,
@@ -2086,6 +2296,20 @@ function ehPermissaoNegada(e: unknown): boolean {
  *    veria o botão mudo e a sala a ouviria.
  */
 async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroDeVoz) {
+  // Silenciado pelo servidor (ou já entrando silenciado: a trava é gravada no
+  // membro e vem no token): nem abre a captura. O `publishTrack` seria recusado
+  // pelo LiveKit e viraria o toast de "não foi possível ligar o microfone" —
+  // falso, o microfone está bom. A decisão fica registrada **antes** de abrir,
+  // para uma trava que chegue durante a abertura ser vista como transição
+  const travado = microfoneTravadoEm(room);
+  travaDoMicrofone = { room, travado };
+  if (travado) {
+    crono.etapa("microfone travado pelo servidor");
+    // "pronto" no sentido da interface: não há abertura em curso para esperar
+    set({ microfonePronto: true });
+    rearmarDetectorLocal();
+    return;
+  }
   // antes do `getUserMedia`: o microfone do WebView2 é um stream de
   // comunicações, e sem isto o Windows abaixa o volume do Discord e da música
   await suspenderAtenuacaoDoWindows();
@@ -2122,16 +2346,81 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
     // o toast culparia o microfone de quem acabou de sair da chamada. O
     // `console.warn` acima fica de qualquer jeito: é o rastro do relato.
     const aviso = `${room.name}|${texto}`;
-    if (sala === room && ultimoAvisoDeMicrofone !== aviso) {
+    // Idem para a trava do servidor que chegou no meio da abertura: a recusa do
+    // LiveKit é consequência dela, não defeito do aparelho
+    if (sala === room && ultimoAvisoDeMicrofone !== aviso && !microfoneTravadoEm(room)) {
       ultimoAvisoDeMicrofone = aviso;
       ui.toast(texto, "error");
     }
   }
   if (sala !== room) return;
-  await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});
+  await definirMicrofoneAberto(
+    useVoicePrefs.getState().micAberto() && !microfoneTravadoEm(room),
+  ).catch(() => {});
   set({ microfonePronto: true });
   // a faixa acabou de nascer: é aqui que o detector local ganha o que medir
   rearmarDetectorLocal();
+}
+
+/**
+ * A trava do servidor já aplicada ao microfone, e em qual sala.
+ *
+ * Guardar a última decisão é o que deixa agir só nas **transições**: o
+ * `voice.state` é reemitido a cada mudo, vídeo ou entrada de alguém, e fechar
+ * ou reabrir a faixa a cada um seria um "entrou/saiu" de microfone para a sala
+ * inteira. A `Room` junto porque a decisão vale para aquela conexão: a sala
+ * nova de uma reconexão decide a sua em `publicarMicrofone`.
+ */
+let travaDoMicrofone: { room: Room; travado: boolean } | null = null;
+
+/**
+ * O microfone está travado pelo servidor nesta sala? Soma o meu `voice.state`
+ * (`serverMute`/`serverDeaf`) à permissão do LiveKit — ver `microfoneTravado`.
+ */
+function microfoneTravadoEm(room: Room): boolean {
+  const { states, channelId } = useVoice.getState();
+  const silencio = meuSilencio(
+    channelId ? states[channelId] : undefined,
+    useAuth.getState().user?.id,
+  );
+  return microfoneTravado(silencio, room.localParticipant.permissions);
+}
+
+function microfoneTravadoAgora(): boolean {
+  return !!sala && microfoneTravadoEm(sala);
+}
+
+/**
+ * Aplica a trava do servidor quando ela muda: fecha a faixa ao travar e a
+ * reabre pelo caminho da entrada ao destravar.
+ *
+ * Fechar, e não só mutar: o LiveKit tira do ar a faixa de uma fonte que deixou
+ * de ser permitida, e o dono (`lib/microfone`) continuaria achando que ela está
+ * publicada — desmutar depois mandaria som para uma publicação que não existe.
+ * Fechar também apaga a luz do microfone, que ninguém vai ouvir mesmo.
+ *
+ * Reabrir passa por `publicarMicrofone` **sempre**, mesmo com a pessoa em mudo
+ * próprio: a faixa sobe mutada, como numa entrada em mudo. Sem faixa viva, o
+ * próximo desmutar não teria o que abrir. A preferência de mudo nunca é tocada
+ * aqui — o mudo do servidor é outro eixo.
+ */
+function reavaliarTravaDoMicrofone() {
+  const room = sala;
+  // antes de `publicarMicrofone` decidir a entrada desta sala não há de onde
+  // transicionar: é ela quem lê a trava inicial
+  if (!room || travaDoMicrofone?.room !== room) return;
+  const agora = microfoneTravadoEm(room);
+  const acao = transicaoDaTrava(travaDoMicrofone.travado, agora);
+  if (!acao) return;
+  travaDoMicrofone = { room, travado: agora };
+  if (acao === "fechar") {
+    // o dono enfileira: uma abertura em curso termina e é fechada em seguida
+    void fecharMicrofone()
+      .then(rearmarDetectorLocal)
+      .catch(() => {});
+    return;
+  }
+  void publicarMicrofone(room, useVoice.setState, cronometroDeVoz("liberarMicrofone"));
 }
 
 /**
@@ -2152,6 +2441,15 @@ function rearmarDetectorLocal() {
     useVoice.setState((s) => ({
       falando: comFalante(s.falando, donoDaIdentidade(eu), falando),
     }));
+    // avisa a sala pelo mesmo caminho (ver `TOPICO_FALA`): é isto que acende o
+    // anel dos outros sem esperar o limiar do SFU. Falha de envio não pode
+    // derrubar o anel local, que já foi aplicado na linha de cima
+    room.localParticipant
+      .publishData(new TextEncoder().encode(falando ? "1" : "0"), {
+        reliable: true,
+        topic: TOPICO_FALA,
+      })
+      .catch(() => {});
   });
 }
 
@@ -2647,7 +2945,12 @@ if (typeof window !== "undefined" && isTauri()) {
   ouvirTelaEncerrada((motivo) => {
     if (!telaNativa) return;
     telaNativa = false;
-    useVoice.setState((s) => ({ screenOn: false, tick: s.tick + 1 }));
+    useVoice.setState((s) => ({
+      screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
+      tick: s.tick + 1,
+    }));
     tocarSom("transmissao-encerrada");
     useVoice.getState().syncFlags();
     ui.toast(

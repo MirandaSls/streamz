@@ -10,7 +10,13 @@ import {
   RotateCw,
   UserPlus,
 } from "@/components/ui/icones";
-import { SCREEN_QUALITY, displayNameOf, isGroupChannel } from "@streamz/shared";
+import {
+  SCREEN_QUALITY,
+  displayNameOf,
+  isGroupChannel,
+  type PublicUser,
+  type VoiceStateEvent,
+} from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
@@ -23,6 +29,7 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
 import { participantesDe, telasDe, useVoice } from "@/stores/voice";
 
@@ -204,6 +211,7 @@ export default function CallStage({
   // o cabeçalho muda de assunto quando uma transmissão sobe ao destaque: sai o
   // título centralizado, entram a trilha e o selo de qualidade da print `p5`
   const meId = useAuth((s) => s.user?.id);
+  const statuses = usePresence((s) => s.statuses);
   // `tick` é o pulso das faixas do SDK — é dele que vem a resolução do selo
   useVoice((s) => s.tick);
   const focado = useVoice((s) => s.focado);
@@ -410,7 +418,12 @@ export default function CallStage({
               <span aria-hidden="true" className="text-text-muted">
                 ·
               </span>
-              <Avatar user={donoDaTela.user} size="sm" surface="border-black" />
+              <Avatar
+                user={donoDaTela.user}
+                size="sm"
+                status={resolveStatus(statuses, donoDaTela.user)}
+                surface="border-black"
+              />
               <span className="max-w-[20ch] truncate">
                 Tela de {displayNameOf(donoDaTela.user)}
               </span>
@@ -641,8 +654,9 @@ function Chamando({
   usuario,
 }: {
   nome: string;
-  usuario: { id: string; username: string; avatarUrl?: string | null } | null;
+  usuario: PublicUser | null;
 }) {
+  const statuses = usePresence((s) => s.statuses);
   return (
     <div className="grid h-full place-items-center">
       <div className="flex flex-col items-center gap-4">
@@ -655,7 +669,12 @@ function Chamando({
             // o palco é preto puro (`bg-black`, linha 111 desta função) — o
             // `Avatar` já sabe recortar contra `--black` (`FUNDO_DO_SELO`), então
             // a bolinha usa a cor real do fundo, não mais a aproximação `-lowest`
-            <Avatar user={usuario} size="xxl" surface="border-black" />
+            <Avatar
+              user={usuario}
+              size="xxl"
+              status={resolveStatus(statuses, usuario)}
+              surface="border-black"
+            />
           ) : (
             <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-background-base-lowest">
               <Phone size={44} className="text-text-muted" aria-hidden="true" />
@@ -680,9 +699,10 @@ function ConviteParaEntrar({
   estados,
   onEntrar,
 }: {
-  estados: { user: { id: string; username: string; avatarUrl?: string | null } }[];
+  estados: VoiceStateEvent[];
   onEntrar: () => void;
 }) {
+  const statuses = usePresence((s) => s.statuses);
   const nomes = estados.map((e) => e.user.username);
   const texto =
     nomes.length === 1
@@ -695,10 +715,23 @@ function ConviteParaEntrar({
     <div className="grid h-full place-items-center">
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex items-center justify-center -space-x-4">
-          {estados.slice(0, 3).map((e) => (
-            // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro
-            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-black" className="rounded-full ring-4 ring-black" />
-          ))}
+          {estados.slice(0, 3).map((e) => {
+            const status = resolveStatus(statuses, e.user);
+            return (
+              // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro
+              // ausente esmaece: é lista de pessoas, e quem está ausente não se destaca dela
+              <Avatar
+                key={e.user.id}
+                user={e.user}
+                size="xl"
+                status={status}
+                surface="border-black"
+                className={`rounded-full ring-4 ring-black transition-opacity ${
+                  status === "IDLE" ? "opacity-60" : ""
+                }`}
+              />
+            );
+          })}
         </div>
         <p className="text-lg font-bold text-text-strong">{texto}</p>
         <Button

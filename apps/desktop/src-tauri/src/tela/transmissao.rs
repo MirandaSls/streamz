@@ -131,6 +131,11 @@ struct EmCurso {
     thread: JoinHandle<()>,
     /// A thread do áudio do sistema, quando o pedido levou som.
     audio: Option<JoinHandle<()>>,
+    /// A faixa "tela-audio" publicada, para silenciá-la sem parar a tela. É
+    /// um clone barato (o `LocalAudioTrack` é um `Arc` por dentro): a
+    /// publicação continua sendo da sala, isto só aponta para ela. Morre com
+    /// o `EmCurso`, então parar ou trocar de fonte leva o silêncio junto.
+    faixa_audio: Option<LocalAudioTrack>,
 }
 
 impl EmCurso {
@@ -195,6 +200,33 @@ impl Transmissao {
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
             .is_some_and(|p| p.url == url && p.token == token)
+    }
+
+    /// Silencia (ou reativa) só o áudio da transmissão: a tela segue no ar e
+    /// o microfone, que é da conexão do webview, nem passa por aqui.
+    ///
+    /// `mute()` da faixa, e não descartar amostras na thread do loopback,
+    /// porque o SDK avisa o SFU: quem assiste vê a faixa marcada como muda
+    /// (o mesmo ícone de quando a web silencia uma faixa) em vez de um áudio
+    /// "ligado" que só entrega silêncio. Por baixo ele desabilita a faixa do
+    /// WebRTC, que passa a mandar silêncio sem gastar bitrate.
+    ///
+    /// Devolve o estado em que a faixa ficou.
+    pub fn silenciar_audio(&self, mudo: bool) -> Result<bool, String> {
+        let atual = self.atual.lock().unwrap_or_else(|e| e.into_inner());
+        let em_curso = atual
+            .as_ref()
+            .ok_or_else(|| "Não há transmissão de tela em curso".to_string())?;
+        let faixa = em_curso
+            .faixa_audio
+            .as_ref()
+            .ok_or_else(|| "A transmissão de tela não está levando áudio".to_string())?;
+        if mudo {
+            faixa.mute();
+        } else {
+            faixa.unmute();
+        }
+        Ok(faixa.is_muted())
     }
 
     /// Para e espera a thread, e derruba a sala pré-conectada. Síncrono de
@@ -405,12 +437,14 @@ pub async fn iniciar(
             red: false,
             ..Default::default()
         };
+        // O clone fica com o estado para o `silenciar_audio`; a publicação
+        // leva o original.
         match sala
             .local_participant()
-            .publish_track(LocalTrack::Audio(faixa), publicacao)
+            .publish_track(LocalTrack::Audio(faixa.clone()), publicacao)
             .await
         {
-            Ok(_) => Some(fonte),
+            Ok(_) => Some((fonte, faixa)),
             Err(_) => None,
         }
     } else {
@@ -441,6 +475,7 @@ pub async fn iniciar(
         .map_err(|e| format!("não foi possível iniciar a thread de transmissão: {e}"))?;
 
     let bandeira_audio = parar_bandeira.clone();
+    let (fonte_audio, faixa_audio) = fonte_audio.unzip();
     let audio = fonte_audio.and_then(|fonte| {
         std::thread::Builder::new()
             .name("streamz-tela-audio".into())
@@ -452,6 +487,7 @@ pub async fn iniciar(
         parar: parar_bandeira,
         thread,
         audio,
+        faixa_audio,
     });
     tempos.total_ms = comeco.elapsed().as_millis() as u64;
     Ok(tempos)

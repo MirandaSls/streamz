@@ -104,6 +104,7 @@ import type {
   SessaoView,
   TokenCriado,
   UserStatus,
+  VoiceModerarInput,
   VoiceMoveInput,
   VoiceStateEvent,
 } from "@streamz/shared";
@@ -545,6 +546,14 @@ export const api = {
       `/guilds/${guildId}/voice/move`,
       json({ userId, channelId } satisfies VoiceMoveInput),
     ),
+  /**
+   * Silencia/dessilencia (áudio) alguém no servidor — o mute/deafen de
+   * moderador, distinto do que a própria pessoa controla. Campo ausente do
+   * `input` não muda; sem corpo de resposta, o estado em si chega pelo
+   * `voice.state` do gateway.
+   */
+  moderarVoz: (guildId: string, input: VoiceModerarInput) =>
+    request<void>(`/guilds/${guildId}/voice/moderar`, json(input)),
   /** Começa (ou entra n)uma chamada de conversa direta; devolve o token de mídia, se houver. */
   startCall: (channelId: string) =>
     request<CallStartResponse>(`/dms/${channelId}/call`, { method: "POST" }),

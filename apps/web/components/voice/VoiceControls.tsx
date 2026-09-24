@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
+import Tooltip from "@/components/ui/Tooltip";
 import BotaoDeSons from "@/components/voice/BotaoDeSons";
 import ControlesMobile from "@/components/voice/ControlesMobile";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
@@ -17,6 +18,7 @@ import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
 import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -58,6 +60,9 @@ export default function VoiceControls({
   // Desde o #144 a entrada não espera pelo microfone, e este é o intervalo em
   // que a pessoa já está na call e ainda não pode falar
   const abrindoMicrofone = useVoice(microfoneAbrindo);
+  // ausente de uma chamada = `false` (ver o hook) — fora disso a barra é a de
+  // sempre.
+  const { serverMute } = useSilencioDoServidor();
 
   useEffect(() => {
     if (!mais) return;
@@ -96,22 +101,43 @@ export default function VoiceControls({
             pior: a pessoa fala e ninguém ouve. O clique continua valendo — o
             dono da faixa reaplica o mudo escolhido assim que ela nasce (ver
             `publicarMicrofone`). Sem cor nova: é o mesmo tom "mudo" de sempre. */}
-        <SplitDeDispositivo
-          label={
-            abrindoMicrofone
-              ? "Ativando microfone…"
-              : muted
-                ? "Desativar mudo"
-                : "Silenciar"
-          }
-          labelDaSeta="Escolher microfone"
-          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
-          pressionado={muted}
-          onClick={toggleMute}
-          menu={() => <MenuDeEntrada />}
-        >
-          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
-        </SplitDeDispositivo>
+        {serverMute ? (
+          // Travado pelo servidor: sem seta de dispositivo — trocar de
+          // microfone não desfaz o mute que o moderador aplicou, então
+          // oferecer o menu aqui só confundiria. `aria-disabled`, **sem**
+          // `disabled` nativo — o mesmo motivo do item 8 de `BotaoDeIcone`:
+          // `<button disabled>` não dispara ponteiro no Chromium, e a dica
+          // "Silenciado pelo servidor" nunca abriria no hover. O clique é
+          // um no-op (não há para onde alternar).
+          <Tooltip label="Silenciado pelo servidor">
+            <button
+              type="button"
+              onClick={(e) => e.preventDefault()}
+              aria-disabled="true"
+              aria-label="Silenciado pelo servidor"
+              className="grid h-11 w-[52px] cursor-not-allowed place-items-center rounded-[22px] bg-status-danger/15 text-status-danger transition"
+            >
+              <MicOff size={22} />
+            </button>
+          </Tooltip>
+        ) : (
+          <SplitDeDispositivo
+            label={
+              abrindoMicrofone
+                ? "Ativando microfone…"
+                : muted
+                  ? "Desativar mudo"
+                  : "Silenciar"
+            }
+            labelDaSeta="Escolher microfone"
+            tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
+            pressionado={muted}
+            onClick={toggleMute}
+            menu={() => <MenuDeEntrada />}
+          >
+            {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+          </SplitDeDispositivo>
+        )}
 
         <SplitDeDispositivo
           label={camOn ? "Desligar câmera" : "Ligar câmera"}

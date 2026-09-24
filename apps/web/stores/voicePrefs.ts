@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { PTT_RELEASE_MS } from "@streamz/shared";
-import { tocarSom, type SomDeVoz } from "@/lib/ringtone";
+import { definirSurdoParaSons, tocarSom, type SomDeVoz } from "@/lib/ringtone";
 import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState } from "@/stores/ptt-core";
 import type { PrefsDeVoz } from "@/stores/teste-de-microfone";
 
@@ -156,6 +156,9 @@ export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
     return s.pushToTalk ? s.pttAtivo : true;
   },
 }));
+
+// ringtone.ts não pode importar este store (ciclo); registra daqui quem diz se está surdo.
+definirSurdoParaSons(() => useVoicePrefs.getState().deafened);
 
 /**
  * O som de uma mudança de mudo/surdo — **um só**, o que o usuário percebe.

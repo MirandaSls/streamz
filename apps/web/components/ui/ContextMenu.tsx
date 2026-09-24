@@ -654,11 +654,25 @@ function Painel({
               </span>
               {controle === "checkbox" && (
                 // marcado: `--text-brand`, não a cor do item (`current`) — é o
-                // que `.check_c1e9c4{color:var(--text-brand)}` faz no focado
+                // que `.check_c1e9c4{color:var(--text-brand)}` faz no focado.
+                // Perigo (`item.danger`) segue o mesmo par que já pinta o
+                // rótulo em `cor` (acima): `--text-feedback-critical` na
+                // borda solta e na borda+fundo marcada, cheio (sem o
+                // `opacity-60` do caso comum, que existe para amaciar o
+                // `current` — o vermelho de perigo já nasce na intensidade
+                // certa). É como o Discord marca "Silenciar voz no
+                // servidor" / "Desativar áudio no servidor": rótulo e caixa
+                // no mesmo vermelho.
                 <span
                   aria-hidden="true"
                   className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border ${
-                    marcado ? "border-text-brand bg-text-brand" : "border-current opacity-60"
+                    marcado
+                      ? item.danger
+                        ? "border-text-feedback-critical bg-text-feedback-critical"
+                        : "border-text-brand bg-text-brand"
+                      : item.danger
+                        ? "border-text-feedback-critical"
+                        : "border-current opacity-60"
                   }`}
                 >
                   {marcado && (

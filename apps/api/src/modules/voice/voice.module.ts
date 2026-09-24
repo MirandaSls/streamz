@@ -1,6 +1,7 @@
 import { Module, type OnModuleInit } from "@nestjs/common";
 import { VoiceController } from "./voice.controller";
 import { CallsController } from "./calls.controller";
+import { LivekitWebhookController } from "./livekit-webhook.controller";
 import { VoiceService } from "./voice.service";
 import { CallsService } from "./calls.service";
 import { AuthModule } from "../auth/auth.module";
@@ -13,7 +14,7 @@ import { RealtimeModule } from "../realtime/realtime.module";
   // FriendsModule entra por causa do bloqueio: quem bloqueou não pode ser
   // chamado numa conversa que já existia antes do bloqueio
   imports: [AuthModule, FriendsModule, GuildsModule, RealtimeModule],
-  controllers: [VoiceController, CallsController],
+  controllers: [VoiceController, CallsController, LivekitWebhookController],
   providers: [VoiceService, CallsService],
   // o gateway usa os dois para tratar voice.join/leave/update e call.*
   exports: [VoiceService, CallsService],

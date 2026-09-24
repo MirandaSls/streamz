@@ -68,8 +68,10 @@ interface SocketUser {
 const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
   [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
-  // f-voz: mudo/surdo/câmera são clicáveis em rajada, mas não a esse ponto
-  [WS_EVENTS.VOICE_UPDATE]: { capacity: 10, refillPerSecond: 2 },
+  // f-voz: o cliente já coalesce o voice.update (máximo um a cada 300 ms), então 5/s
+  // sustentados nunca descartam o estado final de quem alterna mudo/desmudo em rajada.
+  // Com o teto anterior, o excesso era descartado e o ícone ficava preso no estado antigo.
+  [WS_EVENTS.VOICE_UPDATE]: { capacity: 20, refillPerSecond: 5 },
   [WS_EVENTS.VOICE_JOIN]: { capacity: 5, refillPerSecond: 1 },
   // h-moderacao: enquete nasce como mensagem — mesmo teto do envio
   [WS_EVENTS.POLL_CREATE]: { capacity: 5, refillPerSecond: 0.5 },

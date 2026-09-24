@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { IsString, Length } from "class-validator";
+import { voiceModerarSchema, type VoiceModerarPayload } from "@streamz/shared";
 import { VoiceService } from "./voice.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
+import { zodBody } from "../../common/zod.pipe";
 
 /** Corpo de `POST /guilds/:id/voice/move` (contrato `VoiceMoveInput`). */
 class MoveVoiceDto {
@@ -61,5 +63,21 @@ export class VoiceController {
     @Body() body: MoveVoiceDto,
   ) {
     return this.voice.move(user.sub, guildId, body.userId, body.channelId);
+  }
+
+  /**
+   * Muta/ensurdece (ou desfaz) alguém no servidor.
+   *
+   * Mesmo motivo do `move` para ser REST e não evento de socket: é moderação
+   * com resposta — quem mandou precisa saber se foi recusada (sem permissão,
+   * alvo fora da voz ao ligar a flag) para desfazer o clique na hora.
+   */
+  @Post("guilds/:guildId/voice/moderar")
+  moderar(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Body(zodBody(voiceModerarSchema)) body: VoiceModerarPayload,
+  ) {
+    return this.voice.moderarVoz(user.sub, guildId, body);
   }
 }

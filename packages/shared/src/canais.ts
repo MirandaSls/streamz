@@ -186,6 +186,18 @@ export interface VoiceMoveInput {
   channelId: string;
 }
 
+/**
+ * Corpo de moderação de voz do servidor (mute/deafen por um moderador).
+ *
+ * Campo ausente = não muda. `deaf` não implica `mute` — como no Discord, dá
+ * para silenciar o áudio de alguém sem impedir que ela fale.
+ */
+export interface VoiceModerarInput {
+  userId: string;
+  mute?: boolean;
+  deaf?: boolean;
+}
+
 export interface VoiceStateEvent {
   channelId: string;
   guildId: string | null;
@@ -202,6 +214,16 @@ export interface VoiceStateEvent {
    * fora da grade a cada oscilação de rede. Ausente = conectada normalmente.
    */
   reconnecting?: boolean;
+  /**
+   * Silenciado por um moderador neste servidor (mute do servidor, não o
+   * próprio). Ausente = false — mantém válidos os estados antigos (Redis).
+   */
+  serverMute?: boolean;
+  /**
+   * Áudio desativado por um moderador. Ausente = false — mantém válidos os
+   * estados antigos (Redis).
+   */
+  serverDeaf?: boolean;
 }
 
 /** Flags que o próprio usuário controla e transmite (`voice.update`). */
@@ -394,6 +416,12 @@ export interface CallEndedEvent {
 
 export const voiceJoinSchema = z.object({ channelId: idSchema });
 export type VoiceJoinPayload = z.infer<typeof voiceJoinSchema>;
+
+/** Corpo de moderação de voz do servidor (mute/deafen por um moderador). */
+export const voiceModerarSchema = z
+  .object({ userId: idSchema, mute: z.boolean().optional(), deaf: z.boolean().optional() })
+  .refine((v) => v.mute !== undefined || v.deaf !== undefined, { message: "informe mute ou deaf" });
+export type VoiceModerarPayload = z.infer<typeof voiceModerarSchema>;
 
 export const voiceUpdateSchema = z.object({
   muted: z.boolean(),

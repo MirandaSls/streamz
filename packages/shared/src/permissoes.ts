@@ -43,6 +43,8 @@ export const Permission = {
   STREAM: 1 << 20,
   /** alterar o apelido de **outro** membro (o próprio sempre pode o seu). */
   MANAGE_NICKNAMES: 1 << 21,
+  /** desativar o áudio de alguém na voz do servidor (o "Ensurdecer membros" do Discord). */
+  DEAFEN_MEMBERS: 1 << 22,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -127,6 +129,11 @@ export const PERMISSION_INFO: Record<
     description: "Permite tirar o microfone de outras pessoas na voz.",
     group: "voz",
   },
+  DEAFEN_MEMBERS: {
+    label: "Desativar áudio de membros",
+    description: "Permite desativar o áudio de outros membros nos canais de voz.",
+    group: "voz",
+  },
   MOVE_MEMBERS: {
     label: "Mover membros",
     description: "Permite arrastar alguém de um canal de voz para outro do servidor.",
@@ -188,6 +195,7 @@ export const PERMISSION_ORDER: readonly PermissionName[] = [
   "SPEAK",
   "STREAM",
   "MUTE_MEMBERS",
+  "DEAFEN_MEMBERS",
   "MOVE_MEMBERS",
 ];
 
@@ -570,7 +578,7 @@ export function secoesDePermissoes(escopo: EscopoDePermissao): SecaoDePermissoes
   const voz: SecaoDePermissoes = {
     id: "voz",
     label: "Permissões de canal de voz",
-    permissions: ["CONNECT", "SPEAK", "STREAM", "MUTE_MEMBERS", "MOVE_MEMBERS"],
+    permissions: ["CONNECT", "SPEAK", "STREAM", "MUTE_MEMBERS", "DEAFEN_MEMBERS", "MOVE_MEMBERS"],
   };
   if (escopo === "texto") return [geral, assinatura, texto];
   if (escopo === "voz") return [geral, assinatura, voz];

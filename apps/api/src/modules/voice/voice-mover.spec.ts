@@ -102,6 +102,17 @@ function servico(permissoesDoAtor: number) {
         return [];
       },
     },
+    // `join`/`broadcast` (disparado pelo `move`) e `statesForGuild` consultam
+    // a moderação de voz do servidor; sem linha (null) = ninguém foi
+    // silenciado por um moderador
+    guildMember: {
+      async findUnique() {
+        return null;
+      },
+      async findMany() {
+        return [];
+      },
+    },
   } as unknown as PrismaService;
 
   const realtime = { emitToGuild, emitToUsers() {}, emitToUser } as unknown as RealtimeService;
@@ -193,5 +204,49 @@ describe("VoiceService.move", () => {
     await expect(voice.move("dono", "g1", "bia", "voz-privada")).resolves.toMatchObject({
       to: "voz-privada",
     });
+  });
+});
+
+describe("VoiceService.update (rajada de mudo/desmudo)", () => {
+  it("duas updates concorrentes do mesmo usuário não se atropelam — a store recebe na ordem de chegada", async () => {
+    const { voice } = servico(Permission.MOVE_MEMBERS);
+    await voice.join("ana", "voz-1", { muted: false, deafened: false, video: false, screen: false });
+
+    // atrasa só a PRIMEIRA chamada a `assertCanViewChannel` (o primeiro passo
+    // assíncrono de `update`) — sem serialização por userId isso bastaria para
+    // a segunda (mais rápida) terminar primeiro e a primeira, mais lenta,
+    // sobrescrever o estado por cima dela ao terminar depois
+    const guilds = (voice as unknown as { guilds: { assertCanViewChannel: (...a: unknown[]) => Promise<unknown> } })
+      .guilds;
+    const original = guilds.assertCanViewChannel.bind(guilds);
+    let chamadas = 0;
+    guilds.assertCanViewChannel = vi.fn(async (...args: unknown[]) => {
+      chamadas += 1;
+      if (chamadas === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return original(...(args as [string, string]));
+    });
+
+    // rajada: muda para muted=true e, logo em seguida, para muted=false
+    const primeira = voice.update("ana", "voz-1", {
+      muted: true,
+      deafened: false,
+      video: false,
+      screen: false,
+    });
+    const segunda = voice.update("ana", "voz-1", {
+      muted: false,
+      deafened: false,
+      video: false,
+      screen: false,
+    });
+
+    await Promise.all([primeira, segunda]);
+
+    // quem chegou por último (muted=false) é quem vale no final
+    const estados = await voice.statesForGuild("dono", "g1");
+    const ana = estados.find((e) => e.user.id === "ana");
+    expect(ana?.muted).toBe(false);
   });
 });

@@ -1,18 +1,30 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Phone, Settings, Volume2 } from "@/components/ui/icones";
+import {
+  ChevronDown,
+  Headphones,
+  HeadphoneOff,
+  Mic,
+  MicOff,
+  MonitorUp,
+  Phone,
+  Settings,
+  Volume2,
+} from "@/components/ui/icones";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { BlocoTransmitindo } from "@/components/voice/BlocoTransmitindo";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import {
   LARGURA_DO_MENU_DE_AUDIO,
   MenuDeEntrada,
   MenuDeSaida,
 } from "@/components/voice/menus-de-audio";
+import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
@@ -44,6 +56,7 @@ function FooterSplit({
   label,
   labelDaSeta,
   off,
+  travado = false,
   onClick,
   menu,
   children,
@@ -51,6 +64,15 @@ function FooterSplit({
   label: string;
   labelDaSeta: string;
   off: boolean;
+  /**
+   * Mudo/surdo imposto por moderador: sem alternância, só o servidor desfaz.
+   * O botão principal ganha `aria-disabled` e o clique vira no-op — **sem**
+   * `disabled` nativo, senão o Chromium não dispara evento de ponteiro no
+   * botão e a dica "Silenciado pelo servidor" nunca abriria no hover (mesma
+   * razão do item 8 de `BotaoDeIcone`). A seta de escolher aparelho continua
+   * livre — trocar o dispositivo não desfaz o mute do servidor.
+   */
+  travado?: boolean;
   onClick: () => void;
   /** função, e não nó pronto: listar aparelhos pede permissão de mídia. */
   menu: () => React.ReactNode;
@@ -76,10 +98,13 @@ function FooterSplit({
       <Tooltip label={label}>
         <button
           type="button"
-          onClick={onClick}
+          onClick={travado ? undefined : onClick}
+          aria-disabled={travado}
           aria-label={label}
           aria-pressed={off}
-          className={`grid h-8 w-8 place-items-center rounded-l-[4px] rounded-r-[1px] transition ${cor}`}
+          className={`grid h-8 w-8 place-items-center rounded-l-[4px] rounded-r-[1px] transition ${cor} ${
+            travado ? "cursor-not-allowed" : ""
+          }`}
         >
           {children}
         </button>
@@ -130,11 +155,15 @@ export default function UserFooter() {
   const deafened = useVoicePrefs((s) => s.deafened);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
+  // ausente de uma chamada = tudo `false` (ver o hook): fora de voz o rodapé
+  // continua exatamente como antes.
+  const { serverMute, serverDeaf } = useSilencioDoServidor();
   // mesma leitura que `VoiceConnectedBar`: `channelId` é "estou numa chamada
   // agora"; `guildId` distingue canal de voz de servidor (guildId) de call de
   // DM (guildId nulo).
   const vozChannelId = useVoice((s) => s.channelId);
   const vozGuildId = useVoice((s) => s.guildId);
+  const screenOn = useVoice((s) => s.screenOn);
   const emVoz = Boolean(vozChannelId);
 
   if (!user) return null;
@@ -177,7 +206,10 @@ export default function UserFooter() {
       ref={painel}
       className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
     >
-      {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
+      {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante.
+          `BlocoTransmitindo` vem antes: só aparece com `screenOn`, e é o
+          "estou transmitindo" antes do "estou em voz". */}
+      <BlocoTransmitindo />
       <VoiceConnectedBar />
       <div className="flex h-14 shrink-0 items-center gap-2 px-3.5">
         <button
@@ -213,7 +245,16 @@ export default function UserFooter() {
               bolinha é `icon-status-online` (#3d9e60) e sai com esse mesmo
               desvio de captura, então o ícone usa o token dela, não um hex.
             */}
-            {emVoz ? (
+            {emVoz && screenOn ? (
+              // Compartilhando tela substitui "Em voz"/"Em uma chamada" pelo
+              // mesmo motivo que a voz substitui o status: é o estado mais
+              // específico agora. Mesmo par ícone-verde/texto-cinza de cima —
+              // só o ícone muda de cor, o texto continua `text-subtle`.
+              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
+                <MonitorUp size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
+                <span className="truncate">Compartilhando tela</span>
+              </span>
+            ) : emVoz ? (
               <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
                 {vozGuildId ? (
                   <Volume2 size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
@@ -233,23 +274,25 @@ export default function UserFooter() {
         </button>
 
         <FooterSplit
-          label={muted ? "Desativar mudo" : "Silenciar"}
+          label={serverMute ? "Silenciado pelo servidor" : muted ? "Desativar mudo" : "Silenciar"}
           labelDaSeta="Escolher microfone"
-          off={muted}
+          off={muted || serverMute}
+          travado={serverMute}
           onClick={toggleMute}
           menu={() => <MenuDeEntrada />}
         >
-          {muted ? <MicOff size={20} /> : <Mic size={20} />}
+          {muted || serverMute ? <MicOff size={20} /> : <Mic size={20} />}
         </FooterSplit>
 
         <FooterSplit
-          label={deafened ? "Reativar áudio" : "Desativar áudio"}
+          label={serverDeaf ? "Áudio desativado pelo servidor" : deafened ? "Reativar áudio" : "Desativar áudio"}
           labelDaSeta="Escolher saída de áudio"
-          off={deafened}
+          off={deafened || serverDeaf}
+          travado={serverDeaf}
           onClick={toggleDeafen}
           menu={() => <MenuDeSaida />}
         >
-          {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
+          {deafened || serverDeaf ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
         </FooterSplit>
 
         <FooterButton

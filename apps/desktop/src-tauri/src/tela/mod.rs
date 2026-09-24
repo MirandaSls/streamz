@@ -462,3 +462,24 @@ pub async fn parar_tela(estado: tauri::State<'_, Transmissao>) -> Result<(), Str
 pub async fn parar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
     Ok(())
 }
+
+/// Silencia (`mudo = true`) ou reativa só o áudio do sistema da transmissão,
+/// sem parar a tela nem tocar no microfone. Sem transmissão com áudio, erro
+/// dizendo isso — a web decide se mostra ou ignora.
+#[cfg(tela_nativa)]
+#[tauri::command]
+pub async fn silenciar_audio_da_tela(
+    estado: tauri::State<'_, Transmissao>,
+    mudo: bool,
+) -> Result<(), String> {
+    estado.silenciar_audio(mudo).map(|_| ())
+}
+
+#[cfg(not(tela_nativa))]
+#[tauri::command]
+pub async fn silenciar_audio_da_tela(
+    _estado: tauri::State<'_, Transmissao>,
+    _mudo: bool,
+) -> Result<(), String> {
+    Ok(())
+}

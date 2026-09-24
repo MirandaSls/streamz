@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
+import { MonitorUp, MonitorX, Radio, Volume2, VolumeX } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
 import { SEM_CAPTURA_DE_TELA, suportaCapturaDeTela } from "@/lib/captura-de-tela";
 import { capacidadesDeTela, isTauri } from "@/lib/desktop";
+import { aoPedirTrocaDeTela } from "@/lib/pedido-de-troca-de-tela";
 import { ui } from "@/stores/ui";
 import { acaoDoBotaoDeTela } from "@/stores/parar-transmissao";
 import { useVoice } from "@/stores/voice";
@@ -63,10 +64,35 @@ export default function ScreenShareButton({
   const [seletor, setSeletor] = useState(false);
   const screenOn = useVoice((s) => s.screenOn);
   const pararTela = useVoice((s) => s.pararTela);
+  const telaComSom = useVoice((s) => s.telaComSom);
+  const audioDaTelaMudo = useVoice((s) => s.audioDaTelaMudo);
+  const alternarAudioDaTela = useVoice((s) => s.alternarAudioDaTela);
 
   const label = screenOn ? "Parar transmissão" : "Compartilhar tela";
+  // Áudio da transmissão é um mudo à parte do microfone: existe só enquanto a
+  // tela está no ar **e** subiu com som (nem toda janela/aba tem áudio).
+  const mostrarMudoDaTela = screenOn && telaComSom;
+  const labelMudoDaTela = audioDaTelaMudo
+    ? "Reativar áudio da transmissão"
+    : "Silenciar áudio da transmissão";
 
   useEffect(conhecerCapacidades, []);
+
+  // "Alterar a Transmissão" (menu da minha tela no palco). O botão não tinha
+  // caminho de troca — no ar, o clique dele para a tela —, então a troca é
+  // reabrir o mesmo seletor com a transmissão no ar: ir ao ar de novo já
+  // substitui a captura anterior (`publicarTela` encerra a velha; no desktop o
+  // Rust para a atual antes de abrir a nova, e `prepararTelaNativa` não
+  // pré-conecta um segundo `#tela` com `screenOn`). Com a tela fora do ar o
+  // pedido é ignorado: o menu que o dispara só existe sobre a minha tela.
+  // Só um botão atende mesmo com vários montados — ver `pedido-de-troca-de-tela`.
+  useEffect(
+    () =>
+      aoPedirTrocaDeTela(() => {
+        if (useVoice.getState().screenOn) setSeletor(true);
+      }),
+    [],
+  );
 
   const acionar = () => {
     // `isTauri()` no clique, não na renderização: o valor não muda em runtime e
@@ -97,30 +123,81 @@ export default function ScreenShareButton({
         // `h-[30px]`, não `h-8` (32): o invólucro de `VoiceConnectedBar` já é
         // 74×30 (medido nos prints 101842/160106), e os 32 daqui vazavam 2px
         // por baixo dele — ver o comentário lá ("faltando" do cartão anterior).
-        <Tooltip label={label} className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={acionar}
-            aria-label={label}
-            aria-pressed={screenOn}
-            className={`grid h-[30px] w-full place-items-center rounded-lg transition ${
-              screenOn
-                ? "bg-status-positive/20 text-status-positive hover:bg-status-positive/30"
-                : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
-            }`}
-          >
-            {screenOn ? <MonitorX size={24} /> : <MonitorUp size={20} />}
-          </button>
-        </Tooltip>
+        //
+        // Sem o mudo, o botão principal continua ocupando o invólucro inteiro
+        // (`w-full` direto, sem `flex-1`). Com o mudo, os 74px viram uma
+        // divisão de espaço: `flex-1 min-w-0` no principal cede os 30px fixos
+        // do mudo (mesma altura, `h-[30px]`) + 4px de `gap-1` — sem isso o
+        // segundo botão estourava a largura fixa do invólucro.
+        <div className={mostrarMudoDaTela ? "flex w-full gap-1" : "flex h-full w-full items-center"}>
+          <Tooltip label={label} className={mostrarMudoDaTela ? "min-w-0 flex-1" : "w-full"}>
+            <button
+              type="button"
+              onClick={acionar}
+              aria-label={label}
+              aria-pressed={screenOn}
+              className={`grid h-[30px] w-full place-items-center rounded-lg transition ${
+                screenOn
+                  ? "bg-status-positive/20 text-status-positive hover:bg-status-positive/30"
+                  : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
+              }`}
+            >
+              {screenOn ? <MonitorX size={24} /> : <MonitorUp size={20} />}
+            </button>
+          </Tooltip>
+
+          {/* Silenciar só o áudio da transmissão, sem mexer no microfone —
+              por isso é um botão à parte do de parar, não um estado dele.
+              Mesmo par de cores do mudo do microfone em `VoiceControls`
+              (`TOM.mudo`/`TOM.neutro` de `controles-de-chamada.tsx`), porque
+              é o mesmo tipo de estado: silenciado ou não.
+              `w-[30px]` já no invólucro do tooltip (não só no botão): o alvo
+              do tooltip é `inline-flex` e sem largura própria encolheria pelo
+              conteúdo — travar os 30px aqui garante a divisão exata com o
+              `flex-1` do botão principal. */}
+          {mostrarMudoDaTela && (
+            <Tooltip label={labelMudoDaTela} className="w-[30px] shrink-0">
+              <button
+                type="button"
+                onClick={() => void alternarAudioDaTela()}
+                aria-label={labelMudoDaTela}
+                aria-pressed={audioDaTelaMudo}
+                className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-lg transition ${
+                  audioDaTelaMudo
+                    ? "bg-status-danger/15 text-status-danger hover:bg-status-danger/25"
+                    : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
+                }`}
+              >
+                {audioDaTelaMudo ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+            </Tooltip>
+          )}
+        </div>
       ) : (
-        <BotaoDeChamada
-          label={label}
-          onClick={acionar}
-          tom={screenOn ? "aoVivo" : "neutro"}
-          pressionado={screenOn}
-        >
-          {screenOn ? <MonitorX size={22} /> : <MonitorUp size={22} />}
-        </BotaoDeChamada>
+        <>
+          <BotaoDeChamada
+            label={label}
+            onClick={acionar}
+            tom={screenOn ? "aoVivo" : "neutro"}
+            pressionado={screenOn}
+          >
+            {screenOn ? <MonitorX size={22} /> : <MonitorUp size={22} />}
+          </BotaoDeChamada>
+
+          {/* Mesmo botão da variante "largo" acima, com as cores do sistema de
+              `tom` desta barra: `mudo` é exatamente o vermelho que o
+              microfone usa quando está mudo (ver `controles-de-chamada.tsx`). */}
+          {mostrarMudoDaTela && (
+            <BotaoDeChamada
+              label={labelMudoDaTela}
+              onClick={() => void alternarAudioDaTela()}
+              tom={audioDaTelaMudo ? "mudo" : "neutro"}
+              pressionado={audioDaTelaMudo}
+            >
+              {audioDaTelaMudo ? <VolumeX size={22} /> : <Volume2 size={22} />}
+            </BotaoDeChamada>
+          )}
+        </>
       )}
 
       {seletor && <ScreenSharePicker onClose={() => setSeletor(false)} />}
