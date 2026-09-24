@@ -259,10 +259,16 @@ export default function VoiceChannelMembers({
           onFechar={agendarFechar}
           onManter={cancelarFechar}
           onAssistir={() => {
-            // fora da sala não há faixa para assinar: entrar no canal é parte
-            // do "assistir", e por isso este `select` vai como `"clique"` —
-            // é a mesma intenção da linha do canal (ver `voice-entrada.ts`)
-            if (!estouAqui && canal) select(canal, "clique");
+            // "assistir" pede o palco, não só a entrada: por isso aqui o
+            // `select` vai como `"navegacao"` (abre a tela do canal sem
+            // entrar) e quem entra é o `connect` logo depois, com o som de
+            // entrada normal. É diferente da linha do canal (ver
+            // `voice-entrada.ts`), onde o clique pode querer manter o chat
+            // aberto e só o segundo clique abre o palco.
+            if (!estouAqui && canal) {
+              select(canal, "navegacao");
+              void useVoice.getState().connect(canal);
+            }
             assistir(previa.user.id);
             setPrevia(null);
           }}
