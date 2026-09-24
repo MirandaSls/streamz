@@ -81,18 +81,23 @@ describe("pedido para o Rust", () => {
 describe("captura do navegador", () => {
   it("leva o preset e o áudio de sistema sem processamento de voz", () => {
     expect(restricoesDeCaptura("1080p60", true)).toEqual({
+      selfBrowserSurface: "exclude",
+      systemAudio: "include",
       video: { displaySurface: "monitor", width: 1920, height: 1080, frameRate: 60 },
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
         channelCount: 2,
+        restrictOwnAudio: true,
+        suppressLocalAudioPlayback: false,
       },
     });
   });
 
-  it("sem áudio do sistema, pede vídeo só", () => {
+  it("sem áudio do sistema, pede vídeo só — e não força systemAudio", () => {
     expect(restricoesDeCaptura("720p30", false)).toEqual({
+      selfBrowserSurface: "exclude",
       video: { displaySurface: "monitor", width: 1280, height: 720, frameRate: 30 },
       audio: false,
     });
