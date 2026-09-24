@@ -24,6 +24,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use windows::core::{implement, IUnknown, Interface, Ref, HRESULT, PCWSTR};
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::Media::Audio::{
     eConsole, eRender, ActivateAudioInterfaceAsync, IActivateAudioInterfaceAsyncOperation,
     IActivateAudioInterfaceCompletionHandler, IActivateAudioInterfaceCompletionHandler_Impl,
@@ -39,7 +40,6 @@ use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemFree, BLOB, CLSCTX_ALL, COINIT_MULTITHREADED,
 };
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcessId};
 use windows::Win32::System::Variant::VT_BLOB;
 
@@ -147,7 +147,8 @@ impl Loopback {
             )?;
             // Timeout: o aviso pode chegar depois; o `send` dele só falha
             // em silêncio, porque o `rx` já foi embora.
-            rx.recv_timeout(ESPERA_ATIVACAO).map_err(|_| ErroDeAudio::Falha)?;
+            rx.recv_timeout(ESPERA_ATIVACAO)
+                .map_err(|_| ErroDeAudio::Falha)?;
 
             let mut resultado = HRESULT(0);
             let mut ativado: Option<IUnknown> = None;
