@@ -28,8 +28,16 @@ import {
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
+import {
+  chaveDoTileDeTela,
+  minhaTelaAparece,
+  usePreviaDaMinhaTela,
+} from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
+import {
+  previaDaMinhaTelaLigada,
+  usePreferenciasDeTransmissao,
+} from "@/stores/preferencias-de-transmissao";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui } from "@/stores/ui";
@@ -101,6 +109,24 @@ import {
  * O **áudio** dos outros não é daqui. Ele fica em `AudioRemotoHost`, montado
  * com o app inteiro: a grade desmonta ao trocar de tela, e a chamada não.
  */
+
+// "Mostrar meu compartilhamento de tela", "Pausar prévia sem foco" e o próprio
+// foco da janela mudam a assinatura da minha tela, e nenhum deles passa pela
+// store de voz — então quem reaplica é daqui, no nível do módulo e não num
+// efeito: a grade desmonta ao trocar de tela, e a janela perder o foco com a
+// grade desmontada deixaria a prévia assinada (e decodificada) em segundo
+// plano. Só reaplica quando a **decisão** muda, não a cada escrita na store.
+// O ciclo store de voz → assinaturas → preferências impede que isto more em
+// `assinaturas-de-tela.ts`, que não pode importar `aplicarAssinaturasDeTela`.
+if (typeof window !== "undefined") {
+  let anterior = previaDaMinhaTelaLigada(usePreferenciasDeTransmissao.getState());
+  usePreferenciasDeTransmissao.subscribe((s) => {
+    const agora = previaDaMinhaTelaLigada(s);
+    if (agora === anterior) return;
+    anterior = agora;
+    aplicarAssinaturasDeTela();
+  });
+}
 
 /** Uma vaga do palco: alguém, ou o convite que ocupa a vaga vazia. */
 type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
@@ -196,6 +222,11 @@ export default function VoiceGrid({
   const assistir = useVoice((s) => s.assistir);
   const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
   const previaDaMinhaTela = usePreviaDaMinhaTela((s) => s.chave);
+  // a minha tela aparece por padrão (paridade Discord), salvo a preferência
+  // desligada ou a janela fora de foco com "pausar" ligado — um booleano, para
+  // a grade não re-renderizar a cada escrita que não muda a decisão
+  const previaPorPreferencia = usePreferenciasDeTransmissao(previaDaMinhaTelaLigada);
+  const setMostrarMinhaTela = usePreferenciasDeTransmissao((s) => s.setMostrarMinhaTela);
   // ESPEC2 item N: quem eu desativei o vídeo não tem tile de câmera — o
   // objeto inteiro (e não um seletor por id) porque o conjunto de quem está
   // desativado é pequeno e a grade já teria de re-renderizar de qualquer
@@ -251,11 +282,16 @@ export default function VoiceGrid({
       telasDe(p).map((pub): Tile => {
         const key = chaveDoTileDeTela(state.user.id, pub.trackSid);
         // A minha tela pela captura nativa do desktop: vem do `<userId>#tela`,
-        // um participante que não é a pessoa. Ela **não** se assina sozinha
-        // (ver `assinaturas-de-tela.ts`): o tile mostra o aviso "Você está
-        // compartilhando sua tela" até eu pedir a prévia ou pô-la no palco.
+        // um participante que não é a pessoa. Ela se assina (em LOW) pela
+        // preferência "Mostrar meu compartilhamento de tela" ou quando eu peço
+        // a prévia / a ponho no palco; fora disso — preferência desligada, ou
+        // pausada com a janela sem foco — o tile mostra o aviso "Você está
+        // compartilhando sua tela". A conta é a mesma da assinatura
+        // (`minhaTelaAparece`), para o tile nunca desenhar faixa desassinada.
         const minhaTelaNativa = sou && p.identity !== state.user.id;
-        const mostrando = minhaTelaNativa && (previaDaMinhaTela === key || focado === key);
+        const mostrando =
+          minhaTelaNativa &&
+          minhaTelaAparece(key, { previaPorPreferencia, previaDaMinhaTela, focado });
         return {
           key,
           state,
@@ -310,6 +346,11 @@ export default function VoiceGrid({
     // quem a muda reaplica as assinaturas na mão
     onPreviaDaMinhaTela: (chave: string, ver: boolean) => {
       usePreviaDaMinhaTela.setState({ chave: ver ? chave : null });
+      // "Ocultar prévia" com a prévia vindo da preferência: limpar a escolha do
+      // tile não bastaria (a preferência a manteria no ar), então ocultar
+      // desliga "Mostrar meu compartilhamento de tela" — é o mesmo interruptor
+      // que o Discord mexe. O `subscribe` do topo do módulo reaplica.
+      if (!ver && previaPorPreferencia) setMostrarMinhaTela(false);
       // ocultar com a tela no palco tira ela de lá: no destaque ela seguiria
       // assinada, e o aviso em tamanho de cinema não serve para nada
       if (!ver && focado === chave) setFocado(null);
