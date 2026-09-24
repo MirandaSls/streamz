@@ -190,8 +190,10 @@ describe("a minha tela no navegador", () => {
       expect(cardDaTela).not.toContain(rotulo);
     }
     expect(cardDaTela).toContain("Ao vivo");
-    // e o card da pessoa continua com as ações dele
-    expect(html).toContain("Colocar no palco");
+    // paridade com o Discord: o card da pessoa também não leva ação nenhuma
+    // por cima — só o menu do botão direito
+    expect(html).not.toContain("Colocar no palco");
+    expect(html).not.toContain("Mais opções");
   });
 });
 

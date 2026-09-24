@@ -117,7 +117,18 @@ export const useChannels = create<ChannelsState>((set, get) => {
 
     loadForGuild: async (guildId) => {
       const seq = ++loadSeq;
-      set({ guildId, channels: [], activeChannelId: null, loading: true });
+      // **Recarga** do servidor que já está na tela: é o `useRealtime` refazendo
+      // a lista porque o que eu enxergo mudou (cargo, override de canal ou de
+      // categoria). Ela não é navegação e não pode mexer no que está aberto.
+      // Esvaziar a lista aqui fazia o `useVoiceChannel` virar `null` durante o
+      // fetch — o palco desmontava — e o `select(firstText)` do fim zerava o
+      // `voiceChannelId` de quem estava na call, deixando a conexão viva com a
+      // coluna 3 no chat de texto. `guilds.select` não chama isto para o mesmo
+      // servidor, então "mesmo `guildId`" só acontece nas recargas.
+      const recarga = get().guildId === guildId;
+      // na recarga, nem `loading`: a barra lateral trocaria a lista pelo
+      // esqueleto por um instante, e a lista antiga vale até a nova chegar
+      if (!recarga) set({ guildId, channels: [], activeChannelId: null, loading: true });
       try {
         const guild = await api.getGuild(guildId);
         if (seq !== loadSeq) return; // trocaram de servidor no meio do fetch
@@ -126,6 +137,29 @@ export const useChannels = create<ChannelsState>((set, get) => {
         // as categorias vêm de outra rota: carregar aqui mantém os dois lados
         // da barra lateral sempre do mesmo servidor
         void useCategories.getState().loadForGuild(guildId);
+        if (recarga) {
+          // o estado lido é o de **agora**, depois do fetch: se a pessoa clicou
+          // noutro canal enquanto a lista vinha, é esse clique que vale
+          const { activeChannelId, voiceChannelId } = get();
+          const existe = (id: string | null) => !!id && channels.some((c) => c.id === id);
+          if (existe(activeChannelId)) {
+            // o canal aberto sobreviveu: nada de `select`, que reabriria a
+            // conversa e (com a origem padrão) nunca entraria na call — só
+            // soltamos o palco se o canal de voz, e só ele, sumiu da lista
+            if (!existe(voiceChannelId) && voiceChannelId) set({ voiceChannelId: null });
+            return;
+          }
+          // perdi o acesso ao canal aberto: cai no primeiro de texto, como numa
+          // carga nova; sem nenhum, a coluna fica vazia em vez de mostrar a
+          // conversa de um canal que eu já não vejo
+          const firstText = channels.find((c) => isTextChannel(c));
+          if (firstText) get().select(firstText);
+          else {
+            set({ activeChannelId: null, voiceChannelId: null });
+            useMessages.getState().closeChannel();
+          }
+          return;
+        }
         const firstText = channels.find((c) => isTextChannel(c));
         if (firstText) get().select(firstText);
       } catch (e) {

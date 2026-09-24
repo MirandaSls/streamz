@@ -75,7 +75,7 @@ export function Chave({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span>{rotulo}</span>
+      <span className="text-sm font-semibold text-text-strong">{rotulo}</span>
       <button
         type="button"
         role="switch"

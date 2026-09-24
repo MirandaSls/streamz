@@ -23,12 +23,22 @@ describe("decidirSaida", () => {
   });
 
   it("expulso pelo servidor não manda voice.leave: ele derrubaria a conexão nova da conta", () => {
+    // chamada de conversa direta (ou canal que já não está na coluna): não há
+    // vista para onde voltar, a coluna fecha como sempre fechou
     expect(decidirSaida("expulso")).toEqual({ avisaGateway: false, fechaColuna: true });
-    // e fecha a coluna mesmo com o canal aberto: a vista com "entrar" ali seria
-    // um convite a derrubar o aparelho de onde a conta acabou de entrar
-    expect(decidirSaida("expulso", { canalDeServidorAberto: true })).toEqual({
+    expect(decidirSaida("expulso", { canalDeServidorAberto: false })).toEqual({
       avisaGateway: false,
       fechaColuna: true,
+    });
+  });
+
+  it("expulso com o canal de voz de servidor aberto mantém a coluna: ela vira a vista do canal", () => {
+    // era o defeito do "palco só no segundo clique": fechar zerava só o
+    // `voiceChannelId`, o canal de voz seguia ativo e a coluna 3 caía no
+    // `ChatView` dele. Mantida, ela mostra a vista com o botão de entrar
+    expect(decidirSaida("expulso", { canalDeServidorAberto: true })).toEqual({
+      avisaGateway: false,
+      fechaColuna: false,
     });
   });
 

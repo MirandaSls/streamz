@@ -17,8 +17,8 @@
  *   reconectaria no canal antigo assim que o usuário voltasse ao servidor,
  *   derrubando a chamada.
  *
- * **Desligar num canal de voz de servidor que continua aberto não fecha mais a
- * coluna.** Fechá-la mandava a pessoa para o `ChatView` de largura inteira do
+ * **Desligar (ou ser expulso pela própria conta) num canal de voz de servidor
+ * que continua aberto não fecha mais a coluna.** Fechá-la mandava a pessoa para o `ChatView` de largura inteira do
  * mesmo canal — uma tela que ela não pediu, e sem caminho de volta a não ser
  * clicar no canal outra vez. Desde o #131 existe para onde voltar: a
  * `VistaDoCanalDeVoz`, com o nome do canal, quem ficou lá e o botão de entrar
@@ -65,10 +65,19 @@ export function decidirSaida(
       // o canal continua na tela: a coluna fica de pé e vira a vista do canal
       return { avisaGateway: true, fechaColuna: !canalDeServidorAberto };
     case "expulso":
-      // aqui a coluna fecha mesmo com o canal aberto: quem me tirou foi a minha
-      // outra conexão, e ficar na vista do canal que acabei de perder seria um
-      // convite a reentrar e derrubar o aparelho novo
-      return { avisaGateway: false, fechaColuna: true };
+      // A coluna segue a mesma regra do desligar: com o canal de voz de
+      // servidor ainda aberto, ela fica e vira a `VistaDoCanalDeVoz` (nome,
+      // quem está lá, "entrar"), que é o que o Discord mostra no aparelho que
+      // perdeu a sala. Fechá-la **não** era neutro: `leaveVoice` zera só o
+      // `voiceChannelId`, o `activeChannelId` continua no canal de voz, e a
+      // página desenha o `ChatView` de largura inteira dele — o "entrei na
+      // call mas o palco só aparece no segundo clique". Reentrar pela vista
+      // exige um clique em "entrar", e é essa a intenção que decide qual
+      // aparelho fica com a sala; a vista não conecta sozinha (ver
+      // `voice-entrada.ts`). Em conversa direta não há coluna de canal para
+      // manter, e ela fecha como antes. Quem avisa o motivo é o toast do
+      // `expulsoDaVoz`, não esta tabela.
+      return { avisaGateway: false, fechaColuna: !canalDeServidorAberto };
     case "troca-de-sala":
       return { avisaGateway: true, fechaColuna: !destinoEmServidor };
     case "movido":

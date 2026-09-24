@@ -1062,8 +1062,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
       // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
-      // conexão nova da conta. A coluna fecha — o painel mostraria uma sala em
-      // que não estou mais
+      // conexão nova da conta. Em servidor, o painel fica no Vista do canal com
+      // o botão "entrar" (como Discord); em DM, a coluna fecha. Toast explica.
       sairDaSalaAtual("expulso");
       ui.toast(
         channelId === novoCanalId
