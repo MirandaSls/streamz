@@ -99,6 +99,7 @@ import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@
 import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { criarEmissorCoalescido } from "@/stores/voice-update-coalescido";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
@@ -151,6 +152,24 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "error";
 
 /** Sala do canal em que estou — fora da store, ver o comentário acima. */
 let sala: Room | null = null;
+/**
+ * Coalesce as flags (mudo/surdo/câmera/tela) antes de mandar `VOICE_UPDATE`.
+ *
+ * Spammar mudo/desmudo chamava `syncFlags` a cada toggle, e o token bucket do
+ * gateway (WS, "Rate limiting em duas camadas" no CLAUDE.md) descartava o
+ * excesso em silêncio — o último estado podia nunca chegar, e o ícone de mudo
+ * na lista da call (que vem do servidor) ficava atrasado ou errado. Ver
+ * `voice-update-coalescido.ts` para a regra. Um só, no módulo, porque só há
+ * uma sala de voz por vez — as três entradas de sala (`connect`,
+ * `rejoinAposReconexao`, `startCall`) e a saída (`sairDaSalaAtual`) o
+ * zeram, para o coalescedor nunca comparar com o estado de uma sala anterior.
+ */
+const emissorFlags = criarEmissorCoalescido<VoiceFlags>(
+  (f) => emit(WS_EVENTS.VOICE_UPDATE, f),
+  300,
+  (a, b) =>
+    a.muted === b.muted && a.deafened === b.deafened && a.video === b.video && a.screen === b.screen,
+);
 /**
  * Tópico dos avisos de fala por data message do LiveKit.
  *
@@ -747,6 +766,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
     // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
     encerrarTeste(false);
+    // esquece a janela e o último enviado desta sala: sem isto, um `pedir`
+    // pendente de antes da saída dispararia um `VOICE_UPDATE` depois do
+    // `VOICE_LEAVE` — para um canal em que já não estou
+    emissorFlags.zerar();
     const decisao = decidirSaida(motivo, {
       destinoEmServidor,
       // o canal de voz que estou deixando ainda é o que está na coluna: há uma
@@ -1037,7 +1060,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
       emit(WS_EVENTS.VOICE_JOIN, { channelId: channel.id });
-      emit(WS_EVENTS.VOICE_UPDATE, flags());
+      // sala nova: `zerar` esquece o último enviado da sala anterior (senão o
+      // primeiro `syncFlags` daqui poderia ser suprimido por comparar com o
+      // estado de outra sala) antes de `pedir` mandar este direto — a janela
+      // acabou de abrir, então não há nada "em voo" para segurar o envio
+      emissorFlags.zerar();
+      emissorFlags.pedir(flags());
 
       // 2) mídia, se houver
       const r = await conectarMidia(channel, set, rerender, get);
@@ -1129,7 +1157,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (!channelId || status === "idle" || status === "connecting") return;
 
       emit(WS_EVENTS.VOICE_JOIN, { channelId });
-      emit(WS_EVENTS.VOICE_UPDATE, flags());
+      // o gateway perdeu o socket antigo e com ele o que sabia das minhas
+      // flags — reentrar é, do lado dele, tão "de novo" quanto um `connect`;
+      // `zerar` evita que o `pedir` seguinte seja suprimido por comparar com
+      // um "último enviado" que já não vale nada para quem está do outro lado
+      emissorFlags.zerar();
+      emissorFlags.pedir(flags());
 
       // A mídia tem reconexão própria: o LiveKit se restabelece quando só a
       // rede oscilou, e refazer a sala por cima publicaria a mesma câmera duas
@@ -1661,8 +1694,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         emit(WS_EVENTS.VOICE_JOIN, { channelId });
         // as flags **reais** logo em seguida: o join do REST entra com
         // `VOICE_FLAGS_PADRAO`, então quem liga com o microfone fechado nasceria
-        // desmutado para os outros até o primeiro `syncFlags`
-        emit(WS_EVENTS.VOICE_UPDATE, flags());
+        // desmutado para os outros até o primeiro `syncFlags`. `zerar` antes:
+        // sala nova para o gateway, o "último enviado" de uma call anterior
+        // não pode suprimir este envio
+        emissorFlags.zerar();
+        emissorFlags.pedir(flags());
 
         if (!r.voice) {
           // sem LiveKit a chamada ainda toca e o estado de voz vale: só não há som
@@ -1698,6 +1734,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // ele, atender no celular deixava o desktop na sala até o LiveKit derrubar
       // a identidade repetida — e lá aparecia "a conexão de voz caiu", como se
       // fosse queda de rede, em vez do aviso de que entrei em outro aparelho
+      // a call anterior pode ter terminado por um caminho que não passa por
+      // `sairDaSalaAtual`, e o último valor enviado lembrado dela suprimiria o primeiro `voice.update` da sala nova
+      emissorFlags.zerar();
       emit(WS_EVENTS.VOICE_JOIN, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
       lembrarSala({ channelId, guildId: null, name: "" });
@@ -1774,8 +1813,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     syncFlags: () => {
       const f = flags();
       // durante o teste de microfone as preferências **são** mudo e surdo: o
-      // gateway recebe isso, e os outros me veem como o Discord os mostraria
-      emit(WS_EVENTS.VOICE_UPDATE, f);
+      // gateway recebe isso, e os outros me veem como o Discord os mostraria.
+      // Passa pelo coalescedor (`emissorFlags`) e não por `emit` direto: é
+      // `syncFlags` quem spamma em rajada (todo toggle de mudo/câmera/tela
+      // chama isto), o caminho exato do bug que o token bucket do gateway
+      // expunha — ver o comentário de `emissorFlags`
+      emissorFlags.pedir(f);
       if (!sala) return;
       // NÃO é `setMicrophoneEnabled`: sem publicação, ele criaria uma faixa
       // crua (sem restrições e sem cadeia) por baixo do dono — era isso que

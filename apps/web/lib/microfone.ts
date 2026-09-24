@@ -533,14 +533,52 @@ export function atualizarMicrofone(prefs: PreferenciasDoMicrofone): Promise<void
   });
 }
 
+/**
+ * O pedido de `aberto` mais recente que ainda não começou a rodar, e a promise
+ * que o entrega — para coalescer rajadas de clique em `definirMicrofoneAberto`.
+ *
+ * Sem isto, cada clique de "spammar mudo" enfileirava a própria operação em
+ * `emFila`, uma por uma: N cliques viravam N `mute()`/`unmute()` em série (o
+ * `mute()`/`unmute()` do LiveKit tem lock próprio), e se alguma operação lenta
+ * estivesse na fila no meio da rajada (`abrirMicrofone`, uma troca de
+ * restrições), todo o resto esperava atrás dela e era aplicado um a um — a
+ * rajada demorava para assentar no estado real, proporcional ao número de
+ * cliques.
+ *
+ * Agora só o último valor pedido fica guardado aqui; a operação que já está
+ * enfileirada (e ainda não rodou) lê esse valor **no momento em que roda**, não
+ * no momento em que foi pedida. `pendenteAberto` é zerado como a primeira linha
+ * da operação, antes de qualquer `await`: é o que marca "já comecei" para o
+ * próximo clique, que aí enfileira uma operação nova em vez de coalescer nesta.
+ * Resultado: uma rajada de N cliques vira no máximo uma operação em curso mais
+ * uma enfileirada atrás dela — nunca uma fila do tamanho da rajada — e o
+ * estado final é sempre o do último clique.
+ */
+let pendenteAberto: { valor: boolean; prontidao: Promise<void> } | null = null;
+
 /** Mudo/surdo/PTT: só abre e fecha a faixa que já existe. */
 export function definirMicrofoneAberto(aberto: boolean): Promise<void> {
-  return emFila(async () => {
-    const estado = vivo;
-    if (!estado || estado.prefs.aberto === aberto) return;
-    estado.prefs = { ...estado.prefs, aberto };
-    await aplicarMudo(estado);
-  });
+  if (pendenteAberto) {
+    pendenteAberto.valor = aberto;
+    return pendenteAberto.prontidao;
+  }
+  let pendente!: { valor: boolean; prontidao: Promise<void> };
+  pendente = {
+    valor: aberto,
+    prontidao: emFila(async () => {
+      // a partir daqui a operação já começou: o próximo clique não coalesce
+      // mais nesta, e enfileira uma operação nova
+      pendenteAberto = null;
+      const estado = vivo;
+      // sem `vivo`, não faz nada — inclusive quando o pedido coalescido chegou
+      // antes de `abrirMicrofone` terminar de montar `estado.prefs`
+      if (!estado || estado.prefs.aberto === pendente.valor) return;
+      estado.prefs = { ...estado.prefs, aberto: pendente.valor };
+      await aplicarMudo(estado);
+    }),
+  };
+  pendenteAberto = pendente;
+  return pendente.prontidao;
 }
 
 /**
