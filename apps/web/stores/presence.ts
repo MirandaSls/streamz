@@ -177,9 +177,18 @@ export function useAutoIdle(enabled: boolean): void {
       timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
     }
 
+    // Esconder a aba (alt-tab, minimizar) também dispara `visibilitychange` —
+    // mas sair da janela não é atividade, é o oposto. Só contamos como volta
+    // quando ela fica `visible` de novo; ao esconder não fazemos nada, e o
+    // timer de ausente já agendado continua correndo (pode marcar ausente com
+    // a aba escondida, igual ao Discord).
+    function aoMudarVisibilidade() {
+      if (document.visibilityState === "visible") voltar();
+    }
+
     const eventos = ["mousemove", "keydown", "mousedown", "wheel", "touchstart", "focus"] as const;
     for (const e of eventos) window.addEventListener(e, voltar, { passive: true });
-    document.addEventListener("visibilitychange", voltar);
+    document.addEventListener("visibilitychange", aoMudarVisibilidade);
     timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
 
     // Se o usuário escolher um status manual por outro caminho (ex.: menu de
@@ -208,7 +217,7 @@ export function useAutoIdle(enabled: boolean): void {
     return () => {
       window.clearTimeout(timer);
       for (const e of eventos) window.removeEventListener(e, voltar);
-      document.removeEventListener("visibilitychange", voltar);
+      document.removeEventListener("visibilitychange", aoMudarVisibilidade);
       desinscrever?.();
     };
   }, [enabled]);
