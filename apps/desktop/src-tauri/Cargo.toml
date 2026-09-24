@@ -67,18 +67,13 @@ tauri-plugin-process = "2"
 [features]
 custom-protocol = ["tauri/custom-protocol"]
 
-# Só no Windows: é o alvo que o `build.rs` marca com o cfg `tela_nativa`, e
-# esta lista é o que o módulo `tela` importa ali — as duas andam juntas. Além
-# do WebView2 e da captura pela API do Windows, entra o que o `tela` usa fora
-# do backend: `transmissao.rs` importa `livekit` e `tokio::sync::mpsc`,
-# `captura/escala.rs` importa `image` (e `mod escala;` não tem `#[cfg]`, porque
-# as miniaturas são comuns aos backends) e `tela/mod.rs` usa `base64` para
-# montar a data URL de cada miniatura.
-#
-# O macOS ficou de fora de propósito enquanto a captura de lá for esqueleto: o
-# `livekit` arrasta o `webrtc-sys`, que exige Apple clang ≥ 15 (Xcode/CLT 15),
-# e hoje não traria nada ao app de Mac, que usa o `getDisplayMedia` do webview.
-[target.'cfg(windows)'.dependencies]
+# Comum a qualquer alvo com `tela_nativa` (Windows e macOS, ver `build.rs`) —
+# é o que o módulo `tela` usa fora do backend de captura específico da
+# plataforma: `transmissao.rs` importa `livekit` e `tokio::sync::mpsc` para
+# publicar a captura na sala, `captura/escala.rs` importa `image` (e `mod
+# escala;` não tem `#[cfg]`, porque as miniaturas são comuns aos backends) e
+# `tela/mod.rs` usa `base64` para montar a data URL de cada miniatura.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 # Publica a captura na sala como o participante `<userId>#tela`, direto deste
 # processo. Traz o libwebrtc pré-compilado (`webrtc-sys` baixa no build): o
 # instalador cresce dezenas de MB, e é o preço de não passar os quadros pelo
@@ -92,6 +87,11 @@ tokio = { version = "1", features = ["sync"] }
 # e JPEG de 480 px (miniatura da grade).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
+
+# Só no Windows: é o alvo que o `build.rs` marca com o cfg `tela_nativa` junto
+# do macOS, e esta lista é o resto que o módulo `tela` importa ali — WebView2
+# e a captura pela API do Windows (WGC/DXGI).
+[target.'cfg(windows)'.dependencies]
 # `PermissionRequested` do WebView2 (ver `src/permissoes.rs`). A versão é a
 # mesma que o Tauri usa — o `ICoreWebView2Controller` que o `with_webview`
 # entrega vem deste crate, e duas cópias dele seriam dois tipos diferentes com
@@ -127,6 +127,24 @@ windows = { version = "0.62", features = [
 # que é o que tira a borda amarela no Windows 11) e DXGI Desktop Duplication
 # (o caminho sem borda no Windows 10). Ver `src/tela/captura/mod.rs`.
 windows-capture = "2.0.1"
+
+# Só no macOS: bindings objc2 do ScreenCaptureKit/CoreMedia/CoreVideo/
+# CoreGraphics. `objc2` e não o crate `screencapturekit`, porque este compila
+# uma ponte Swift no seu próprio `build.rs`. objc2 0.6 / frameworks 0.3 já
+# vêm no `Cargo.lock` via tao/wry — não é versão nova no grafo.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+block2 = "0.6.2"
+dispatch2 = "0.3.1"
+objc2-foundation = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-core-media = "0.3.2"
+objc2-core-video = "0.3.2"
+objc2-core-audio-types = "0.3.2"
+objc2-screen-capture-kit = "0.3.2"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "libc", "objc2-core-graphics", "objc2-core-foundation", "NSRunningApplication", "NSImage", "NSImageRep", "NSGraphicsContext"] }
+libc = "0.2"
 
 # Só no Linux: o `permission-request` e os ajustes de mídia do WebKitGTK (ver
 # `src/permissoes_linux.rs`). Pelo mesmo motivo do `webview2-com` acima, a
