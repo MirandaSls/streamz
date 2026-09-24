@@ -46,6 +46,30 @@ pub fn converter_para_estereo(bruto: &[u8], amostra: Amostra, canais: usize, sai
     }
 }
 
+/// Converte quadros planares (um slice por canal, não intercalado) para i16
+/// estéreo — é o formato que o `ScreenCaptureKit` entrega (float32 não
+/// intercalado) e que o loopback do macOS usa.
+///
+/// 0 canais: nada sai. 1 canal: duplicado para L e R. 2 ou mais: só os dois
+/// primeiros sobrevivem (esquerdo e direito, por convenção). O número de
+/// quadros é o menor `len` entre os canais usados, para nunca ler fora dos
+/// limites de um canal mais curto. Acrescenta a `saida` — não limpa o que já
+/// está lá.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn planar_f32_para_estereo(canais: &[&[f32]], saida: &mut Vec<i16>) {
+    let (esquerdo, direito) = match canais {
+        [] => return,
+        [mono] => (*mono, *mono),
+        [esquerdo, direito, ..] => (*esquerdo, *direito),
+    };
+    let quadros = esquerdo.len().min(direito.len());
+    let converter = |x: f32| -> i16 { (x.clamp(-1.0, 1.0) * 32767.0) as i16 };
+    for i in 0..quadros {
+        saida.push(converter(esquerdo[i]));
+        saida.push(converter(direito[i]));
+    }
+}
+
 /// Reamostragem linear de estéreo intercalado, com estado entre chamadas
 /// (a posição fracionária e o último quadro), para não estalar na emenda
 /// dos pacotes. Linear é suficiente para 44,1 → 48 kHz em áudio de jogo e
@@ -163,5 +187,32 @@ mod testes {
         let mut mono = Vec::new();
         converter_para_estereo(&7i16.to_le_bytes(), Amostra::I16, 1, &mut mono);
         assert_eq!(mono, vec![7, 7]);
+    }
+
+    #[test]
+    fn planar_mono_e_estereo() {
+        // mono: cada quadro duplica para L e R
+        let mut saida = Vec::new();
+        planar_f32_para_estereo(&[&[0.5, -0.5]], &mut saida);
+        assert_eq!(saida, vec![16383, 16383, -16383, -16383]);
+
+        // estéreo: intercala L,R; e clamp de 1.5 vira 32767 (limite de i16)
+        let mut saida = Vec::new();
+        let esquerdo = [1.5f32, 0.0];
+        let direito = [-1.0f32, 0.0];
+        planar_f32_para_estereo(&[&esquerdo, &direito], &mut saida);
+        assert_eq!(saida, vec![32767, -32767, 0, 0]);
+
+        // canais de tamanhos diferentes: usa o menor
+        let mut saida = Vec::new();
+        let esquerdo = [0.0f32, 0.0, 0.0];
+        let direito = [0.0f32];
+        planar_f32_para_estereo(&[&esquerdo, &direito], &mut saida);
+        assert_eq!(saida.len(), 2);
+
+        // 0 canais: nada sai; e a saída é acrescentada, não limpa
+        let mut saida = vec![9, 9];
+        planar_f32_para_estereo(&[], &mut saida);
+        assert_eq!(saida, vec![9, 9]);
     }
 }
