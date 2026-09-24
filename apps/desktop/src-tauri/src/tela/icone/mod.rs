@@ -13,3 +13,9 @@ mod windows;
 // `windows`, que tem exatamente o mesmo nome do módulo.
 #[cfg(windows)]
 pub use self::windows::do_executavel;
+
+#[cfg(target_os = "macos")]
+mod macos;
+
+#[cfg(target_os = "macos")]
+pub use self::macos::do_pid;
