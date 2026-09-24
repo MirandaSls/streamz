@@ -65,13 +65,17 @@ pub(crate) fn pedir_permissao() -> bool {
     false
 }
 
-/// Janelas visíveis agora, displays e apps — o que a grade de fontes mostra.
+/// Displays e apps, com só as janelas visíveis agora. Serve a aba "Telas";
+/// a aba "Aplicativos" usa o `conteudo_completo`, porque "visível agora" é
+/// "no Space que cada monitor mostra neste instante" — e uma janela noutro
+/// Space (ou atrás de um app em tela cheia noutro monitor) sumiria da grade.
 pub(crate) fn conteudo(limite: Duration) -> Option<Retained<SCShareableContent>> {
     pedir_conteudo(true, limite)
 }
 
-/// Inclui janelas fora da tela (minimizadas, em outro Space): quem já está
-/// capturando uma janela precisa achá-la mesmo quando ela sai de vista.
+/// Inclui janelas fora da tela (minimizadas, em outro Space): a grade oferece
+/// todas, e quem já está capturando uma janela precisa achá-la mesmo quando
+/// ela sai de vista.
 pub(crate) fn conteudo_completo(limite: Duration) -> Option<Retained<SCShareableContent>> {
     pedir_conteudo(false, limite)
 }
@@ -104,6 +108,15 @@ pub(crate) fn achar_janela(c: &SCShareableContent, id: u32) -> Option<Retained<S
         .to_vec()
         .into_iter()
         .find(|j| unsafe { j.windowID() } == id)
+}
+
+/// A janela existe, mas não está desenhando — minimizada, escondida (⌘H) ou
+/// em outro Space? O `c` precisa ser o `conteudo_completo`: no só-na-tela a
+/// janela fora da tela nem aparece. Janela não achada responde `false` —
+/// "fechada" é outra pergunta, a do `janela_existe`.
+pub(crate) fn janela_fora_da_tela(c: &SCShareableContent, id: u32) -> bool {
+    // SAFETY: getter sem efeito colateral de um SCWindow válido.
+    achar_janela(c, id).is_some_and(|j| !unsafe { j.isOnScreen() })
 }
 
 pub(crate) fn achar_display(c: &SCShareableContent, id: u32) -> Option<Retained<SCDisplay>> {
@@ -143,7 +156,11 @@ pub(crate) fn escala_do_display(id: u32) -> f64 {
 
 /// Em qual display está o centro da janela — é a escala dele que vale para
 /// capturá-la. O `frame` do SCWindow está no mesmo espaço global (origem no
-/// canto superior esquerdo do display principal) que o Core Graphics usa aqui.
+/// canto superior esquerdo do display principal) que o Core Graphics usa aqui,
+/// então um monitor à esquerda ou acima do principal, de coordenadas
+/// negativas, responde certo. Centro fora de todo display (janela quase toda
+/// arrastada para fora, ou minimizada) cai no principal: erra só a escala da
+/// medida, nunca tira a janela da lista.
 pub(crate) fn display_da_janela(frame: CGRect) -> u32 {
     let mut id: u32 = 0;
     let mut quantos: u32 = 0;

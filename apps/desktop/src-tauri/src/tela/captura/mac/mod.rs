@@ -75,6 +75,15 @@ pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>>
             if cancelar.load(Ordering::Acquire) {
                 break;
             }
+            // Janela fora da tela (outro Space, minimizada) está na grade, mas
+            // não desenha: a foto voltaria vazia depois do prazo inteiro, e no
+            // 13 seria um stream aberto à toa. Sem miniatura a grade mostra o
+            // ícone do app, que é o que ela mostraria de qualquer jeito.
+            if let Alvo::Janela(bruto) = *alvo {
+                if u32::try_from(bruto).is_ok_and(|id| sck::janela_fora_da_tela(&conteudo, id)) {
+                    continue;
+                }
+            }
             // Um pool por fonte: amostras e filtros não se acumulam até o
             // fim da varredura.
             let quadro = autoreleasepool(|_| {
