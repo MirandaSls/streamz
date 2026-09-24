@@ -185,6 +185,12 @@ pub fn run() {
             restaurar_atenuacao_do_windows,
         ])
         .setup(|app| {
+            // --- Janela principal --------------------------------------------
+            // Primeiro de tudo: os blocos abaixo procuram a `main` pelo rótulo.
+            // Ver o porquê de ela nascer aqui em `criar_janela_principal`.
+            #[cfg(desktop)]
+            criar_janela_principal(app)?;
+
             // --- Permissão de mídia ------------------------------------------
             // Antes da bandeja e antes de a janela carregar a web: o primeiro
             // `getUserMedia` da página tem de encontrar o ouvinte de pé, senão
@@ -519,6 +525,64 @@ fn ambiente_de_atenuacao(app: &tauri::AppHandle) -> Option<atenuacao::Real> {
     Some(atenuacao::Real {
         marca: pasta.join("atenuacao-do-windows.txt"),
     })
+}
+
+/// Cria a janela `main` a partir da própria entrada dela no `tauri.conf.json`
+/// (que está com `"create": false`), acrescentando o tratador de `window.open`.
+///
+/// **Por que a janela deixou de nascer sozinha:** o "Usuário/Transmissão em
+/// nova janela" da call (`apps/web/lib/janela-solta.ts`) abre um
+/// `window.open("about:blank")` e desenha nele por `createPortal`, a partir do
+/// React da janela principal. Isso exige que o `window.open` devolva um
+/// `Window` de verdade, do mesmo contexto JS. Sem tratador, o wry 0.55 marca
+/// todo pedido como tratado sem entregar janela (`args.SetHandled(true)` em
+/// `webview2/mod.rs`) e a página recebe `null`. O tratador só pode ser dado no
+/// builder (`WebviewWindowBuilder::on_new_window`); para uma janela criada pela
+/// configuração não existe gancho depois de pronta. O `from_config` mantém tudo
+/// o que o JSON diz (tamanho, sem decoração, invisível até a splash mostrar) —
+/// inclusive o que o `tauri.macos.conf.json` troca.
+///
+/// **Por que `Allow`, e não `Create` com uma `WebviewWindow` nossa:** com
+/// `Allow` quem cria a janela é o próprio webview (o popup padrão do WebView2;
+/// no macOS e no Linux o wry monta a janela com a mesma configuração do
+/// webview que abriu), e o `Window` volta para a página já ligado ao opener,
+/// que é tudo o que o portal precisa. O `Create` pediria um rótulo único por
+/// janela, o mesmo ambiente do WebView2 e a mesma configuração do WKWebView —
+/// cada um é um jeito de o `SetNewWindow` falhar —, e a janela nova ganharia
+/// os scripts do Tauri sem ter nada a fazer com eles.
+///
+/// **Só `about:blank`:** é o único endereço que a web abre assim, e ele herda
+/// a origem da janela principal. Qualquer outro `window.open` continua negado,
+/// como antes — link externo sai pelo `opener`, no navegador do sistema, e não
+/// numa janela solta do app.
+///
+/// **Desktop apenas**: no Android/iOS o `on_new_window` não existe, e as
+/// configurações de celular redefinem `app.windows` sem o `"create": false`,
+/// então lá a `main` continua nascendo da configuração.
+#[cfg(desktop)]
+fn criar_janela_principal<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
+    // Se alguém devolver o `"create"` ao JSON, a janela já existe e criar outra
+    // com o mesmo rótulo falharia o `setup` inteiro; perde-se só a janela solta.
+    let Some(config) = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|janela| janela.label == "main" && !janela.create)
+        .cloned()
+    else {
+        return Ok(());
+    };
+    tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .on_new_window(|url, _| {
+            if url.as_str() == "about:blank" {
+                tauri::webview::NewWindowResponse::Allow
+            } else {
+                tauri::webview::NewWindowResponse::Deny
+            }
+        })
+        .build()?;
+    Ok(())
 }
 
 /// Mostra e foca a janela principal (usada pelo menu e pelo clique no ícone).

@@ -734,6 +734,7 @@ const TABELA_DE_PERMISSOES = {
     { streamz: "ADMINISTRATOR", bitStreamz: 18, discord: "ADMINISTRATOR", bitDiscord: 3 },
     { streamz: "MOVE_MEMBERS", bitStreamz: 19, discord: "MOVE_MEMBERS", bitDiscord: 24 },
     { streamz: "STREAM", bitStreamz: 20, discord: "STREAM", bitDiscord: 9 },
+    { streamz: "DEAFEN_MEMBERS", bitStreamz: 22, discord: "DEAFEN_MEMBERS", bitDiscord: 23 },
   ],
   sempreConcedidas: [
     { discord: "READ_MESSAGE_HISTORY", bitDiscord: 16, porque: "todo mundo lê o histórico de um canal que já pode ver" },
@@ -748,7 +749,6 @@ const TABELA_DE_PERMISSOES = {
   ],
   sempreApagadas: [
     "PRIORITY_SPEAKER",
-    "DEAFEN_MEMBERS",
     "MANAGE_NICKNAMES",
     "MANAGE_WEBHOOKS",
     "VIEW_GUILD_INSIGHTS",

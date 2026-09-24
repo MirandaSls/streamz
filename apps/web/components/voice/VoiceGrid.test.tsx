@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Track } from "livekit-client";
 import type { VoiceStateEvent } from "@streamz/shared";
@@ -104,9 +104,37 @@ vi.mock("@/components/voice/fullscreen", () => ({
   suportaTelaCheia: () => true,
 }));
 
+/**
+ * A store de verdade é zustand com `persist`: o binding React dela passa
+ * `getServerState || getInitialState` como retrato de servidor para o
+ * `useSyncExternalStore` (ver `node_modules/zustand/esm/index.mjs`), e sem
+ * `getServerState` isso cai no estado **congelado da criação do módulo**.
+ * Como este arquivo roda em `environment: "node"` (sem `document`), o
+ * `renderToStaticMarkup` sempre lê esse retrato — o `setState` do teste muda a
+ * store de verdade, mas o render nunca vê a mudança. Mesma razão de
+ * `@/stores/voice` estar mockada: aqui também precisa de um hook de mentira
+ * que leia o estado ao vivo, e não do módulo real.
+ */
+const falsasPreferenciasDoPalco = vi.hoisted(() => {
+  const estado = { previaDaCamera: true, mostrarSemVideo: true };
+  const hook = <T,>(sel: (s: typeof estado) => T): T => sel(estado);
+  return {
+    estado,
+    usePreferenciasDoPalco: Object.assign(hook, {
+      getState: () => estado,
+      setState: (parcial: Partial<typeof estado>) => Object.assign(estado, parcial),
+    }),
+  };
+});
+
+vi.mock("@/stores/preferencias-do-palco", () => ({
+  usePreferenciasDoPalco: falsasPreferenciasDoPalco.usePreferenciasDoPalco,
+}));
+
 import VoiceGrid, { estiloDaTira, telaQueAssumeOPalco } from "./VoiceGrid";
 import { larguraDaTira } from "./grid-layout";
 import type { Tile } from "./TileDeVoz";
+import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 
 // ── cenário ────────────────────────────────────────────────────────────────
 
@@ -139,12 +167,30 @@ function telaPublicada(trackSid: string): PubFalsa {
   };
 }
 
+/** Câmera publicada de verdade (não confundir com `telaPublicada`: fonte não é tela). */
+function cameraPublicada(trackSid: string): PubFalsa {
+  return {
+    kind: Track.Kind.Video,
+    source: Track.Source.Camera,
+    trackSid,
+    track: {},
+    isMuted: false,
+  };
+}
+
+const PADRAO_PREFERENCIAS_DO_PALCO = { previaDaCamera: true, mostrarSemVideo: true };
+
 beforeEach(() => {
   falsas.sala.participantes = [];
   falsas.voz.states = {};
   falsas.voz.focado = null;
   falsas.voz.focoAutomatico = true;
   falsas.voz.assistindo = new Set();
+  usePreferenciasDoPalco.setState(PADRAO_PREFERENCIAS_DO_PALCO);
+});
+
+afterEach(() => {
+  usePreferenciasDoPalco.setState(PADRAO_PREFERENCIAS_DO_PALCO);
 });
 
 describe("a minha tela no navegador", () => {
@@ -197,6 +243,63 @@ describe("a minha tela no navegador", () => {
     // por cima — só o menu do botão direito
     expect(html).not.toContain("Colocar no palco");
     expect(html).not.toContain("Mais opções");
+  });
+});
+
+/**
+ * O menu de vídeo do palco (`usePreferenciasDoPalco`), paridade Discord: quem
+ * está sem câmera some da grade, e a minha própria prévia pode ficar de fora
+ * do meu tile — as duas só valem localmente, nada disso viaja para o servidor
+ * nem para quem está do outro lado.
+ */
+describe("preferências do palco", () => {
+  it("mostrarSemVideo=false tira da grade quem está sem vídeo, mas mantém quem tem", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    falsas.sala.participantes = [
+      participante("ana", [cameraPublicada("sid1")]),
+      participante("bia", []),
+    ];
+    usePreferenciasDoPalco.setState({ mostrarSemVideo: false });
+
+    const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" />);
+
+    expect(html).toContain('data-voice-tile="ana"');
+    expect(html).not.toContain('data-voice-tile="bia"');
+  });
+
+  it("mostrarSemVideo=false não esvazia o palco: com todo mundo sem vídeo, volta a mostrar todos", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    falsas.sala.participantes = [participante("ana", []), participante("bia", [])];
+    usePreferenciasDoPalco.setState({ mostrarSemVideo: false });
+
+    // canal de servidor (`guildId`), não conversa direta: sem vídeo nenhum, uma
+    // DM cairia em `modoAvatares` (`data-voice-avatar`, ver o cabeçalho de
+    // `VoiceGrid.tsx`) e a asserção de tile não valeria por um motivo alheio ao
+    // que este teste afirma — o guarda-costas do filtro, não o modo avatares.
+    const html = renderToStaticMarkup(
+      <VoiceGrid channelId={CANAL} nomeDoCanal="Geral" guildId="guild1" />,
+    );
+
+    expect(html).toContain('data-voice-tile="ana"');
+    expect(html).toContain('data-voice-tile="bia"');
+  });
+
+  it("previaDaCamera=false tira a câmera só do meu tile, localmente", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana"), estado("bia", "Bia")] };
+    // "ana" é a mesma conta do `useAuth` mockado — é a minha própria câmera
+    falsas.sala.participantes = [
+      participante("ana", [cameraPublicada("sid1")]),
+      participante("bia", []),
+    ];
+    usePreferenciasDoPalco.setState({ previaDaCamera: false });
+
+    const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" />);
+    const cardDaAna = html.slice(
+      html.indexOf('data-voice-tile="ana"'),
+      html.indexOf('data-voice-tile="bia"'),
+    );
+
+    expect(cardDaAna).not.toContain("<video");
   });
 });
 

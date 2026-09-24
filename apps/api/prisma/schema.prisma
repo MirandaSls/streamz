@@ -320,6 +320,10 @@ model GuildMember {
   acceptedRulesAt DateTime?
   // Quando viu a tela de boas-vindas; null = mostrar ao abrir o servidor.
   welcomeSeenAt   DateTime?
+  /// silenciado na voz por um moderador (o "Silenciar voz no servidor"); persiste ao sair e voltar, como no Discord
+  voiceMuted    Boolean @default(false)
+  /// áudio desativado na voz por um moderador (o "Desativar áudio no servidor")
+  voiceDeafened Boolean @default(false)
 
   // ── menus de contexto ──
   // Apelido neste servidor (até 32), editado pelo próprio membro. null = sem

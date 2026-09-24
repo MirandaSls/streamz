@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Apps,
   Eye,
+  ExternalLink,
   EyeOff,
   HeadphoneOff,
   MicOff,
@@ -29,6 +30,7 @@ import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voic
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
+import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
 
@@ -190,7 +192,20 @@ export function AvatarDeChamada({
           // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
           surface="border-black"
           status={status}
-          voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
+          // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
+          // um moderador mostra o selo "-servidor" mesmo que também tenha se
+          // silenciado sozinho (ver `useSilencioDoServidor.ts`)
+          voz={
+            state.serverDeaf
+              ? "surdo-servidor"
+              : state.serverMute
+                ? "mudo-servidor"
+                : state.deafened
+                  ? "surdo"
+                  : state.muted
+                    ? "mudo"
+                    : null
+          }
           className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
         {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
@@ -267,6 +282,24 @@ export function VoiceTile({
 }) {
   const { state, publication, tela, assistindo } = tile;
   const sou = state.user.id === meId;
+  /**
+   * A chave da **janela solta**, não `tile.key`: elas divergem para a tela —
+   * `chaveDaJanela` usa `${userId}:tela` (fixa), e `tile.key` usa
+   * `${userId}:${trackSid}` (`chaveDoTileDeTela`, muda a cada nova
+   * transmissão). Assinado com a chave errada, o placeholder nunca casaria com
+   * a janela aberta pelo menu de participante (`abrirJanelaSolta`, que também
+   * registra com `chaveDaJanela`).
+   *
+   * Reativo por seletor, e não `jaAberta()`: aquele muda o store como
+   * efeito colateral de ler (limpa entrada morta), o que não é seguro dentro
+   * do corpo do render. O `pagehide` da janela (`lib/janela-solta.ts`) já
+   * chama `fechar()` sozinho, então o registro do store fica em dia sem
+   * ajuda daqui — só o `!win.closed` cobre a janela que sumiu sem disparar o
+   * evento (aba congelada).
+   */
+  const chaveJanela = chaveDaJanela(tela ? "tela" : "usuario", tile.userId);
+  const janelaDaChave = useJanelasDeVoz((s) => s.janelas[chaveJanela]);
+  const emJanela = !!janelaDaChave && !janelaDaChave.win.closed;
   const caixa = useRef<HTMLDivElement>(null);
   /**
    * **Tela cheia do tile nunca é a da janela sozinha** — e no app desktop ela
@@ -352,8 +385,13 @@ export function VoiceTile({
    * decide se ela aparece aqui é o "Ver prévia".
    */
   const minhaTelaOculta = !!tile.minhaTelaNativa && !assistindo;
-  /** só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. */
-  const video = publication?.track && !minhaTelaOculta ? publication : null;
+  /**
+   * Só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. E
+   * nunca com `emJanela`: a janela solta já decodifica a mesma faixa
+   * (`JanelasDeVoz.tsx`); colar o `<video>` aqui **também** seria decodificar
+   * duas vezes o quadro que a pessoa já está vendo na outra janela.
+   */
+  const video = publication?.track && !minhaTelaOculta && !emJanela ? publication : null;
   /** ver o comentário do componente: a cor dominante só pinta o tile quando
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
@@ -397,8 +435,11 @@ export function VoiceTile({
           ? undefined
           : (e) => {
               // botão de dentro já tem ação própria: dois cliques nele não são
-              // "dois cliques na transmissão"
-              if ((e.target as HTMLElement).closest("button")) return;
+              // "dois cliques na transmissão". E o placeholder de janela
+              // aberta não tem transmissão nenhuma para colocar em tela
+              // cheia — é o mesmo motivo do botão, só que sem elemento
+              // `<button>` cobrindo a área toda.
+              if ((e.target as HTMLElement).closest("button, [data-placeholder-janela]")) return;
               window.clearTimeout(cliquePendente.current);
               void alternarTelaCheiaDe(caixa.current);
             }
@@ -433,7 +474,9 @@ export function VoiceTile({
         raio === undefined ? "rounded-lg" : ""
       } ${usaFundoDaFoto ? "" : "bg-chat-background-default"}`}
     >
-      {video ? (
+      {emJanela ? (
+        <PlaceholderJanelaAberta chave={chaveJanela} nome={nome} compacto={compacto} />
+      ) : video ? (
         <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
       ) : tela ? (
         // Sem faixa. Ou a tela não se assiste ainda — e aí o convite logo
@@ -537,7 +580,11 @@ export function VoiceTile({
           codificar é decodificar 1440p só para se ver — ver
           `assinaturas-de-tela.ts`. O botão reaproveita a pílula de 32px do
           convite ao lado, no cinza secundário: não é um chamado para agir. */}
-      {minhaTelaOculta && (
+      {/* Não junto do `emJanela`: com a janela aberta o placeholder de cima já
+          cobre o mesmo `inset-0` e conta a história certa ("aberto em outra
+          janela"), e não a desta caixa ("Ver prévia"), que não faz sentido
+          para uma tela que já está sendo vista — só noutro lugar. */}
+      {minhaTelaOculta && !emJanela && (
         <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
           {!compacto && (
             <span className="text-sm font-semibold text-text-strong">
@@ -583,7 +630,12 @@ export function VoiceTile({
         </div>
       )}
 
-      {tela && !assistindo && !tile.minhaTelaNativa && (
+      {/* `!emJanela`: abrir a janela solta já assina a transmissão sozinho
+          (`useAssinaturaDaTela` em `JanelasDeVoz.tsx`) — mas entre o clique
+          que abre a janela e esse efeito rodar há um quadro em que
+          `emJanela` já é `true` e `assistindo` ainda não. Sem a checagem, o
+          convite "Assistir" piscaria por cima do placeholder nesse instante. */}
+      {tela && !assistindo && !tile.minhaTelaNativa && !emJanela && (
         <button
           type="button"
           onClick={(e) => {
@@ -691,7 +743,9 @@ export function VoiceTile({
           // o ramo de 20px é o do celular (`PalcoMobile`), medido lá
           rotuloPequeno
             ? "h-[20px] gap-1.5 px-[6px] text-[11px]"
-            : `h-8 gap-1.5 pr-3 text-sm ${tela || state.muted || state.deafened ? "pl-2" : "pl-3"}`
+            : `h-8 gap-1.5 pr-3 text-sm ${
+                tela || state.muted || state.deafened || state.serverMute || state.serverDeaf ? "pl-2" : "pl-3"
+              }`
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
         } ${
@@ -702,17 +756,30 @@ export function VoiceTile({
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
             mesma coisa. "Silenciado por você" não entra — é estado meu, não
             dele, e vive no menu de contexto.
-            Branco, e não vermelho: é o que a print 101857 mostra. Na tela
-            compartilhada o glifo é o monitor (print 123917, tile "Md" com a
-            transmissão), porque o que o rótulo anuncia ali é a tela, não a voz. */}
+            Branco, e não vermelho: é o que a print 101857 mostra — para o
+            mudo por conta própria. O mudo/ensurdecido **pelo servidor**
+            (`serverMute`/`serverDeaf`) é vermelho (`status-danger`), como o
+            selo do avatar em `AvatarDeChamada`, e manda sobre o próprio: quem
+            foi silenciado por um moderador mostra o glifo vermelho mesmo que
+            também tenha se mutado sozinho. Na tela compartilhada o glifo é o
+            monitor (print 123917, tile "Md" com a transmissão), porque o que
+            o rótulo anuncia ali é a tela, não a voz. */}
         {tela ? (
           <span className="grid h-4 w-4 shrink-0 place-items-center">
             <Monitor size={16} role="img" aria-label="Tela compartilhada" />
           </span>
         ) : (
-          (state.deafened || state.muted) && (
-            <span className="grid h-4 w-4 shrink-0 place-items-center">
-              {state.deafened ? (
+          (state.serverDeaf || state.serverMute || state.deafened || state.muted) && (
+            <span
+              className={`grid h-4 w-4 shrink-0 place-items-center ${
+                state.serverDeaf || state.serverMute ? "text-status-danger" : ""
+              }`}
+            >
+              {state.serverDeaf ? (
+                <HeadphoneOff size={16} role="img" aria-label="Áudio desativado pelo servidor" />
+              ) : state.serverMute ? (
+                <MicOff size={16} role="img" aria-label="Silenciado pelo servidor" />
+              ) : state.deafened ? (
                 <HeadphoneOff size={16} role="img" aria-label="Sem áudio" />
               ) : (
                 <MicOff size={16} role="img" aria-label="Mudo" />
@@ -752,6 +819,71 @@ export function VoiceTile({
           - volume, silenciar, colocar/tirar do palco, tela cheia e mais
             opções migraram para o menu de contexto (`onContextMenu` acima),
             que agora é o único caminho de ação do card de pessoa. */}
+    </div>
+  );
+}
+
+/**
+ * O tile de quem tem a câmera ou a tela numa **janela solta**
+ * (`useJanelasDeVoz` — "Usuário em Nova Janela" / "Transmissão em Nova
+ * Janela" do menu de contexto).
+ *
+ * Nada de vídeo aqui: `VoiceTile` já zera `video` quando `emJanela` (ver o
+ * comentário de lá) para não colar a mesma faixa duas vezes — a janela solta
+ * decodifica o quadro dela sozinha (`JanelasDeVoz.tsx`). No lugar, o mesmo
+ * papel do "Você está compartilhando sua tela" ao lado: ícone discreto,
+ * aviso, e o único caminho de volta.
+ *
+ * O clique na área inteira foca a janela (é a mesma pessoa que clicaria no
+ * tile para focar no palco, só que agora o conteúdo está lá, não aqui); o
+ * botão para o clique nele mesmo e fecha a janela em vez de focar — voltar a
+ * transmissão para o palco, e não trazer a janela para a frente.
+ */
+function PlaceholderJanelaAberta({
+  chave,
+  nome,
+  compacto,
+}: {
+  chave: string;
+  nome: string;
+  compacto: boolean;
+}) {
+  return (
+    <div
+      data-placeholder-janela=""
+      role="button"
+      tabIndex={0}
+      aria-label={`Focar a janela de ${nome}`}
+      className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 px-3 text-center"
+      onClick={(e) => {
+        e.stopPropagation();
+        useJanelasDeVoz.getState().focar(chave);
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        e.stopPropagation();
+        useJanelasDeVoz.getState().focar(chave);
+      }}
+    >
+      <ExternalLink size={20} className="text-text-overlay-light/70" aria-hidden="true" />
+      {!compacto && (
+        <span className="text-sm font-semibold text-text-overlay-light">
+          Aberto em outra janela
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          useJanelasDeVoz.getState().fechar(chave);
+        }}
+        className={`flex items-center rounded-full bg-control-overlay-secondary-background-default font-semibold text-control-overlay-secondary-text-default shadow-popout transition hover:bg-control-overlay-secondary-background-hover ${
+          compacto ? "h-6 px-2 text-[10px]" : "h-8 px-3 text-[13px]"
+        }`}
+      >
+        Voltar para cá
+      </button>
     </div>
   );
 }

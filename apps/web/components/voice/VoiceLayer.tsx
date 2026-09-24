@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { CALL_RING_TIMEOUT_MS } from "@streamz/shared";
 import AudioRemotoHost from "@/components/voice/AudioRemotoHost";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
+import JanelasDeVoz from "@/components/voice/JanelasDeVoz";
 import VoiceHotkeys from "@/components/voice/VoiceHotkeys";
 import { VoiceVolumePopoverHost } from "@/components/voice/VoiceGrid";
 import { pararToque, prepararToque, ringbackUrl, tocarToque } from "@/lib/ringtone";
@@ -148,6 +149,9 @@ export default function VoiceLayer() {
   return (
     <>
       <AudioRemotoHost />
+      {/* as janelas soltas da chamada vivem aqui, e não no palco: trocar de
+          tela na aba principal desmonta o palco, e a janela tem de seguir */}
+      <JanelasDeVoz />
       <VoiceHotkeys />
       <VoiceVolumePopoverHost />
       <IncomingCallModal />

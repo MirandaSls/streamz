@@ -42,13 +42,13 @@ function amostraDeBitfields(quantos: number): number[] {
 }
 
 describe("permissoes-discord", () => {
-  it("são 22 permissões, não as 19 do documento", () => {
+  it("são 23 permissões, não as 19 do documento", () => {
     // O §6 foi escrito antes de `MOVE_MEMBERS` (1<<19), `STREAM` (1<<20) e
     // `MANAGE_NICKNAMES` (1<<21) existirem. Este teste é o que denuncia o
     // documento se ele voltar a mentir.
-    expect(PERMISSION_ORDER).toHaveLength(22);
-    expect(Object.keys(Permission)).toHaveLength(22);
-    expect(Object.keys(PAR_NO_DISCORD)).toHaveLength(22);
+    expect(PERMISSION_ORDER).toHaveLength(23);
+    expect(Object.keys(Permission)).toHaveLength(23);
+    expect(Object.keys(PAR_NO_DISCORD)).toHaveLength(23);
   });
 
   it("cada uma das 22 tem par e volta como ela mesma", () => {
@@ -80,6 +80,7 @@ describe("permissoes-discord", () => {
       CONNECT: 1n << 20n,
       SPEAK: 1n << 21n,
       MUTE_MEMBERS: 1n << 22n,
+      DEAFEN_MEMBERS: 1n << 23n,
       MODERATE_MEMBERS: 1n << 40n,
       MANAGE_EMOJIS: 1n << 30n,
       VIEW_AUDIT_LOG: 1n << 7n,

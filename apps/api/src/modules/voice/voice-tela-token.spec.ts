@@ -86,6 +86,16 @@ function servico() {
         return [];
       },
     },
+    // `join`/`broadcast` e `statesForGuild` consultam a moderação de voz do
+    // servidor; sem linha (null) = ninguém foi silenciado por um moderador
+    guildMember: {
+      async findUnique() {
+        return null;
+      },
+      async findMany() {
+        return [];
+      },
+    },
   } as unknown as PrismaService;
   const realtime = { emitToGuild() {}, emitToUsers() {} } as unknown as RealtimeService;
   return new VoiceService(guilds, prisma, realtime);

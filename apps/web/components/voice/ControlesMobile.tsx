@@ -20,6 +20,7 @@ import PainelDeSons from "@/components/voice/PainelDeSons";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
 import { BARRA_ALTURA, BARRA_MARGEM, BOTAO } from "@/components/voice/palco-mobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
+import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import {
   SEM_CAPTURA_DE_TELA,
   capturarTelaNoNavegador,
@@ -88,6 +89,9 @@ export default function ControlesMobile({
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
   // a faixa ainda não subiu: a sala já me ouviria, mas não há o que ouvir
   const abrindoMicrofone = useVoice(microfoneAbrindo);
+  // ausente de uma chamada = tudo `false` (ver o hook): fora de voz a barra
+  // continua exatamente como antes.
+  const { serverMute, serverDeaf } = useSilencioDoServidor();
   // só para decidir o padding da cápsula abaixo — o botão em si mora em
   // `BotaoDeSomDaTelaMobile`, que assina a store de novo (ver o comentário lá)
   const mostrarMudoDaTela = useVoice((s) => s.screenOn && s.telaComSom);
@@ -143,21 +147,31 @@ export default function ControlesMobile({
         } ${escondida ? "pointer-events-none opacity-0" : "opacity-100"}`}
       >
         <BotaoDaBarra
-          label={abrindoMicrofone ? "Ativando microfone…" : muted ? "Desativar mudo" : "Silenciar"}
+          label={
+            serverMute
+              ? "Silenciado pelo servidor"
+              : abrindoMicrofone
+                ? "Ativando microfone…"
+                : muted
+                  ? "Desativar mudo"
+                  : "Silenciar"
+          }
           onClick={toggleMute}
-          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
-          pressionado={muted}
+          tom={muted || abrindoMicrofone || serverMute ? "mudo" : "neutro"}
+          pressionado={muted || serverMute}
+          desabilitado={serverMute}
         >
-          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+          {muted || abrindoMicrofone || serverMute ? <MicOff size={22} /> : <Mic size={22} />}
         </BotaoDaBarra>
 
         <BotaoDaBarra
-          label={deafened ? "Reativar áudio" : "Ficar surdo"}
+          label={serverDeaf ? "Áudio desativado pelo servidor" : deafened ? "Reativar áudio" : "Ficar surdo"}
           onClick={toggleDeafen}
-          tom={deafened ? "mudo" : "neutro"}
-          pressionado={deafened}
+          tom={deafened || serverDeaf ? "mudo" : "neutro"}
+          pressionado={deafened || serverDeaf}
+          desabilitado={serverDeaf}
         >
-          {deafened ? <HeadphoneOff size={22} /> : <Headphones size={22} />}
+          {deafened || serverDeaf ? <HeadphoneOff size={22} /> : <Headphones size={22} />}
         </BotaoDaBarra>
 
         <BotaoDaBarra
@@ -320,6 +334,7 @@ function BotaoDaBarra({
   tom = "neutro",
   pressionado,
   apagado = false,
+  desabilitado = false,
   children,
 }: {
   label: string;
@@ -332,21 +347,30 @@ function BotaoDaBarra({
    * seria a falha em silêncio que este botão existe para evitar.
    */
   apagado?: boolean;
+  /**
+   * Travado por moderador (mute/surdo de servidor): aqui não há nada para o
+   * toque explicar — o próprio rótulo já diz "pelo servidor" — e ninguém
+   * pode desfazer daqui, então vai `disabled` nativo mesmo, junto do
+   * `aria-disabled`. Sem `Tooltip` nesta barra (é tudo `aria-label`), então
+   * a ressalva de hover que vale para `BotaoDeIcone`/o desktop não se aplica.
+   */
+  desabilitado?: boolean;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={desabilitado}
       aria-label={label}
       aria-pressed={pressionado}
-      aria-disabled={apagado || undefined}
+      aria-disabled={desabilitado || apagado || undefined}
       // `style`, e não `h-12`: o valor vem de `palco-mobile.ts`, fonte única em
       // px para esta barra (a raiz do app é 16px, ADR-0009). Medida em px é px.
       style={{ height: BOTAO, width: BOTAO }}
       className={`grid shrink-0 place-items-center rounded-full transition ${TOM[tom]} ${
         apagado ? "opacity-40" : ""
-      }`}
+      } ${desabilitado ? "cursor-not-allowed" : ""}`}
     >
       {children}
     </button>

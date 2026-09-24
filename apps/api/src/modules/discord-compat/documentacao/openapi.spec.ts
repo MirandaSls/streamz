@@ -318,9 +318,14 @@ describe("a especificação OpenAPI da API de bots", () => {
       sempreConcedidas: unknown[];
       sempreApagadas: string[];
     };
-    // as 21 do Streamz, e os bits sem buraco nem repetição
-    expect(permissoes.pares).toHaveLength(21);
-    expect(permissoes.pares.map((p) => p.bitStreamz)).toEqual([...Array(21).keys()]);
+    // as 22 do Streamz, sem repetição de bit — o buraco no 21 é
+    // MANAGE_NICKNAMES, que existe em Permission mas não tem par nesta tabela
+    expect(permissoes.pares).toHaveLength(22);
+    const bitsStreamz = permissoes.pares.map((p) => p.bitStreamz);
+    expect(new Set(bitsStreamz).size).toBe(bitsStreamz.length);
+    expect([...bitsStreamz].sort((a, b) => a - b)).toEqual(
+      [...Array(23).keys()].filter((n) => n !== 21),
+    );
     // as duas listas do §6: o que se prova aqui é que nenhuma ficou vazia — o
     // conteúdo delas é prosa conferida contra o documento, não aritmética
     expect(permissoes.sempreConcedidas.length).toBeGreaterThan(0);
