@@ -33,10 +33,11 @@ use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
 
 use super::audio;
 // `Loopback` e o `ErroDeAudio` que ele devolve só existem onde há backend de
-// som do sistema — hoje, o loopback do WASAPI. Fora do Windows o `audio` não
-// os exporta, e importá-los sem `#[cfg]` era o que impedia o alvo do macOS de
-// compilar. Quem os usa é um só: `transmitir_audio`, logo abaixo.
-#[cfg(windows)]
+// som do sistema — hoje, o loopback do WASAPI no Windows e a captura via
+// ScreenCaptureKit no macOS. Fora desses dois o `audio` não os exporta, e
+// importá-los sem `#[cfg]` era o que impedia os demais alvos de compilar.
+// Quem os usa é um só: `transmitir_audio`, logo abaixo.
+#[cfg(any(windows, target_os = "macos"))]
 use super::audio::{ErroDeAudio, Loopback};
 use super::captura::{self, Capturador, Erro, Quadro};
 use super::fontes;
@@ -58,7 +59,7 @@ pub struct Pedido {
     pub altura: u32,
     pub fps: u32,
     pub max_bitrate: u64,
-    /// Levar o som do sistema junto (WASAPI loopback, ver `audio.rs`).
+    /// Levar o som do sistema junto (WASAPI/ScreenCaptureKit loopback, ver `audio.rs`).
     #[serde(default)]
     pub audio: bool,
     /// Teto do áudio da tela (`MEDIA_QUALITY.screenAudioBitrate` na web).
@@ -471,15 +472,15 @@ pub async fn parar(estado: &Transmissao) {
 /// thread; 200 ms cobre um engasgo da leitura sem virar atraso audível.
 const FILA_DE_AUDIO_MS: u32 = 200;
 /// Sem pacote novo no mixer, quanto dormir antes de perguntar de novo.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 const PAUSA_SEM_AUDIO: Duration = Duration::from_millis(5);
 /// Tentativas de reabrir o loopback depois de o dispositivo mudar.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 const REABERTURAS: u32 = 10;
 
 /// O laço do áudio do sistema: lê o loopback e empurra para a fonte. Termina
 /// com a bandeira, ou quando o loopback não reabre mais.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
     let mut loopback = match Loopback::abrir() {
         Ok(l) => l,
@@ -528,8 +529,9 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
 /// Sem backend de som do sistema neste alvo não há laço nenhum a rodar — e
 /// nem se chega aqui: `audio::disponivel()` é `false`, então a faixa de áudio
 /// não é criada e esta thread nunca chega a ser lançada. O corpo vazio existe
-/// só para o `spawn` lá em cima continuar compilando fora do Windows.
-#[cfg(not(windows))]
+/// só para o `spawn` lá em cima continuar compilando fora do Windows e do
+/// macOS.
+#[cfg(not(any(windows, target_os = "macos")))]
 fn transmitir_audio(_fonte: &NativeAudioSource, _parar: &AtomicBool) {}
 
 /// O laço da transmissão. Devolve `None` quando parou a pedido, ou o motivo
