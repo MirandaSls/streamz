@@ -7,6 +7,7 @@ import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
 import { SEM_CAPTURA_DE_TELA, suportaCapturaDeTela } from "@/lib/captura-de-tela";
 import { capacidadesDeTela, isTauri } from "@/lib/desktop";
+import { aoPedirTrocaDeTela } from "@/lib/pedido-de-troca-de-tela";
 import { ui } from "@/stores/ui";
 import { acaoDoBotaoDeTela } from "@/stores/parar-transmissao";
 import { useVoice } from "@/stores/voice";
@@ -76,6 +77,22 @@ export default function ScreenShareButton({
     : "Silenciar áudio da transmissão";
 
   useEffect(conhecerCapacidades, []);
+
+  // "Alterar a Transmissão" (menu da minha tela no palco). O botão não tinha
+  // caminho de troca — no ar, o clique dele para a tela —, então a troca é
+  // reabrir o mesmo seletor com a transmissão no ar: ir ao ar de novo já
+  // substitui a captura anterior (`publicarTela` encerra a velha; no desktop o
+  // Rust para a atual antes de abrir a nova, e `prepararTelaNativa` não
+  // pré-conecta um segundo `#tela` com `screenOn`). Com a tela fora do ar o
+  // pedido é ignorado: o menu que o dispara só existe sobre a minha tela.
+  // Só um botão atende mesmo com vários montados — ver `pedido-de-troca-de-tela`.
+  useEffect(
+    () =>
+      aoPedirTrocaDeTela(() => {
+        if (useVoice.getState().screenOn) setSeletor(true);
+      }),
+    [],
+  );
 
   const acionar = () => {
     // `isTauri()` no clique, não na renderização: o valor não muda em runtime e

@@ -9,7 +9,9 @@ import {
   type PublicUser,
 } from "@streamz/shared";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { Monitor, MonitorX } from "@/components/ui/icones";
 import { mencionar as entregarMencao } from "@/lib/mencoes";
+import { pedirTrocaDeTela } from "@/lib/pedido-de-troca-de-tela";
 import {
   garantirComandosDeContexto,
   iniciarChamadaComUsuario,
@@ -31,6 +33,7 @@ import { usePermissions } from "@/stores/permissions";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
  * O menu de um participante da sala — o mesmo na barra lateral e no tile do
@@ -89,6 +92,12 @@ export function abrirMenuDeParticipante(
      * caminho até ele.
      */
     tela?: { onPararDeAssistir: () => void };
+    /**
+     * O menu abriu do tile do palco (`TileDeVoz`), não da barra lateral. Muda
+     * só o meu próprio menu: no palco o Discord não oferece "Mencionar" a mim
+     * mesmo (print 3), na lista da sidebar oferece (print 4).
+     */
+    noPalco?: boolean;
   },
 ) {
   const voz = useVoice.getState();
@@ -109,11 +118,10 @@ export function abrirMenuDeParticipante(
       label: "Perfil",
       onSelect: () => ui.openProfile(user, { x, y, width: 0, height: 0 }),
     },
-    {
-      label: "Mencionar",
-      onSelect: () => mencionar(opcoes.channelId, user),
-    },
   ];
+  if (!(opcoes.sou && opcoes.noPalco)) {
+    itens.push({ label: "Mencionar", onSelect: () => mencionar(opcoes.channelId, user) });
+  }
 
   // "Parar de assistir": único jeito de sair de uma tela pelo menu no celular
   // (o botão do hover não existe lá — ver `TileDeVoz`). Vem antes dos itens
@@ -124,13 +132,40 @@ export function abrirMenuDeParticipante(
   }
 
   if (opcoes.sou) {
+    // Meu mudo/surdo são os mesmos da barra de controles (`useVoicePrefs`),
+    // não o "silenciar" local que aplico aos outros — por isso valem também
+    // em DM/grupo, sem `guildId`.
+    const prefsDeVoz = useVoicePrefs.getState();
+    itens.push({ separator: true });
+    // (Prévia da câmera, Usuário em Nova Janela e Mostrar participantes sem
+    // vídeo entrariam aqui — ainda não existem no app)
+    itens.push({
+      label: "Silenciar",
+      checked: prefsDeVoz.muted,
+      control: "checkbox",
+      onSelect: () => useVoicePrefs.getState().toggleMute(),
+    });
+    itens.push({
+      label: "Desativar áudio",
+      checked: prefsDeVoz.deafened,
+      control: "checkbox",
+      onSelect: () => useVoicePrefs.getState().toggleDeafen(),
+    });
+    // (Silenciar voz / Desativar áudio no servidor entrariam aqui — moderação
+    // de voz do servidor ainda não existe)
     if (guildId) {
-      itens.push({ separator: true });
       itens.push({
         label: "Editar perfil por servidor",
         onSelect: () => ui.openModal({ kind: "perfilPorServidor", guildId }),
       });
       itens.push(submenuAppsDeUsuario(guildId, opcoes.channelId, user.id));
+      if (podeModerarMembros(guildId)) {
+        itens.push({ separator: true });
+        itens.push({
+          label: "Abrir na visualização de moderador",
+          onSelect: () => ui.openModal({ kind: "visaoDeModerador", guildId, userId: user.id }),
+        });
+      }
     }
   } else {
     const friends = useFriends.getState();
@@ -204,6 +239,49 @@ export function abrirMenuDeParticipante(
   // desconectar — entrariam aqui, "mantidos"; não há nenhum hoje neste menu)
 
   ui.openContextMenu(x, y, itens, MENU_WIDTH_WIDE);
+}
+
+/**
+ * Menu da **minha** transmissão de tela (print 2) — botão direito no tile dela
+ * no palco. Diferente do menu de participante, este tem ícones, como no
+ * Discord.
+ */
+export function abrirMenuDaMinhaTela(x: number, y: number): void {
+  const itens: MenuItem[] = [
+    {
+      label: "Parar de transmitir",
+      danger: true,
+      icon: <MonitorX size={18} />,
+      onSelect: () => void useVoice.getState().pararTela(),
+    },
+    {
+      // o seletor é estado do `ScreenShareButton`; o pedido chega a ele por
+      // `lib/pedido-de-troca-de-tela`
+      label: "Alterar a Transmissão",
+      icon: <Monitor size={18} />,
+      onSelect: pedirTrocaDeTela,
+    },
+    // ("Transmissão em Nova Janela" e "Mais opções" entrariam aqui — ainda
+    // não existem no app)
+  ];
+  ui.openContextMenu(x, y, itens, MENU_WIDTH_WIDE);
+}
+
+/**
+ * "Abrir na visualização de moderador" exige MODERATE_MEMBERS — a mesma regra
+ * de `MemberList.tsx`, calculada sem hooks como em `submenuCargos`. `false`
+ * quando o servidor da sala não é o carregado: sem cargos na mão não há como
+ * saber, e esconder é o lado seguro (a API recusaria de qualquer forma).
+ */
+function podeModerarMembros(guildId: string): boolean {
+  const guildsState = useGuilds.getState();
+  const permsState = usePermissions.getState();
+  if (guildsState.activeGuildId !== guildId || permsState.guildId !== guildId) return false;
+  const meId = useAuth.getState().user?.id;
+  const guild = guildsState.guilds.find((g) => g.id === guildId);
+  const meuMembro = guildsState.members.find((m) => m.user.id === meId);
+  const meuPM: PermissionMember = { isOwner: !!guild && guild.ownerId === meId, roleIds: meuMembro?.roleIds ?? [] };
+  return hasPermission(computePermissions(meuPM, permsState.roles, []), Permission.MODERATE_MEMBERS);
 }
 
 /**
