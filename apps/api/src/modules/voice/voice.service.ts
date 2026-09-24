@@ -200,6 +200,19 @@ export class VoiceService {
   /** Cliente de sala do LiveKit, criado na primeira revogação (ver `roomService`). */
   private roomClient: RoomServiceClient | null = null;
 
+  /**
+   * Fila de `update` por usuário — mudo/desmudo em rajada.
+   *
+   * `update` é assíncrono em vários pontos (`assertCanViewChannel`, `store.update`,
+   * busca do canal, broadcast); duas chamadas do mesmo usuário disparadas em
+   * sequência rápida (rajada de mudo/desmudo) intercalam essas etapas e podem
+   * gravar/transmitir fora de ordem — a mais lenta termina depois e o estado
+   * final no servidor fica o antigo. Cada entrada aqui é a promise da última
+   * chamada em curso para aquele `userId`; a próxima encadeia depois dela, na
+   * ordem de chegada. Por processo (voz já é single-process, ver CLAUDE.md).
+   */
+  private readonly filaUpdatePorUsuario = new Map<string, Promise<void>>();
+
   constructor(
     private readonly guilds: GuildsService,
     private readonly prisma: PrismaService,
@@ -573,8 +586,36 @@ export class VoiceService {
     return null;
   }
 
-  /** Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala. */
+  /**
+   * Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala.
+   *
+   * Serializado por `userId` (ver `filaUpdatePorUsuario`): a chamada só começa a
+   * de fato rodar depois que a anterior do mesmo usuário terminou, então duas
+   * em rajada não intercalam `assertCanViewChannel`/`store.update`/broadcast.
+   * O erro de uma chamada continua indo para quem a fez — só não derruba a fila
+   * para a próxima.
+   */
   async update(userId: string, channelId: string, flags: VoiceFlags) {
+    const anterior = this.filaUpdatePorUsuario.get(userId) ?? Promise.resolve();
+    const resultado = anterior.then(() => this.updateSerializado(userId, channelId, flags));
+    // a entrada da fila nunca rejeita — senão a próxima chamada encadeada
+    // herdaria a rejeição e nunca chegaria a rodar `updateSerializado`
+    const proximo = resultado.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.filaUpdatePorUsuario.set(userId, proximo);
+    proximo.finally(() => {
+      // só remove se ninguém encadeou depois — senão apagaria a fila de uma
+      // chamada mais nova que já está esperando por esta
+      if (this.filaUpdatePorUsuario.get(userId) === proximo) {
+        this.filaUpdatePorUsuario.delete(userId);
+      }
+    });
+    return resultado;
+  }
+
+  private async updateSerializado(userId: string, channelId: string, flags: VoiceFlags) {
     // c-cargos: desmutar sem SPEAK, ou ligar câmera/tela sem STREAM, não passa.
     // Vale o mesmo caminho do join — quem entrou com permissão e a perdeu no
     // meio (cargo removido) é corrigido no primeiro update que mandar.

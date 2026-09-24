@@ -72,7 +72,8 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
 - **Área principal** (`flex-1`, `bg-chat`): cabeçalho de 49px + 1px de borda (`HeaderBar`: ícone
   + nome, toolbar à direita com busca que expande ao focar), timeline, composer,
   linha de "digitando…" (24px).
-- **Coluna 4**: lista de membros (`w-60`, seções ONLINE/OFFLINE, offline a 30%)
+- **Coluna 4**: lista de membros (`w-60`, seções ONLINE/OFFLINE, offline a 30%,
+  ausente a 60%)
   ou painel de thread (`w-[26rem]`, `bg-chat`) — nunca as duas ao mesmo tempo.
   O botão de membros do cabeçalho alterna a lista.
 
