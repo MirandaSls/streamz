@@ -258,6 +258,27 @@ for ferramenta in clang codesign lipo hdiutil SetFile shasum; do
     || falha "'$ferramenta' não encontrado. Reinstale as Command Line Tools:  xcode-select --install"
 done
 
+# Apple clang >= 15 (Xcode/CLT 15): o crate objc2-screen-capture-kit (captura
+# de tela nativa via ScreenCaptureKit, ver Cargo.toml e build.rs) só compila
+# com o SDK do macOS 14+, que só entra com as Command Line Tools 15. Com CLT
+# 14 o build quebra no meio da compilação do crate, sem dizer que a causa é a
+# versão do Xcode — a checagem aqui devolve isso em uma linha, antes de gastar
+# tempo de cargo.
+CLANG_VERSAO_TEXTO=$(clang --version | head -1)
+CLANG_MAIOR=$(echo "$CLANG_VERSAO_TEXTO" | sed -nE 's/.*version ([0-9]+).*/\1/p')
+if [ -z "$CLANG_MAIOR" ] || [ "$CLANG_MAIOR" -lt 15 ]; then
+  falha "Apple clang \"$CLANG_VERSAO_TEXTO\" é anterior à versão 15 (Xcode/Command Line Tools 15 ou mais novo), exigida pelo objc2-screen-capture-kit (captura de tela nativa no macOS). Instale com:  xcode-select --install   ou baixe o Xcode 15+ pela App Store."
+fi
+
+# Piso de compatibilidade do binário. Sem isto o cargo/clang assumiriam o SDK
+# instalado (14+) como piso mínimo, e o .app deixaria de abrir no macOS
+# 12.3–13.x — que continua suportado (a captura nativa por ScreenCaptureKit
+# exige 13+; abaixo disso o app cai no getDisplayMedia do navegador). Espelha
+# `bundle.macOS.minimumSystemVersion` do tauri.macos.conf.json; herda do
+# ambiente se já vier setado (ex.: Codemagic), para não haver duas fontes de
+# verdade divergentes.
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.3}"
+
 # O rustup instala em ~/.cargo/bin e só põe isso no PATH dos shells *novos*.
 # Acrescentar aqui evita o falso "rustup não encontrado" logo depois de instalar.
 if [ -d "$HOME/.cargo/bin" ]; then

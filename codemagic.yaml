@@ -254,6 +254,15 @@ workflows:
         NEXT_PUBLIC_WS_URL: "https://api.streamz.chat"
         NEXT_PUBLIC_LIVEKIT_URL: "wss://livekit.streamz.chat"
         NEXT_TELEMETRY_DISABLED: "1"
+        # Piso de compatibilidade do binário, igual ao que
+        # `scripts/build-desktop-macos.sh` exporta localmente. `xcode: latest`
+        # acima traz o SDK do macOS 14+ (exigido pelo objc2-screen-capture-kit,
+        # ver Cargo.toml/build.rs do crate), mas sem MACOSX_DEPLOYMENT_TARGET o
+        # cargo/clang assumiriam esse SDK como piso mínimo — e o .app deixaria
+        # de abrir no macOS 12.3–13.x, que continua suportado (a captura nativa
+        # exige 13+; abaixo disso cai no getDisplayMedia). Espelha
+        # `bundle.macOS.minimumSystemVersion` do tauri.macos.conf.json.
+        MACOSX_DEPLOYMENT_TARGET: "12.3"
 
     triggering:
       # Igual ao iOS: sem gatilho automático, para não gastar minuto de cota
