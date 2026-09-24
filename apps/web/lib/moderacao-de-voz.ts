@@ -8,9 +8,6 @@ import {
 } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
-import { useAuth } from "@/stores/auth";
-import { useGuilds } from "@/stores/guilds";
-import { usePermissions } from "@/stores/permissions";
 import { ui } from "@/stores/ui";
 
 /**
@@ -66,48 +63,6 @@ export function podeEnsurdecerNoServidor(
   roles: readonly Role[],
 ): boolean {
   return podeModerarVozBit(eu, alvo, roles, Permission.DEAFEN_MEMBERS);
-}
-
-/**
- * `{ silenciar, ensurdecer }` para o alvo, a partir do que já está carregado
- * nas stores (mesmo padrão conservador de `usePermissions`/`participant-menu`:
- * servidor pedido diferente do carregado → `false` nos dois, porque sem
- * cargos na mão não há como saber e esconder é o lado seguro).
- */
-export function usePodeModerarVoz(
-  alvoId: string,
-  guildId: string | null,
-): { silenciar: boolean; ensurdecer: boolean } {
-  const meId = useAuth((s) => s.user?.id);
-  const guildsCarregado = useGuilds((s) => s.activeGuildId);
-  const guilds = useGuilds((s) => s.guilds);
-  const members = useGuilds((s) => s.members);
-  const permsCarregado = usePermissions((s) => s.guildId);
-  const roles = usePermissions((s) => s.roles);
-
-  const NADA = { silenciar: false, ensurdecer: false };
-  if (!guildId || !meId) return NADA;
-  if (guildsCarregado !== guildId || permsCarregado !== guildId) return NADA;
-  const guild = guilds.find((g) => g.id === guildId);
-  if (!guild) return NADA;
-
-  const meuMembro = members.find((m) => m.user.id === meId);
-  const alvoMembro = members.find((m) => m.user.id === alvoId);
-  const eu: MembroDeVoz = {
-    userId: meId,
-    isOwner: guild.ownerId === meId,
-    roleIds: meuMembro?.roleIds ?? [],
-  };
-  const alvo: MembroDeVoz = {
-    userId: alvoId,
-    isOwner: guild.ownerId === alvoId,
-    roleIds: alvoMembro?.roleIds ?? [],
-  };
-
-  return {
-    silenciar: podeSilenciarNoServidor(eu, alvo, roles),
-    ensurdecer: podeEnsurdecerNoServidor(eu, alvo, roles),
-  };
 }
 
 /**
