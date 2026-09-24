@@ -41,7 +41,7 @@ import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { chaveDaJanela, type TipoDeJanelaDeVoz } from "@/stores/janelas-de-voz";
 import { useNotas } from "@/stores/notas";
-import { usePermissions } from "@/stores/permissions";
+import { minhasRegrasNoCanalAgora, usePermissions } from "@/stores/permissions";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui, type MenuItem } from "@/stores/ui";
@@ -487,7 +487,7 @@ function itensDeModeracaoDeVoz(guildId: string | null, channelId: string, alvoId
   // cópia já estreitada para `string`: as closures do `onSelect` não herdam o
   // estreitamento do parâmetro em toda versão do TypeScript
   const servidor = guildId;
-  const pode = moderacaoDeVozSobre(alvoId, servidor);
+  const pode = moderacaoDeVozSobre(alvoId, servidor, channelId);
   if (!pode.silenciar && !pode.ensurdecer) return [];
   const { serverMute, serverDeaf } = silencioDoServidorDe(useVoice.getState().states, channelId, alvoId);
   const itens: MenuItem[] = [];
@@ -514,13 +514,21 @@ function itensDeModeracaoDeVoz(guildId: string | null, channelId: string, alvoId
 
 /**
  * A leitura de `podeSilenciarNoServidor`/`podeEnsurdecerNoServidor`
- * (`lib/moderacao-de-voz`, bit + hierarquia, "contra mim só o bit") sem
- * hooks — este arquivo abre por `onContextMenu`, fora de render. Vai direto
- * ao `getState()` das stores, com a mesma saída conservadora: servidor da
- * sala diferente do carregado → nada, porque sem os cargos na mão não há
- * como saber e esconder é o lado seguro (a API recusaria de todo modo).
+ * (`lib/moderacao-de-voz`, bit + hierarquia + override do **canal**, "contra
+ * mim só o bit") sem hooks — este arquivo abre por `onContextMenu`, fora de
+ * render. Vai direto ao `getState()` das stores, com a mesma saída
+ * conservadora: servidor da sala diferente do carregado → nada, porque sem os
+ * cargos na mão não há como saber e esconder é o lado seguro (a API recusaria
+ * de todo modo). `channelId` alimenta `minhasRegrasNoCanalAgora`, calculado
+ * uma vez e repassado às duas checagens — sem ele a decisão ficaria só na
+ * hierarquia do servidor, ignorando o `deny`/`allow` do canal em que a
+ * pessoa está de fato.
  */
-function moderacaoDeVozSobre(alvoId: string, guildId: string): { silenciar: boolean; ensurdecer: boolean } {
+function moderacaoDeVozSobre(
+  alvoId: string,
+  guildId: string,
+  channelId: string,
+): { silenciar: boolean; ensurdecer: boolean } {
   const NADA = { silenciar: false, ensurdecer: false };
   const meId = useAuth.getState().user?.id;
   const guildsState = useGuilds.getState();
@@ -536,9 +544,10 @@ function moderacaoDeVozSobre(alvoId: string, guildId: string): { silenciar: bool
   });
   const eu = membro(meId);
   const alvo = membro(alvoId);
+  const regras = minhasRegrasNoCanalAgora(channelId);
   return {
-    silenciar: podeSilenciarNoServidor(eu, alvo, permsState.roles),
-    ensurdecer: podeEnsurdecerNoServidor(eu, alvo, permsState.roles),
+    silenciar: podeSilenciarNoServidor(eu, alvo, permsState.roles, regras),
+    ensurdecer: podeEnsurdecerNoServidor(eu, alvo, permsState.roles, regras),
   };
 }
 

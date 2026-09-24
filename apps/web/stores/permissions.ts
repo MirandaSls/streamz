@@ -34,7 +34,8 @@ import { useUI } from "@/stores/ui";
  * Para os outros agentes: `useMyPermissions(guildId, channelId?)` devolve o
  * bitfield, `useCan(Permission.X, channelId?)` o booleano, `usePodeTalvez`
  * o booleano ou `null` enquanto não dá para saber, e `useCanManageCategory`
- * a engrenagem da categoria.
+ * a engrenagem da categoria. Fora de render (menu de contexto,
+ * drag-and-drop), o par sem hook é `possoNoCanalAgora`/`minhasRegrasNoCanalAgora`.
  */
 
 interface PermissionsState {
@@ -163,6 +164,41 @@ export function useCategoryOverrides(categoryId: string | null | undefined): Cat
 }
 
 /**
+ * As regras (de canal + as da categoria, se sincronizado) que valem para um
+ * usuário num canal específico — a parte de `useMyPermissions` que não depende
+ * de React, extraída para ser reaproveitada por quem lê os stores fora de
+ * render (`minhasRegrasNoCanalAgora`).
+ *
+ * Recebe os dados já lidos dos stores (nunca lê store sozinha) para que hook e
+ * função fora de render fiquem obrigados a passar os mesmos dados e não
+ * divirjam de fonte.
+ *
+ * `readonly` porque `overridesEfetivos` devolve o array que recebeu sem cópia
+ * (é só uma escolha entre os dois) — quem precisar de um `PermissionOverwrite[]`
+ * mutável (`minhasRegrasNoCanalAgora`) copia na saída.
+ */
+function regrasEfetivasNoCanal(
+  overrides: ChannelOverride[],
+  categoryOverrides: CategoryOverride[],
+  canal: { categoryId: string | null; syncedWithCategory: boolean } | null,
+  channelId: string | null | undefined,
+  meId: string,
+): readonly PermissionOverwrite[] {
+  if (!channelId) return [];
+  // regra de outra pessoa não me diz respeito: só as de cargo e a minha
+  const minhas = (o: PermissionOverwrite) => o.userId === null || o.userId === meId;
+  const doCanal = overrides.filter((o) => o.channelId === channelId && minhas(o));
+  const daCategoriaDoCanal = canal?.categoryId
+    ? categoryOverrides.filter((o) => o.categoryId === canal.categoryId && minhas(o))
+    : [];
+  return overridesEfetivos<PermissionOverwrite>(
+    canal?.syncedWithCategory ?? false,
+    doCanal,
+    daCategoriaDoCanal,
+  );
+}
+
+/**
  * Permissão efetiva do usuário logado. Sem `channelId`, a do servidor; com ele,
  * a do canal (aplica os overrides).
  *
@@ -191,22 +227,50 @@ export function useMyPermissions(guildId?: string | null, channelId?: string | n
   // o servidor pedido não é o que está carregado: só o dono é certeza
   if (carregado !== guild.id) return isOwner ? ALL_PERMISSIONS : 0;
   const member: PermissionMember = { isOwner, roleIds };
-  // regra de outra pessoa não me diz respeito: só as de cargo e a minha
-  const minhas = (o: PermissionOverwrite) => o.userId === null || o.userId === meId;
-  const doCanal = channelId
-    ? overrides.filter((o) => o.channelId === channelId && minhas(o))
-    : [];
-  const daCategoriaDoCanal = canal?.categoryId
-    ? daCategoria.filter((o) => o.categoryId === canal.categoryId && minhas(o))
-    : [];
-  const efetivos = channelId
-    ? overridesEfetivos<PermissionOverwrite>(
-        canal?.syncedWithCategory ?? false,
-        doCanal,
-        daCategoriaDoCanal,
-      )
-    : [];
+  const efetivos = regrasEfetivasNoCanal(overrides, daCategoria, canal, channelId, meId);
   return computePermissions(member, roles, efetivos);
+}
+
+/**
+ * `minhasRegrasNoCanalAgora` fora de render: mesma conta de `useMyPermissions`,
+ * lendo os stores por `.getState()` — para handler que dispara fora de
+ * renderização (menu de contexto, drag-and-drop), onde não há hook.
+ */
+export function minhasRegrasNoCanalAgora(channelId: string): PermissionOverwrite[] {
+  const meId = useAuth.getState().user?.id;
+  if (!meId) return [];
+  const { overrides, categoryOverrides } = usePermissions.getState();
+  const canal = useChannels.getState().channels.find((c) => c.id === channelId) ?? null;
+  // a assinatura exportada promete mutável; a interna é `readonly`, então copia
+  return [...regrasEfetivasNoCanal(overrides, categoryOverrides, canal, channelId, meId)];
+}
+
+/**
+ * Espelho de `useCan(permission, channelId)` para fora de render (menu de
+ * contexto, drag-and-drop): mesma conta — cargos + `minhasRegrasNoCanalAgora`,
+ * dono/`ADMINISTRATOR` valem sempre —, lendo os stores por `.getState()` em vez
+ * de hook.
+ *
+ * Sem hook não há re-render para acompanhar troca de servidor, então `guildId`
+ * é explícito: quem chama fora de render já sabe em qual servidor está o
+ * canal, ao contrário de `useCan`, que usa o servidor ativo. Se as
+ * permissões carregadas nos stores não são as de `guildId`, só o dono tem
+ * certeza — o mesmo conservador de `useMyPermissions` quando `carregado !==
+ * guild.id`.
+ */
+export function possoNoCanalAgora(permission: number, guildId: string, channelId: string): boolean {
+  const meId = useAuth.getState().user?.id;
+  const guild = useGuilds.getState().guilds.find((g) => g.id === guildId) ?? null;
+  if (!meId || !guild) return false;
+  const isOwner = guild.ownerId === meId;
+  const { guildId: carregado, roles, overrides, categoryOverrides } = usePermissions.getState();
+  if (carregado !== guild.id) return isOwner;
+  const roleIds =
+    useGuilds.getState().members.find((m) => m.user.id === meId)?.roleIds ?? EMPTY;
+  const canal = useChannels.getState().channels.find((c) => c.id === channelId) ?? null;
+  const efetivos = regrasEfetivasNoCanal(overrides, categoryOverrides, canal, channelId, meId);
+  const member: PermissionMember = { isOwner, roleIds };
+  return hasPermission(computePermissions(member, roles, efetivos), permission);
 }
 
 /** `useCan(Permission.MANAGE_ROLES)` — a UI esconde o que o usuário não pode. */

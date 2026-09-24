@@ -338,10 +338,23 @@ export class GuildsService {
   /**
    * O ator precisa ter a permissão pedida no servidor. Substitui o antigo
    * "é OWNER ou ADMIN?" — cada chamador declara **qual** permissão exige.
+   *
+   * Com `channelId`, o bit é avaliado **naquele canal** (`permissionsInChannel`,
+   * que aplica override de categoria e de canal) em vez de na permissão crua do
+   * servidor — sem isso um `deny` de canal em `MUTE_MEMBERS`/`DEAFEN_MEMBERS`
+   * seria ignorado pela moderação de voz. Sem `channelId`, comportamento
+   * idêntico a antes.
    */
-  async assertCanModerate(actorId: string, guildId: string, permission: number) {
+  async assertCanModerate(
+    actorId: string,
+    guildId: string,
+    permission: number,
+    channelId?: string | null,
+  ) {
     const actor = await this.assertMember(actorId, guildId);
-    const bits = await this.permissionsOf(actorId, guildId);
+    const bits = channelId
+      ? await this.permissionsInChannel(actorId, guildId, channelId)
+      : await this.permissionsOf(actorId, guildId);
     if (!hasPermission(bits, permission)) {
       throw new ForbiddenException("Você não tem permissão para isso");
     }
@@ -356,18 +369,25 @@ export class GuildsService {
    * (`assertCanModerate`); contra outro membro, vale a regra cheia — bit **e**
    * hierarquia, e o alvo precisa existir como membro — que é o que
    * `assertCanActOn` já garante.
+   *
+   * `channelId` é o canal de voz **onde o alvo está** — o bit é avaliado lá
+   * (override de canal vale, como no Discord: um `deny` de `MUTE_MEMBERS`
+   * naquele canal barra o ator mesmo que ele tenha o bit no servidor inteiro).
+   * `null` significa "sem canal conhecido" e cai na permissão do servidor, sem
+   * override — é o caso de alvo fora de qualquer sala de voz.
    */
   async assertCanModerarVoz(
     actorId: string,
     guildId: string,
     targetId: string,
     permission: number,
+    channelId: string | null,
   ): Promise<void> {
     if (actorId === targetId) {
-      await this.assertCanModerate(actorId, guildId, permission);
+      await this.assertCanModerate(actorId, guildId, permission, channelId);
       return;
     }
-    await this.assertCanActOn(actorId, guildId, targetId, permission);
+    await this.assertCanActOn(actorId, guildId, targetId, permission, channelId);
   }
 
   // ── herança categoria → canal ──────────────────────────────
@@ -1262,11 +1282,12 @@ export class GuildsService {
     guildId: string,
     targetUserId: string,
     permission: number,
+    channelId?: string | null,
   ) {
     if (actorId === targetUserId) {
       throw new ForbiddenException("Você não pode moderar a si mesmo");
     }
-    const actor = await this.assertCanModerate(actorId, guildId, permission);
+    const actor = await this.assertCanModerate(actorId, guildId, permission, channelId);
     const target = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });

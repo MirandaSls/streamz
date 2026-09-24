@@ -4,6 +4,7 @@ import {
   hasPermission,
   highestPosition,
   type PermissionMember,
+  type PermissionOverwrite,
   type Role,
 } from "@streamz/shared";
 import { api } from "@/lib/api";
@@ -39,30 +40,44 @@ function podeModerarVozBit(
   alvo: MembroDeVoz,
   roles: readonly Role[],
   bit: number,
+  regras: readonly PermissionOverwrite[] = [],
 ): boolean {
-  const meusBits = computePermissions(eu, roles, []);
+  const meusBits = computePermissions(eu, roles, regras);
   if (!hasPermission(meusBits, bit)) return false;
   // contra mim mesmo: só o bit importa (automutar não é hierarquia)
   if (eu.userId === alvo.userId) return true;
   return highestPosition(eu, roles) > highestPosition(alvo, roles);
 }
 
-/** Posso silenciar (mute) esta pessoa na voz do servidor? */
+/**
+ * Posso silenciar (mute) esta pessoa na voz do servidor?
+ *
+ * `regras` são os overrides que valem para mim **no canal de voz do alvo**
+ * (`overridesEfetivos` já resolvido por quem chama) — sem argumento, o cálculo
+ * cai no que vale fora de canal, igual antes.
+ */
 export function podeSilenciarNoServidor(
   eu: MembroDeVoz,
   alvo: MembroDeVoz,
   roles: readonly Role[],
+  regras: readonly PermissionOverwrite[] = [],
 ): boolean {
-  return podeModerarVozBit(eu, alvo, roles, Permission.MUTE_MEMBERS);
+  return podeModerarVozBit(eu, alvo, roles, Permission.MUTE_MEMBERS, regras);
 }
 
-/** Posso ensurdecer (deafen) esta pessoa na voz do servidor? */
+/**
+ * Posso ensurdecer (deafen) esta pessoa na voz do servidor?
+ *
+ * `regras` = overrides que me valem no canal de voz do alvo — ver
+ * `podeSilenciarNoServidor`.
+ */
 export function podeEnsurdecerNoServidor(
   eu: MembroDeVoz,
   alvo: MembroDeVoz,
   roles: readonly Role[],
+  regras: readonly PermissionOverwrite[] = [],
 ): boolean {
-  return podeModerarVozBit(eu, alvo, roles, Permission.DEAFEN_MEMBERS);
+  return podeModerarVozBit(eu, alvo, roles, Permission.DEAFEN_MEMBERS, regras);
 }
 
 /**

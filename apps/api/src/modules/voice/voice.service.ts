@@ -516,7 +516,8 @@ export class VoiceService {
    * É a versão servidor do arrasto da barra lateral. Quatro coisas têm de valer
    * antes de mexer no estado, e cada uma já foi um jeito de burlar:
    *
-   * 1. quem move precisa de `MOVE_MEMBERS` no servidor (o dono tem tudo);
+   * 1. quem move precisa de `MOVE_MEMBERS` na origem **e** no destino (o dono
+   *    e override de canal entram na conta, como em qualquer outro bit);
    * 2. o destino é canal de voz **daquele** servidor — sem isso dava para jogar
    *    alguém na chamada de uma conversa direta de que ele nem participa;
    * 3. o alvo tem de estar em voz **neste** servidor agora: mover quem está
@@ -530,8 +531,6 @@ export class VoiceService {
    * o cliente movido, que precisa trocar de sala no LiveKit.
    */
   async move(actorId: string, guildId: string, userId: string, channelId: string) {
-    await this.guilds.assertCanModerate(actorId, guildId, Permission.MOVE_MEMBERS);
-
     const destino = await this.prisma.channel.findUnique({
       where: { id: channelId },
       select: { id: true, guildId: true, type: true, name: true },
@@ -547,6 +546,12 @@ export class VoiceService {
     if (origem.channelId === channelId) {
       throw new BadRequestException("Esta pessoa já está neste canal");
     }
+
+    // c-cargos: MOVE_MEMBERS entra por override de canal — quem move precisa do
+    // bit tanto na origem quanto no destino, como o "arrastar" do Discord: um
+    // override que negue o bit num dos dois lados barra o movimento ali.
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MOVE_MEMBERS, origem.channelId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MOVE_MEMBERS, channelId);
 
     // as flags viajam com a pessoa: quem estava mudo continua mudo do outro lado
     await this.join(userId, channelId, {
@@ -648,14 +653,30 @@ export class VoiceService {
    */
   async moderarVoz(actorId: string, guildId: string, input: VoiceModerarPayload): Promise<void> {
     const { userId } = input;
+    // c-cargos: o canal de voz do alvo (ou null, fora de voz) entra no assert
+    // antes de qualquer 400 — é ele que decide o override, e uma única consulta
+    // aqui serve tanto os asserts quanto o 400 "não está em voz" logo abaixo.
+    const emVoz = await this.canalDeVozNoServidor(userId, guildId);
+    const canalDoAlvo = emVoz?.channelId ?? null;
     if (input.mute !== undefined) {
-      await this.guilds.assertCanModerarVoz(actorId, guildId, userId, Permission.MUTE_MEMBERS);
+      await this.guilds.assertCanModerarVoz(
+        actorId,
+        guildId,
+        userId,
+        Permission.MUTE_MEMBERS,
+        canalDoAlvo,
+      );
     }
     if (input.deaf !== undefined) {
-      await this.guilds.assertCanModerarVoz(actorId, guildId, userId, Permission.DEAFEN_MEMBERS);
+      await this.guilds.assertCanModerarVoz(
+        actorId,
+        guildId,
+        userId,
+        Permission.DEAFEN_MEMBERS,
+        canalDoAlvo,
+      );
     }
 
-    const emVoz = await this.canalDeVozNoServidor(userId, guildId);
     // Ligar exige a pessoa em voz (é o que o menu oferece e o que o Discord
     // faz); desligar vale sempre, senão quem saiu silenciado ficaria preso
     // nesse estado até voltar para a sala.
