@@ -180,6 +180,7 @@ pub fn run() {
             tela::descartar_tela,
             tela::iniciar_tela,
             tela::parar_tela,
+            tela::silenciar_audio_da_tela,
             suspender_atenuacao_do_windows,
             restaurar_atenuacao_do_windows,
         ])
