@@ -191,7 +191,9 @@ export function AvatarDeChamada({
           // o palco de avatares só existe no `CallStage`, que é `--black`: o
           // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
           surface="border-black"
-          status={status}
+          // sem bolinha de presença: quem está na chamada já está online, o
+          // selo seria ruído (como no Discord) — ausência ainda esmaece
+          // (`ausente` logo acima).
           // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
           // um moderador mostra o selo "-servidor" mesmo que também tenha se
           // silenciado sozinho (ver `useSilencioDoServidor.ts`)
@@ -509,7 +511,8 @@ export function VoiceTile({
               user={state.user}
               size="xl"
               surface="border-chat-background-default"
-              status={status}
+              // sem bolinha de presença aqui também — ver o comentário em
+              // `AvatarDeChamada` acima.
               className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""} ${
                 compacto && rotuloPequeno
                   ? // tira do celular (116×78, só ela passa `rotuloPequeno`): os

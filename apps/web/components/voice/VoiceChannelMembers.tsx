@@ -164,10 +164,12 @@ export default function VoiceChannelMembers({
                     irmão por cima do avatar: como `ring-inset` na caixa do
                     próprio avatar, a foto o cobria e o anel nunca aparecia. */}
                 <span className="relative inline-grid shrink-0 rounded-full">
+                  {/* Sem bolinha de presença aqui: quem está na sala de voz já
+                      está online, a bolinha é ruído (como no Discord) — a
+                      ausência (IDLE) continua visível pelo esmaecido. */}
                   <Avatar
                     user={e.user}
                     size="sm"
-                    status={status}
                     surface="border-background-base-lowest"
                     className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
                   />
