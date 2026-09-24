@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
-import { AppWindow, Monitor, MonitorUp } from "@/components/ui/icones";
+import { AppWindow, Lock, Monitor, MonitorUp } from "@/components/ui/icones";
 import { Button, Checkbox } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { capturarTelaNoNavegador, suportaCapturaDeTela } from "@/lib/captura-de-tela";
@@ -13,6 +13,8 @@ import {
   fontesDeTela,
   isTauri,
   miniaturasDeTela,
+  pedirPermissaoDeTela,
+  reiniciarApp,
   type CapacidadesDeTela,
 } from "@/lib/desktop";
 import {
@@ -102,6 +104,12 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
   const [iniciando, setIniciando] = useState(false);
   const publicado = useRef(false);
 
+  // Painel de permissão do macOS (ver `PainelPermissao`): `pedindoPermissao`
+  // cobre o tempo do `invoke`; `permissaoPedida` marca que o sistema já
+  // abriu os Ajustes, para mostrar a instrução de reiniciar o app.
+  const [pedindoPermissao, setPedindoPermissao] = useState(false);
+  const [permissaoPedida, setPermissaoPedida] = useState(false);
+
   const quality = useVoice((s) => s.screenQuality);
   const audio = useVoice((s) => s.screenAudio);
   const setQuality = useVoice((s) => s.setScreenQuality);
@@ -152,6 +160,25 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     },
     [stream],
   );
+
+  /**
+   * Clique em "Permitir Gravação de Tela": se já estava concedida, recarrega
+   * as capacidades (o painel some e a grade nativa assume, já que `nativo`
+   * segue `true`); senão o sistema abriu os Ajustes e só resta esperar o
+   * usuário conceder e reiniciar (`reiniciarApp`, no botão que aparece a
+   * seguir).
+   */
+  async function permitirGravacaoDeTela() {
+    if (pedindoPermissao) return;
+    setPedindoPermissao(true);
+    try {
+      const concedida = await pedirPermissaoDeTela();
+      if (concedida) setCapacidades(await capacidadesDeTela());
+      else setPermissaoPedida(true);
+    } finally {
+      setPedindoPermissao(false);
+    }
+  }
 
   function aplicarQualidade(q: ScreenQuality) {
     setQuality(q);
@@ -239,6 +266,13 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-4">
         {capacidades === null ? (
           <p className="pt-10 text-center text-sm text-text-muted">Procurando janelas…</p>
+        ) : capacidades.nativo && capacidades.permissao === "faltando" ? (
+          <PainelPermissao
+            pedindo={pedindoPermissao}
+            pedida={permissaoPedida}
+            onPermitir={() => void permitirGravacaoDeTela()}
+            onReiniciar={() => void reiniciarApp()}
+          />
         ) : nativo ? (
           <GradeNativa
             aba={aba}
@@ -272,7 +306,18 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         )}
       </div>
 
-      <Rodape quality={quality} audio={audio} onQualidade={aplicarQualidade} onAudio={setAudio} />
+      <Rodape
+        quality={quality}
+        audio={audio}
+        // O checkbox pede áudio do sistema; na captura nativa isso é o
+        // loopback que o backend do Rust sabe (ou não) fazer — sem ele a
+        // opção não tem efeito nenhum, e ficar visível prometeria uma faixa
+        // de áudio que nunca vem. No navegador o pedido é outro (a caixa do
+        // próprio diálogo do browser) e `audioDoSistema` não fala dele.
+        mostrarAudio={!nativo || (capacidades?.audioDoSistema ?? true)}
+        onQualidade={aplicarQualidade}
+        onAudio={setAudio}
+      />
     </Dialog>
   );
 }
@@ -518,6 +563,63 @@ function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
   );
 }
 
+// ── permissão do macOS ──────────────────────────────────────────────────────
+
+/**
+ * O macOS exige a permissão "Gravação de Tela" por app — sem ela o
+ * ScreenCaptureKit não devolve nenhuma fonte (`permissao: "faltando"` de
+ * `capacidades_de_tela`), e a grade nativa ficaria vazia sem dizer por quê.
+ * Este painel troca o lugar dela: explica a exigência, pede a permissão e, no
+ * caso comum (o macOS só relê a permissão num processo novo), leva até o
+ * reinício do app.
+ *
+ * Dois estados depois do clique em "Permitir": ou a permissão já estava
+ * concedida (`pedirPermissaoDeTela` devolve `true` e quem chamou recarrega as
+ * capacidades — este painel nem chega a mostrar o segundo passo), ou o
+ * sistema **acabou de abrir** os Ajustes (`false`) e só falta o usuário
+ * conceder ali e reiniciar.
+ */
+function PainelPermissao({
+  pedindo,
+  pedida,
+  onPermitir,
+  onReiniciar,
+}: {
+  pedindo: boolean;
+  pedida: boolean;
+  onPermitir: () => void;
+  onReiniciar: () => void;
+}) {
+  return (
+    <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-4 px-10 text-center">
+      <Lock size={32} className="text-text-muted" />
+      <div className="max-w-sm">
+        <p className="text-base font-semibold text-text-strong">
+          O Streamz precisa da permissão "Gravação de Tela"
+        </p>
+        <p className="mt-1 text-sm text-text-muted">
+          O macOS só deixa um app compartilhar tela ou janela depois que essa
+          permissão é concedida a ele, em Ajustes do Sistema.
+        </p>
+      </div>
+      <Button variante="primario" tamanho="md" onClick={onPermitir} disabled={pedindo}>
+        {pedindo ? "Pedindo…" : "Permitir Gravação de Tela"}
+      </Button>
+      {pedida && (
+        <div className="mt-2 flex max-w-sm flex-col items-center gap-3">
+          <p className="text-sm text-text-muted">
+            Ative o Streamz em Ajustes do Sistema › Privacidade e Segurança ›
+            Gravação de Tela e reinicie o app.
+          </p>
+          <Button variante="secundario" tamanho="sm" onClick={onReiniciar}>
+            Reiniciar o Streamz
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── navegador: o seletor do próprio browser ────────────────────────────────
 
 /**
@@ -610,11 +712,13 @@ function EscolhaDoNavegador({
 function Rodape({
   quality,
   audio,
+  mostrarAudio,
   onQualidade,
   onAudio,
 }: {
   quality: ScreenQuality;
   audio: boolean;
+  mostrarAudio: boolean;
   onQualidade: (q: ScreenQuality) => void;
   onAudio: (on: boolean) => void;
 }) {
@@ -626,7 +730,9 @@ function Rodape({
             navegador ele é um **pedido**: quem decide é a caixa "compartilhar
             áudio" do diálogo do browser, que só existe para aba e tela
             inteira. */}
-        <Checkbox marcado={audio} aoMudar={onAudio} rotulo="Compartilhar áudio do sistema" />
+        {mostrarAudio && (
+          <Checkbox marcado={audio} aoMudar={onAudio} rotulo="Compartilhar áudio do sistema" />
+        )}
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
         <p className="truncate text-xs leading-4 text-text-muted">
