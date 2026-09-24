@@ -152,6 +152,26 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "error";
 /** Sala do canal em que estou — fora da store, ver o comentário acima. */
 let sala: Room | null = null;
 /**
+ * Tópico dos avisos de fala por data message do LiveKit.
+ *
+ * O SFU só aponta quem está falando a cada ~500 ms por participante, no canal
+ * lossy de `activeSpeakers` (ver o comentário de `recomporFalantes`) — limiar
+ * alto e intermitente, os outros só me veem falar quando falo alto. Quem tem o
+ * microfone na mão sabe o próprio nível na hora (é o detector local, ver
+ * `rearmarDetectorLocal`), então cada cliente anuncia esse estado para a sala
+ * por aqui, e quem recebe acende o anel do remetente sem esperar o SFU. O SFU
+ * continua como reserva — `recomporFalantes` soma os dois conjuntos — para
+ * quem ainda não manda o aviso (cliente antigo).
+ */
+const TOPICO_FALA = "fala";
+/**
+ * Quem anunciou estar falando por data message, já por `donoDaIdentidade`.
+ * Entra em `recomporFalantes` como reforço do que o SFU relata. Zerado quando
+ * a sala fecha/desconecta e quando uma sala nova é conectada — o aviso vale só
+ * para a sala em que foi mandado.
+ */
+const falandoPorAviso = new Set<string>();
+/**
  * A transmissão de tela em curso é a **nativa** (captura no Rust, participante
  * `#tela`)? Fora do estado observável como `sala`: é detalhe de transporte, e
  * o que a interface lê é `screenOn`.
@@ -661,6 +681,8 @@ function desmontarSala() {
   // rodaria num contexto morto na próxima entrada
   void fecharMicrofone();
   desarmarDetectorLocal(() => {});
+  // avisos da sala que está fechando não valem para a próxima
+  falandoPorAviso.clear();
   sala.removeAllListeners();
   void sala.disconnect().catch(() => {});
   sala = null;
@@ -2024,6 +2046,8 @@ async function entrarNaSala(
   });
   sala = room;
   cameraSobCpu = false;
+  // sala nova, avisos novos — o que sobrou da sala anterior não é desta gente
+  falandoPorAviso.clear();
 
   // O navegador mede a própria codificação (`qualityLimitationReason`) e o SDK
   // avisa quando a CPU virou o gargalo. A câmera recebe o mesmo alívio da tela
@@ -2052,6 +2076,16 @@ async function entrarNaSala(
     // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
     const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
     const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    // reforço dos avisos por data message (ver `TOPICO_FALA`): quem saiu no
+    // meio da frase não manda um "parei de falar", então tira daqui quem já
+    // não está mais na sala antes de somar — senão o anel dele ficava preso
+    const presentes = new Set(
+      Array.from(room.remoteParticipants.values()).map((p) => donoDaIdentidade(p.identity)),
+    );
+    for (const dono of falandoPorAviso) {
+      if (presentes.has(dono)) proximo.add(dono);
+      else falandoPorAviso.delete(dono);
+    }
     if (useVoice.getState().falando.has(eu)) proximo.add(eu);
     set((s) => ({ falando: proximoConjunto(s.falando, proximo) }));
   };
@@ -2061,7 +2095,11 @@ async function entrarNaSala(
       recomporFalantes();
       rerender();
     })
-    .on(RoomEvent.ParticipantDisconnected, () => {
+    .on(RoomEvent.ParticipantDisconnected, (participant) => {
+      // explícito, embora `recomporFalantes` já limpe quem não está mais na
+      // sala: sem esperar o próximo recálculo para descartar o aviso de quem
+      // acabou de sair
+      falandoPorAviso.delete(donoDaIdentidade(participant.identity));
       recomporFalantes();
       rerender();
     })
@@ -2093,6 +2131,19 @@ async function entrarNaSala(
       rerender();
     })
     .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
+    .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      // aviso de fala de outro cliente (ver `TOPICO_FALA`); qualquer outro
+      // tópico não é deste anel, e sem `participant` não há de quem acender
+      if (topic !== TOPICO_FALA || !participant) return;
+      const dono = donoDaIdentidade(participant.identity);
+      // o meu próprio anel vem do detector local (`rearmarDetectorLocal`), não
+      // do aviso que eu mesmo publiquei — o LiveKit não ecoa para o remetente,
+      // mas a guarda fica pelo mesmo motivo do filtro em `recomporFalantes`
+      if (dono === donoDaIdentidade(room.localParticipant.identity ?? "")) return;
+      if (new TextDecoder().decode(payload) === "1") falandoPorAviso.add(dono);
+      else falandoPorAviso.delete(dono);
+      recomporFalantes();
+    })
     .on(RoomEvent.Disconnected, () => {
       // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
       // quem chegou depois manda, e uma sala aposentada não tem o direito de
@@ -2103,6 +2154,8 @@ async function entrarNaSala(
       sala = null;
       pararMedicaoDePing();
       desarmarDetectorLocal(() => {});
+      // idem: sala caiu, os avisos dela não valem mais
+      falandoPorAviso.clear();
       set({
         midiaDisponivel: false,
         microfonePronto: false,
@@ -2243,6 +2296,15 @@ function rearmarDetectorLocal() {
     useVoice.setState((s) => ({
       falando: comFalante(s.falando, donoDaIdentidade(eu), falando),
     }));
+    // avisa a sala pelo mesmo caminho (ver `TOPICO_FALA`): é isto que acende o
+    // anel dos outros sem esperar o limiar do SFU. Falha de envio não pode
+    // derrubar o anel local, que já foi aplicado na linha de cima
+    room.localParticipant
+      .publishData(new TextEncoder().encode(falando ? "1" : "0"), {
+        reliable: true,
+        topic: TOPICO_FALA,
+      })
+      .catch(() => {});
   });
 }
 

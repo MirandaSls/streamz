@@ -90,12 +90,14 @@ export function rmsDeAmostras(amostras: ArrayLike<number>): number {
 /**
  * Limiar de fala do detector local.
  *
- * Baixo de propósito (≈ −34 dBFS): o Discord acende o anel com muito pouco
- * nível, e microfone de notebook com ganho baixo fica bem abaixo do limiar do
- * SFU. Falso positivo aqui custa um anel verde a mais por um quarto de
- * segundo; falso negativo custa a impressão de que o app não te ouve.
+ * O anel responde "há som saindo do meu microfone", não "passou do limiar do
+ * SFU" — não é sensibilidade de captura, é o indicador refletir o que já está
+ * sendo transmitido. Como o detector mede a faixa já processada (depois do
+ * supressor de ruído e do ganho), é o supressor quem filtra o fundo, não este
+ * número: ele só separa silêncio digital/ruído residual de som de verdade,
+ * então qualquer fala, mesmo baixa, passa (≈ −46 dBFS).
  */
-export const LIMIAR_DE_FALA = 0.02;
+export const LIMIAR_DE_FALA = 0.005;
 
 /**
  * Quanto o anel fica aceso depois de o nível cair.
