@@ -70,6 +70,16 @@ function servico() {
         return [{ userId: "ana" }, { userId: "bia" }];
       },
     },
+    // `join`/`broadcast` consultam a moderação de voz do servidor a cada
+    // entrada; sem linha (null) = ninguém foi silenciado por um moderador
+    guildMember: {
+      async findUnique() {
+        return null;
+      },
+      async findMany() {
+        return [];
+      },
+    },
   } as unknown as PrismaService;
 
   const realtime = { emitToGuild, emitToUsers, emitToUser() {} } as unknown as RealtimeService;

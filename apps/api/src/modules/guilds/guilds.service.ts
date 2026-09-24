@@ -348,6 +348,28 @@ export class GuildsService {
     return actor;
   }
 
+  /**
+   * Moderação de voz (mutar/ensurdecer no servidor) tem uma exceção que o
+   * `assertCanActOn` não prevê: no Discord um moderador pode se automutar —
+   * `MUTE_MEMBERS`/`DEAFEN_MEMBERS` autoaplicado é uso normal, não abuso de
+   * hierarquia. Quando o alvo é o próprio ator, basta o bit
+   * (`assertCanModerate`); contra outro membro, vale a regra cheia — bit **e**
+   * hierarquia, e o alvo precisa existir como membro — que é o que
+   * `assertCanActOn` já garante.
+   */
+  async assertCanModerarVoz(
+    actorId: string,
+    guildId: string,
+    targetId: string,
+    permission: number,
+  ): Promise<void> {
+    if (actorId === targetId) {
+      await this.assertCanModerate(actorId, guildId, permission);
+      return;
+    }
+    await this.assertCanActOn(actorId, guildId, targetId, permission);
+  }
+
   // ── herança categoria → canal ──────────────────────────────
 
   /**

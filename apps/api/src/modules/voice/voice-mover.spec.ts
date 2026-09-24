@@ -102,6 +102,17 @@ function servico(permissoesDoAtor: number) {
         return [];
       },
     },
+    // `join`/`broadcast` (disparado pelo `move`) e `statesForGuild` consultam
+    // a moderação de voz do servidor; sem linha (null) = ninguém foi
+    // silenciado por um moderador
+    guildMember: {
+      async findUnique() {
+        return null;
+      },
+      async findMany() {
+        return [];
+      },
+    },
   } as unknown as PrismaService;
 
   const realtime = { emitToGuild, emitToUsers() {}, emitToUser } as unknown as RealtimeService;
