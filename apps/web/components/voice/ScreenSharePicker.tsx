@@ -595,7 +595,7 @@ function PainelPermissao({
       <Lock size={32} className="text-text-muted" />
       <div className="max-w-sm">
         <p className="text-base font-semibold text-text-strong">
-          O Streamz precisa da permissão "Gravação de Tela"
+          O Streamz precisa da permissão “Gravação de Tela”
         </p>
         <p className="mt-1 text-sm text-text-muted">
           O macOS só deixa um app compartilhar tela ou janela depois que essa
