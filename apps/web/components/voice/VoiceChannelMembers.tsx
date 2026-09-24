@@ -14,6 +14,7 @@ import { useChannels } from "@/stores/channels";
 import { anchorOf, ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 import { useNomesOcultos } from "@/stores/nomes-ocultos";
+import { usePresence, resolveStatus } from "@/stores/presence";
 
 /**
  * Quem está num canal de voz, listado sob ele na barra lateral.
@@ -29,7 +30,8 @@ import { useNomesOcultos } from "@/stores/nomes-ocultos";
  *   lista ler como "dentro" do canal, e não como uma segunda lista solta.
  * - Mudo é só o ícone de microfone cortado. Esmaecer o nome de quem está mudo
  *   diria "esta pessoa está ausente", que é outra coisa — o esmaecimento fica
- *   reservado a quem está com o áudio desativado (não escuta ninguém).
+ *   reservado a quem está com o áudio desativado (não escuta ninguém) e a
+ *   quem está `IDLE` (ausente de verdade) e não fala: falar prova presença.
  * - Transmissão vira pílula "AO VIVO", que é o convite para assistir; um ícone
  *   verde a mais no meio dos outros passa despercebido.
  *
@@ -70,6 +72,7 @@ export default function VoiceChannelMembers({
   const canal = useChannels((s) => s.channels.find((c) => c.id === channelId) ?? null);
   const select = useChannels((s) => s.select);
   const nomesOcultos = useNomesOcultos((s) => s.ocultos(channelId));
+  const statuses = usePresence((s) => s.statuses);
   const [previa, setPrevia] = useState<AlvoDaPrevia | null>(null);
   // fechar com um respiro: entre a linha e o cartão há 8px de vão, e sem a
   // carência o pop-up piscaria toda vez que o cursor os atravessa
@@ -93,8 +96,12 @@ export default function VoiceChannelMembers({
       <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5">
         {estados.map((e) => {
           const nome = displayNameOf(e.user);
+          const status = resolveStatus(statuses, e.user);
           // quem está mudo nunca "fala": o anel tem de contar a mesma história
           const ativo = !e.muted && falando.has(e.user.id);
+          // ausente de verdade (IDLE) e sem falar: falar prova presença, e
+          // por isso não esmaece quem está com o anel verde
+          const ausente = status === "IDLE" && !ativo;
           return (
             <li
               key={e.user.id}
@@ -143,8 +150,12 @@ export default function VoiceChannelMembers({
                   **à esquerda** do ícone do próprio canal — colado na borda da
                   coluna, que foi a queixa.
                 */
-                className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-interactive-background-hover hover:text-text-default ${
-                  e.deafened ? "text-channels-default opacity-30" : "text-channels-default"
+                className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm transition-opacity hover:bg-interactive-background-hover hover:text-text-default ${
+                  e.deafened
+                    ? "text-channels-default opacity-30"
+                    : ausente
+                      ? "text-channels-default opacity-60"
+                      : "text-channels-default"
                 }`}
               >
                 {/* 24px (`sm`), medido no print. O anel de "está falando" é o
@@ -156,6 +167,7 @@ export default function VoiceChannelMembers({
                   <Avatar
                     user={e.user}
                     size="sm"
+                    status={status}
                     surface="border-background-base-lowest"
                     className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
                   />

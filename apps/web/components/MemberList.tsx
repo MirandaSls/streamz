@@ -338,6 +338,8 @@ export default function MemberList() {
 
   function renderMember({ m, status }: Linha) {
     const offline = status === "OFFLINE";
+    // ausente e calado esmaece — quem fala prova presença e não esmaece
+    const ausente = status === "IDLE" && !falando.has(m.user.id);
     const nome = nomeParaMim(m.user, {
       apelidoDeAmigo: apelidosDeAmigo?.[m.user.id],
       apelidoNoServidor: m.nickname,
@@ -355,7 +357,11 @@ export default function MemberList() {
            uma coluna que se navega com o mouse; no dedo ficam abaixo do piso
            de 44 e a lista vira uma faixa de alvos colados. */
         className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-interactive-background-hover celular:h-[60px] ${
-          offline ? "opacity-30 hover:opacity-100" : ""
+          offline
+            ? "opacity-30 hover:opacity-100"
+            : ausente
+              ? "opacity-60 hover:opacity-100 transition-opacity"
+              : ""
         }`}
       >
         <button

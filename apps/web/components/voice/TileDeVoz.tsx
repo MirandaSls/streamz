@@ -29,7 +29,7 @@ import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voic
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
-import { usePresence } from "@/stores/presence";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
 
 /**
@@ -165,6 +165,10 @@ export function AvatarDeChamada({
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
+  const statuses = usePresence((s) => s.statuses);
+  const status = resolveStatus(statuses, state.user);
+  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
+  const ausente = status === "IDLE" && !ativo;
 
   return (
     <Tooltip label={nome}>
@@ -176,7 +180,7 @@ export function AvatarDeChamada({
           abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
         }}
         className={`relative inline-grid rounded-full transition ${
-          state.reconnecting ? "opacity-50" : ""
+          state.reconnecting ? "opacity-50" : ausente ? "opacity-60" : ""
         }`}
       >
         <Avatar
@@ -185,8 +189,9 @@ export function AvatarDeChamada({
           // o palco de avatares só existe no `CallStage`, que é `--black`: o
           // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
           surface="border-black"
+          status={status}
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
-          className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
+          className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
         {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
             Desenhado por fora, o avatar crescia quando a pessoa falava e a
@@ -331,6 +336,11 @@ export function VoiceTile({
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
+  const statuses = usePresence((s) => s.statuses);
+  const status = resolveStatus(statuses, state.user);
+  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
+  // Nunca entra no vídeo — só no avatar (câmera desligada) e no rótulo.
+  const ausente = status === "IDLE" && !ativo;
   const nome = displayNameOf(state.user);
   // a foto ao vivo, pelo mesmo caminho do `Avatar`: quem troca a foto troca
   // também a cor do tile, sem F5
@@ -447,12 +457,17 @@ export function VoiceTile({
               avatar de 80 num tile de 760×428) e 64 na faixa de miniaturas
               (medido em `203909`: ~68px num tile de 188×106 — o avatar do
               Discord é quase constante, não uma fração do tile). */}
-          <span className="relative inline-grid rounded-full">
+          <span
+            className={`relative inline-grid rounded-full transition-opacity ${
+              ausente ? "opacity-60" : ""
+            }`}
+          >
             <Avatar
               user={state.user}
               size="xl"
               surface="border-chat-background-default"
-              className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""} ${
+              status={status}
+              className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""} ${
                 compacto && rotuloPequeno
                   ? // tira do celular (116×78, só ela passa `rotuloPequeno`): os
                     // 64 da tira do desktop ocupavam 82% da altura e eram
@@ -672,13 +687,16 @@ export function VoiceTile({
           `.overlayTitle__2f4f7.idle{opacity:0}` — o ponteiro parado, que no
           palco já é a moldura inteira que some. */}
       <span
-        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default ${
+        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default transition-opacity ${
           // o ramo de 20px é o do celular (`PalcoMobile`), medido lá
           rotuloPequeno
             ? "h-[20px] gap-1.5 px-[6px] text-[11px]"
             : `h-8 gap-1.5 pr-3 text-sm ${tela || state.muted || state.deafened ? "pl-2" : "pl-3"}`
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
+        } ${
+          // câmera e tela nunca esmaecem — só o rótulo do avatar parado
+          ausente && !video && !tela ? "opacity-60" : ""
         }`}
       >
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a

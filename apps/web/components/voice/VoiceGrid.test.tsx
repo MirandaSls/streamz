@@ -85,7 +85,10 @@ vi.mock("@/stores/auth", () => ({
 }));
 
 vi.mock("@/stores/presence", () => ({
-  usePresence: <T,>(sel: (s: { profiles: Record<string, unknown> }) => T) => sel({ profiles: {} }),
+  usePresence: <T,>(sel: (s: { profiles: Record<string, unknown>; statuses: Record<string, unknown> }) => T) =>
+    sel({ profiles: {}, statuses: {} }),
+  resolveStatus: (statuses: Record<string, unknown>, user: { id: string; status?: unknown }) =>
+    statuses[user.id] ?? user.status,
 }));
 
 vi.mock("@/stores/preferencias-por-participante", () => ({
