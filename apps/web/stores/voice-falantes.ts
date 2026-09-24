@@ -90,14 +90,13 @@ export function rmsDeAmostras(amostras: ArrayLike<number>): number {
 /**
  * Limiar de fala do detector local.
  *
- * O anel responde "há som saindo do meu microfone", não "passou do limiar do
- * SFU" — não é sensibilidade de captura, é o indicador refletir o que já está
- * sendo transmitido. Como o detector mede a faixa já processada (depois do
- * supressor de ruído e do ganho), é o supressor quem filtra o fundo, não este
- * número: ele só separa silêncio digital/ruído residual de som de verdade,
- * então qualquer fala, mesmo baixa, passa (≈ −46 dBFS).
+ * ≈ −36 dBFS. 0,005 (≈ −46 dBFS) acendia com ruído residual que passa pelo
+ * supressor e com o chiado da própria leitura de 8 bits, deixando o anel
+ * sempre aceso. 0,02 (≈ −34 dBFS) deixava fala baixa em microfone de notebook
+ * sem acender. 0,015 fica entre os dois. O detector mede a faixa já
+ * processada (depois do supressor de ruído e do ganho).
  */
-export const LIMIAR_DE_FALA = 0.005;
+export const LIMIAR_DE_FALA = 0.015;
 
 /**
  * Quanto o anel fica aceso depois de o nível cair.
