@@ -229,10 +229,24 @@ class FaixaFalsa {
   async reaquisicaoDoSdk() {
     await this.restartTrack({ deviceId: "default" });
   }
+  /**
+   * Trava opcional para `mute()`/`unmute()`: quando setada, a chamada espera
+   * por ela antes de aplicar — é o que deixa simular uma operação de mudo em
+   * curso (o LiveKit tem lock próprio) enquanto uma rajada de cliques chega
+   * atrás dela.
+   */
+  travaDeMudo: (() => Promise<void>) | null = null;
+  /** cada chamada real ao navegador, na ordem — é o que a rajada não pode inflar. */
+  readonly chamadasDeMudo: ("mute" | "unmute")[] = [];
+
   async mute() {
+    this.chamadasDeMudo.push("mute");
+    if (this.travaDeMudo) await this.travaDeMudo();
     this.mudo = true;
   }
   async unmute() {
+    this.chamadasDeMudo.push("unmute");
+    if (this.travaDeMudo) await this.travaDeMudo();
     this.mudo = false;
   }
   stop() {
@@ -411,6 +425,78 @@ describe("dono da faixa de microfone", () => {
     // mas o volume sozinho já justifica a cadeia
     await atualizarMicrofone(prefs({ supressao: false, ganho: 0.5 }));
     expect(cadeiasMontadas()).toBe(1);
+
+    await fecharMicrofone();
+  });
+});
+
+/**
+ * Spammar mudo/desmudo não pode acumular atraso.
+ *
+ * Antes, `definirMicrofoneAberto` enfileirava uma operação por clique: N
+ * cliques viravam N `mute()`/`unmute()` em série (o `mute()`/`unmute()` do
+ * LiveKit tem lock próprio), e uma rajada de dez cliques demorava dez vezes
+ * mais para assentar no estado real. O que este teste guarda: com uma
+ * operação já em curso (travada de propósito, como o `mute()` real trava no
+ * lock do LiveKit), uma rajada de cliques atrás dela coalesce — no máximo uma
+ * fica pendente — e o estado final é sempre o do último clique, não o
+ * primeiro a terminar.
+ */
+describe("rajada de mudo/desmudo não acumula atraso", () => {
+  beforeEach(() => {
+    faixas.length = 0;
+    contextos.length = 0;
+    publicadas.clear();
+    vi.stubGlobal("AudioContext", ContextoFalso);
+    vi.stubGlobal("MediaStream", class {
+      constructor(public faixas: unknown[]) {}
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: async () => new StreamFalso([new FaixaFalsaDeMidia()]),
+      },
+    });
+  });
+
+  it("dez cliques alternados viram no máximo uma operação em curso e uma pendente", async () => {
+    const { abrirMicrofone, definirMicrofoneAberto, faixaDoMicrofone, fecharMicrofone } =
+      await import("@/lib/microfone");
+
+    await abrirMicrofone(salaFalsa() as never, prefs());
+    const faixa = faixaDoMicrofone() as unknown as FaixaFalsa;
+
+    // trava o `mute()`/`unmute()` real, como o lock do LiveKit travaria uma
+    // operação em curso
+    let liberar: () => void = () => {};
+    const trava = new Promise<void>((resolver) => {
+      liberar = resolver;
+    });
+    faixa.travaDeMudo = () => trava;
+
+    // primeiro clique: começa a rodar de verdade (fila estava vazia) e fica
+    // preso na trava — é "a primeira em curso"
+    const primeira = definirMicrofoneAberto(false);
+    await Promise.resolve(); // deixa a fila iniciar a operação até o `await` na trava
+    expect(faixa.chamadasDeMudo).toEqual(["mute"]);
+
+    // rajada de nove cliques alternados atrás da primeira, ainda travada
+    const pedidos = [true, false, true, false, true, false, true, false, true];
+    let ultima: Promise<void> = primeira;
+    for (const aberto of pedidos) {
+      ultima = definirMicrofoneAberto(aberto);
+    }
+    // nenhum dos nove chegou a chamar o navegador: coalesceram numa só pendente
+    expect(faixa.chamadasDeMudo).toEqual(["mute"]);
+
+    liberar();
+    await primeira;
+    await ultima;
+
+    // a primeira (em curso) mais no máximo uma pendente: nunca dez
+    expect(faixa.chamadasDeMudo.length).toBeLessThanOrEqual(3);
+    // o último pedido da rajada foi `aberto: true` — é o que tem de valer
+    expect(faixa.chamadasDeMudo.at(-1)).toBe("unmute");
+    expect(faixa.mudo).toBe(false);
 
     await fecharMicrofone();
   });
