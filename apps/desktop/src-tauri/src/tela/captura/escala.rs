@@ -17,6 +17,11 @@ const QUALIDADE: u8 = 65;
 
 /// Recorta um quadro BGRA. Cantos fora do quadro são aparados; `None` se não
 /// sobrar nada.
+///
+/// Só o DXGI recorta: é o jeito dele de "capturar uma janela" duplicando o
+/// monitor inteiro (ver `win/dxgi.rs`). O WGC e o ScreenCaptureKit capturam a
+/// janela isolada e não precisam disto.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn recortar(q: &Quadro, x0: u32, y0: u32, x1: u32, y1: u32) -> Option<Quadro> {
     let x1 = x1.min(q.largura);
     let y1 = y1.min(q.altura);
@@ -78,6 +83,12 @@ fn reduzir_rgb(q: &Quadro) -> (u32, u32, Vec<u8>) {
 
 /// Miniatura JPEG do quadro. `None` se o encoder recusar (não deveria: o
 /// tamanho é sempre válido), e a grade cai no ícone do app.
+///
+/// Hoje só os dois backends do Windows chamam isto (`win/mod.rs` e
+/// `win/dxgi.rs`); o `mac` ainda é esqueleto e devolve `None` sem gerar
+/// quadro nenhum para reduzir. Sai quando o `mac::miniaturas` passar a
+/// chamar esta mesma função.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn jpeg(q: &Quadro) -> Option<Vec<u8>> {
     if q.largura == 0 || q.altura == 0 || q.bgra.len() < (q.largura * q.altura * 4) as usize {
         return None;
