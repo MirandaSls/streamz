@@ -17,6 +17,7 @@ import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import { useAuth } from "@/stores/auth";
 import { useMessages } from "@/stores/messages";
+import { useVoicePrefs } from "@/stores/voicePrefs";
 import { ui, type Anchor } from "@/stores/ui";
 
 /**
@@ -240,11 +241,13 @@ function Imagem({
  * mouse sai — o mesmo comportamento do GIF/vídeo curto no Discord.
  */
 function Video({ anexo }: { anexo: Attachment }) {
+  const deafened = useVoicePrefs((s) => s.deafened);
   return (
     <video
       src={anexo.url}
       controls
       preload="metadata"
+      muted={deafened}
       onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)}
       onMouseLeave={(e) => {
         e.currentTarget.pause();
@@ -257,12 +260,13 @@ function Video({ anexo }: { anexo: Attachment }) {
 }
 
 function Audio({ anexo }: { anexo: Attachment }) {
+  const deafened = useVoicePrefs((s) => s.deafened);
   return (
     <div className="w-[432px] max-w-full rounded-lg border border-border-subtle bg-background-base-lower p-4">
       <span className="mb-2 block truncate text-sm font-medium text-text-default">
         {attachmentDisplayName(anexo)}
       </span>
-      <audio src={anexo.url} controls preload="metadata" className="w-full" />
+      <audio src={anexo.url} controls preload="metadata" muted={deafened} className="w-full" />
     </div>
   );
 }

@@ -184,6 +184,7 @@ vi.mock("@/lib/microfone", () => ({
 vi.mock("@/lib/ringtone", () => ({
   tocarSom: (nome: string) => void sons.push(nome),
   tocarSomDeMovido: () => void sons.push("movido"),
+  definirSurdoParaSons: () => {},
 }));
 vi.mock("@/stores/voice-ping", () => ({
   iniciarMedicaoDePing: vi.fn(),

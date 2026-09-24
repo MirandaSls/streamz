@@ -114,10 +114,39 @@ function AudioDaFaixa({
   // igual): ninguém do outro lado sabe, e mudo/surdo persistidos não mudam
   const testandoMicrofone = useVoice((s) => s.testandoMicrofone);
   const outputId = useVoiceDevicesStore((s) => s.outputId);
+  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa —
+  // e, na faixa de tela, também pelo silenciar só-da-tela
+  const calado = saidaCalada(deafened, testandoMicrofone, silenciado || (deTela && telaSilenciada));
+
+  // reforça o silêncio no elemento (e no grafo do Web Audio, se existir): o
+  // livekit sobrescreve `muted` tanto no `track.attach` quanto no
+  // `Room.startAudio()`, então a prop declarativa sozinha não basta — quando
+  // não está calado, restaura o volume/ganho que o resto do componente já
+  // calculou
+  const aplicarMudo = (el: HTMLAudioElement) => {
+    if (calado) {
+      el.muted = true;
+      el.volume = 0;
+      if (grafo.current) grafo.current.ganho.gain.value = 0;
+    } else {
+      el.muted = false;
+      if (grafo.current) {
+        el.volume = 1;
+        grafo.current.ganho.gain.value = Math.max(0, volume);
+      } else {
+        el.volume = Math.max(0, Math.min(1, volume));
+      }
+    }
+  };
 
   useEffect(() => {
     const el = ref.current;
-    if (el && faixa) faixa.attach(el);
+    if (el && faixa) {
+      faixa.attach(el);
+      // o attach do livekit faz `element.muted = semFaixaDeAudio` (quase
+      // sempre false), desfazendo o mudo declarativo — reforça na sequência
+      aplicarMudo(el);
+    }
     return () => {
       if (el && faixa) faixa.detach(el);
     };
@@ -144,15 +173,10 @@ function AudioDaFaixa({
       }
     }
 
-    if (grafo.current) {
-      el.volume = 1;
-      grafo.current.ganho.gain.value = Math.max(0, volume);
-      void grafo.current.ctx.resume().catch(() => {});
-    } else {
-      el.volume = Math.max(0, Math.min(1, volume));
-    }
+    aplicarMudo(el);
+    if (grafo.current) void grafo.current.ctx.resume().catch(() => {});
     void aplicarSaida(el, outputId);
-  }, [volume, outputId]);
+  }, [volume, outputId, calado]);
 
   useEffect(() => {
     return () => {
@@ -161,13 +185,22 @@ function AudioDaFaixa({
     };
   }, []);
 
-  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa —
-  // e, na faixa de tela, também pelo silenciar só-da-tela
-  return (
-    <audio
-      ref={ref}
-      autoPlay
-      muted={saidaCalada(deafened, testandoMicrofone, silenciado || (deTela && telaSilenciada))}
-    />
-  );
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // o `Room.startAudio()` do livekit faz `el.muted = false` em todo
+    // elemento anexado (dispara no primeiro gesto do usuário na página) —
+    // sem depender de evento do Room, o listener reforça o mudo aqui mesmo
+    const reforcarSeCalado = () => {
+      if (calado && !el.muted) aplicarMudo(el);
+    };
+    el.addEventListener("volumechange", reforcarSeCalado);
+    el.addEventListener("play", reforcarSeCalado);
+    return () => {
+      el.removeEventListener("volumechange", reforcarSeCalado);
+      el.removeEventListener("play", reforcarSeCalado);
+    };
+  }, [calado]);
+
+  return <audio ref={ref} autoPlay muted={calado} />;
 }

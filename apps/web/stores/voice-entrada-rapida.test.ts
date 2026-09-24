@@ -119,6 +119,7 @@ vi.mock("@/lib/microfone", () => ({
 vi.mock("@/lib/ringtone", () => ({
   tocarSom: vi.fn(),
   tocarSomDeMovido: vi.fn(),
+  definirSurdoParaSons: () => {},
 }));
 vi.mock("@/stores/voice-ping", () => ({
   iniciarMedicaoDePing: vi.fn(),

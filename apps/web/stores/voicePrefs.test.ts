@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const tocarSom = vi.fn();
-vi.mock("@/lib/ringtone", () => ({ tocarSom }));
+vi.mock("@/lib/ringtone", () => ({ tocarSom, definirSurdoParaSons: () => {} }));
 
 const { somDaMudanca, useVoicePrefs } = await import("./voicePrefs");
 const { PREFS_DO_TESTE } = await import("./teste-de-microfone");

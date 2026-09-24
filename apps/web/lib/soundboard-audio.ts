@@ -61,7 +61,8 @@ export function volumeDoEfeito(sound: SoundboardSound, volume: number): number {
  * chamada não deve ouvir justamente o som que a chamada dispara.
  *
  * É a porta de quem **ouve o `soundboard.play`** (`hooks/useRealtime.ts`); o
- * tocar em si é `tocarNaSaida`, que as prévias usam sem esta guarda.
+ * tocar em si é `tocarNaSaida`, que hoje já checa `deafened` sozinha — a
+ * checagem aqui é redundante, mas inofensiva.
  */
 export function tocarEfeitoSonoro(sound: SoundboardSound, volume: number): void {
   if (useVoicePrefs.getState().deafened) return;
@@ -70,22 +71,18 @@ export function tocarEfeitoSonoro(sound: SoundboardSound, volume: number): void 
 
 /**
  * Toca um arquivo na saída de áudio escolhida em "Voz e vídeo", no volume dado
- * (0 a 1) — **sem** olhar se a pessoa está surda.
+ * (0 a 1) — e não toca se a pessoa está **surda**.
  *
- * Separado de `tocarEfeitoSonoro` porque as duas perguntas são diferentes. Lá é
- * "a chamada disparou um som, devo deixá-lo entrar?", e ensurdecido responde
- * não. Aqui é o gesto deliberado de **ouvir uma prévia** — o botão de tocar da
- * aba "Painel de efeitos sonoros" e o do modal "Adicionar som": não há chamada
- * envolvida, e a prévia falhar em silêncio porque a pessoa está ensurdecida numa
- * call é o tipo de defeito que ninguém entende. Antes desta função a aba
- * contornava a guarda criando um `Audio` próprio, e com isso perdia o
- * roteamento para o fone escolhido (`aplicarSaida`); agora as duas portas
- * dividem o mesmo elemento, a mesma saída e o mesmo "falhar em silêncio".
+ * Antes esta função tocava a prévia mesmo ensurdecida (era o gesto deliberado
+ * da aba "Painel de efeitos sonoros" e do modal "Adicionar som", sem chamada
+ * envolvida). Mudança de pedido: ensurdecer agora cala tudo, prévia inclusa —
+ * não há mais exceção, nem aqui nem nos dois chamadores.
  *
  * Devolve o elemento (ou `null` quando nada tocou) para quem precisa **parar**
  * a prévia — trocar de som, sair da aba.
  */
 export function tocarNaSaida(url: string, volume: number): HTMLAudioElement | null {
+  if (useVoicePrefs.getState().deafened) return null;
   if (typeof Audio === "undefined") return null;
   const nivel = Math.min(1, Math.max(0, volume));
   if (nivel <= 0) return null;

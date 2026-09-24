@@ -55,8 +55,8 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  * que faltava era a API ler o campo do multipart (`volumeDoEnvio`, em
  * `apps/api/src/modules/soundboard/dto.ts`). Aqui o deslizador guarda 0 a 1 e
  * mostra 0 a 100%, e a prévia toca **nesse** volume, pela mesma saída de áudio
- * dos efeitos (`tocarNaSaida`) — sem a guarda de surdo, porque ouvir o arquivo
- * antes de enviar é gesto deliberado. O padrão é 100%, o mesmo `@default(1)` da
+ * dos efeitos (`tocarNaSaida`) — que também respeita o ensurdecer: surdo cala
+ * a prévia igual cala tudo o mais. O padrão é 100%, o mesmo `@default(1)` da
  * coluna: quem não mexe no controle envia o som como ele veio.
  *
  * A prévia toca um `blob:` do arquivo escolhido. Cada arquivo é uma URL nova,
