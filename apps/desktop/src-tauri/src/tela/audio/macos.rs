@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use block2::RcBlock;
 use dispatch2::{DispatchQueue, DispatchQueueAttr, DispatchRetained};
-use objc2::rc::Retained;
+use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, AnyThread, DefinedClass};
 use objc2_core_audio_types::{
@@ -292,9 +292,11 @@ fn receber(amostra: &CMSampleBuffer, estado: &Mutex<Estado>) {
 /// Um stream do ScreenCaptureKit só de áudio, sobre o display principal.
 pub struct Loopback {
     stream: sck::Enviavel<Retained<SCStream>>,
-    // Mantidos vivos junto do stream: o stream guarda o delegate como
-    // referência fraca, e a fila é onde o callback roda.
-    _saida: sck::Enviavel<Retained<SaidaDeAudio>>,
+    /// O stream guarda o delegate como referência fraca; quem o mantém vivo
+    /// é o `Loopback`. `Option` para o `Drop` poder decidir se solta ou
+    /// vaza (ver lá).
+    saida: sck::Enviavel<Option<Retained<SaidaDeAudio>>>,
+    /// A fila dos callbacks. Guardada para viver tanto quanto o stream.
     _fila: DispatchRetained<DispatchQueue>,
     estado: Compartilhado,
 }
@@ -306,6 +308,13 @@ impl Loopback {
         if !sck::sistema_atende() {
             return Err(ErroDeAudio::Falha);
         }
+        // Isto roda numa thread do tokio, sem pool próprio (o do runloop do
+        // AppKit, que aqui não existe); sem isto, os objetos autoliberados
+        // (NSArray, filtro, config, ...) vazariam a cada abertura/fechamento.
+        autoreleasepool(|_| Self::abrir_dentro_do_pool())
+    }
+
+    fn abrir_dentro_do_pool() -> Result<Self, ErroDeAudio> {
         let conteudo = sck::conteudo(PRAZO).ok_or(ErroDeAudio::Falha)?;
         // O filtro de áudio do ScreenCaptureKit é por app, e o display é só o
         // pretexto que o filtro exige: o principal existe sempre.
@@ -384,14 +393,15 @@ impl Loopback {
         }
         .map_err(|_| ErroDeAudio::Falha)?;
 
-        iniciar(&stream)?;
-
-        Ok(Self {
+        let loopback = Self {
             stream: sck::Enviavel(stream),
-            _saida: sck::Enviavel(saida),
+            saida: sck::Enviavel(Some(saida)),
             _fila: fila,
             estado,
-        })
+        };
+        // Se o início falhar, o `Drop` já montado faz a limpeza.
+        iniciar(&loopback.stream.0)?;
+        Ok(loopback)
     }
 
     /// Acrescenta em `saida` tudo o que chegou desde a última leitura, já
@@ -425,15 +435,41 @@ fn iniciar(stream: &SCStream) -> Result<(), ErroDeAudio> {
     rx.recv_timeout(PRAZO).unwrap_or(Err(ErroDeAudio::Falha))
 }
 
+/// Para o stream e espera a confirmação até `PRAZO_DE_PARADA`. `true` se o
+/// sistema respondeu (com ou sem erro — erro aqui é "já estava parado", ou o
+/// stream já derrubado pelo próprio sistema).
+fn parar(stream: &SCStream) -> bool {
+    let (tx, rx) = sync_channel::<()>(1);
+    let bloco = RcBlock::new(move |_erro: *mut NSError| {
+        // Parar um stream que o sistema já derrubou devolve erro; tanto faz.
+        let _ = tx.try_send(());
+    });
+    // SAFETY: stream válido; o bloco é copiado pelo framework.
+    unsafe { stream.stopCaptureWithCompletionHandler(Some(&*bloco)) };
+    rx.recv_timeout(PRAZO_DE_PARADA).is_ok()
+}
+
 impl Drop for Loopback {
     fn drop(&mut self) {
-        let (tx, rx) = sync_channel::<()>(1);
-        let bloco = RcBlock::new(move |_erro: *mut NSError| {
-            // Parar um stream que o sistema já derrubou devolve erro; tanto faz.
-            let _ = tx.try_send(());
+        autoreleasepool(|_| {
+            let parou = parar(&self.stream.0);
+            if let Some(saida) = self.saida.0.take() {
+                // SAFETY: stream e saída válidos; erro aqui é a saída já
+                // removida, e não há o que fazer com ele.
+                let _ = unsafe {
+                    self.stream.0.removeStreamOutput_type_error(
+                        ProtocolObject::<dyn SCStreamOutput>::from_ref(&*saida),
+                        SCStreamOutputType::Audio,
+                    )
+                };
+                // Se o sistema não confirmou a parada, um callback ainda pode
+                // estar a caminho na fila — e o SCStream não documenta se
+                // retém a saída. Vazar um objeto pequeno nesse caso raro é
+                // melhor que arriscar um callback num objeto já solto.
+                if !parou {
+                    std::mem::forget(saida);
+                }
+            }
         });
-        // SAFETY: stream válido; o bloco é copiado pelo framework.
-        unsafe { self.stream.0.stopCaptureWithCompletionHandler(Some(&*bloco)) };
-        let _ = rx.recv_timeout(PRAZO_DE_PARADA);
     }
 }

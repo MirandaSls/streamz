@@ -189,7 +189,7 @@ pub enum Backend {
     /// DXGI Desktop Duplication com recorte por janela (Windows 10).
     #[cfg_attr(not(windows), allow(dead_code))]
     Dxgi,
-    /// ScreenCaptureKit (macOS 12.3+).
+    /// ScreenCaptureKit (macOS 13+).
     Sck,
 }
 
