@@ -1,12 +1,23 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Phone, Settings, Volume2 } from "@/components/ui/icones";
+import {
+  ChevronDown,
+  Headphones,
+  HeadphoneOff,
+  Mic,
+  MicOff,
+  MonitorUp,
+  Phone,
+  Settings,
+  Volume2,
+} from "@/components/ui/icones";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { BlocoTransmitindo } from "@/components/voice/BlocoTransmitindo";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import {
   LARGURA_DO_MENU_DE_AUDIO,
@@ -135,6 +146,7 @@ export default function UserFooter() {
   // DM (guildId nulo).
   const vozChannelId = useVoice((s) => s.channelId);
   const vozGuildId = useVoice((s) => s.guildId);
+  const screenOn = useVoice((s) => s.screenOn);
   const emVoz = Boolean(vozChannelId);
 
   if (!user) return null;
@@ -177,7 +189,10 @@ export default function UserFooter() {
       ref={painel}
       className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
     >
-      {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
+      {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante.
+          `BlocoTransmitindo` vem antes: só aparece com `screenOn`, e é o
+          "estou transmitindo" antes do "estou em voz". */}
+      <BlocoTransmitindo />
       <VoiceConnectedBar />
       <div className="flex h-14 shrink-0 items-center gap-2 px-3.5">
         <button
@@ -213,7 +228,16 @@ export default function UserFooter() {
               bolinha é `icon-status-online` (#3d9e60) e sai com esse mesmo
               desvio de captura, então o ícone usa o token dela, não um hex.
             */}
-            {emVoz ? (
+            {emVoz && screenOn ? (
+              // Compartilhando tela substitui "Em voz"/"Em uma chamada" pelo
+              // mesmo motivo que a voz substitui o status: é o estado mais
+              // específico agora. Mesmo par ícone-verde/texto-cinza de cima —
+              // só o ícone muda de cor, o texto continua `text-subtle`.
+              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
+                <MonitorUp size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
+                <span className="truncate">Compartilhando tela</span>
+              </span>
+            ) : emVoz ? (
               <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
                 {vozGuildId ? (
                   <Volume2 size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
