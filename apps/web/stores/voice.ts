@@ -43,6 +43,7 @@ import {
 import { api } from "@/lib/api";
 import {
   abrirNoSistema,
+  capacidadesDeTela,
   descartarTelaNativa as ponteDescartarTela,
   ehAndroidNoTauri,
   iniciarServicoDeChamada,
@@ -54,6 +55,7 @@ import {
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
   restaurarAtenuacaoDoWindows,
+  silenciarAudioDaTela,
   suspenderAtenuacaoDoWindows,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
@@ -283,6 +285,20 @@ interface VoiceStoreState {
   screenQuality: ScreenQuality;
   screenAudio: boolean;
   /**
+   * A transmissão que está no ar publica som? `screenAudio` é a **intenção**
+   * de antes de ir ao ar; isto é o fato: a aba/janela pode não ter som, o
+   * navegador pode não entregá-lo e a captura nativa pode não ter loopback.
+   * O botão de silenciar o som da tela só faz sentido quando isto é `true`.
+   */
+  telaComSom: boolean;
+  /**
+   * Silenciei o som da **minha** transmissão (não o microfone). A faixa fica
+   * publicada e só é emudecida: tirá-la e republicar custaria uma
+   * renegociação a cada clique e faria o som sumir/voltar como publicação
+   * nova para quem assiste.
+   */
+  audioDaTelaMudo: boolean;
+  /**
    * Taxa de quadros da câmera (persistida no browser). Vale na captura, no
    * teto do encoder e nas camadas do simulcast; mudar com a câmera ligada
    * reinicia a captura dentro da mesma faixa, sem republicar.
@@ -304,6 +320,13 @@ interface VoiceStoreState {
   // ── preferências por participante (locais, não vão para o servidor) ──
   volumes: Record<string, number>;
   silenciados: Record<string, boolean>;
+  /**
+   * Por `userId` do **dono**: silencio só o som da transmissão dele
+   * (`ScreenShareAudio`, venha da conexão dele ou do `<userId>#tela`), e a voz
+   * continua. É outro eixo de `silenciados` de propósito: quem assiste a uma
+   * transmissão com música alta quer calar a música, não a pessoa.
+   */
+  telaSilenciada: Record<string, boolean>;
 
   // ── foco/tela cheia da grade ──
   focado: string | null;
@@ -393,6 +416,8 @@ interface VoiceStoreState {
   /** Desfaz a pré-conexão (seletor fechado sem escolha). */
   descartarTelaNativa: () => Promise<void>;
   pararTela: () => Promise<void>;
+  /** Emudece/devolve o som da minha transmissão (navegador ou nativa). */
+  alternarAudioDaTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
   setCameraFps: (fps: CameraFps) => void;
@@ -400,6 +425,8 @@ interface VoiceStoreState {
 
   setVolume: (userId: string, volume: number) => void;
   toggleSilenciado: (userId: string) => void;
+  /** Silencia/devolve só o som da transmissão deste dono, para mim. */
+  alternarTelaSilenciada: (userId: string) => void;
   /**
    * Põe um tile no palco, ou tira o que está lá (clicar no focado volta à
    * grade). A chave é a do tile, não o id da pessoa: quem assiste a duas telas
@@ -736,6 +763,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       testandoMicrofone: false,
       camOn: false,
       screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
       focado: null,
       focoAutomatico: true,
       telaCheia: false,
@@ -763,11 +792,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     screenOn: false,
     screenQuality: lerScreenQuality(lerDoStorage(SCREEN_QUALITY_KEY)),
     screenAudio: true,
+    telaComSom: false,
+    audioDaTelaMudo: false,
     cameraFps: lerCameraFps(lerDoStorage(CAMERA_FPS_KEY)),
     audio: carregarAudio(),
     erroDeSupressao: null,
     volumes: {},
     silenciados: {},
+    telaSilenciada: {},
     focado: null,
     focoAutomatico: true,
     telaCheia: false,
@@ -968,6 +1000,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         falando: NINGUEM,
         camOn: false,
         screenOn: false,
+        telaComSom: false,
+        audioDaTelaMudo: false,
         focado: null,
         focoAutomatico: true,
         assistindo: new Set<string>(),
@@ -1202,6 +1236,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // passa a preservar nitidez em vez de suavizar o quadro (o que faria com
       // uma câmera). É o ganho de legibilidade mais barato que existe aqui.
       video.contentHint = "detail";
+      // o som pode não subir (faixa encerrada no meio): `telaComSom` diz o que
+      // foi ao ar, não o que se pediu
+      let somNoAr = false;
       try {
         await lp.publishTrack(new LocalVideoTrack(video), {
           source: Track.Source.ScreenShare,
@@ -1228,6 +1265,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
             dtx: false,
             red: false,
           });
+          somNoAr = true;
         }
         const valeAinda =
           sala === salaNoInicio &&
@@ -1245,7 +1283,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           encerrarFaixas(stream.getTracks());
           await despublicarTela(lp);
         } else {
-          set({ screenOn: true });
+          // faixa nova sobe com som: um "mudo" de uma transmissão anterior
+          // não vale para esta
+          set({ screenOn: true, telaComSom: somNoAr, audioDaTelaMudo: false });
           tocarSom("transmissao-iniciada");
           // **Sem mexer no palco.** Ir ao ar pelo navegador já põe a minha tela
           // na grade como mais um card, que é o que a print `p2` mostra o
@@ -1258,7 +1298,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         encerrarFaixas(stream.getTracks());
         // o vídeo pode ter subido e o som falhado: nada da tela fica no ar
         await despublicarTela(lp);
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1321,6 +1361,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       geracaoDeTela += 1;
       const salaNoInicio = sala;
       const inicio = { geracao: ++geracaoDaTransmissao, canal: channelId };
+      // Pedir som não garante som: sem loopback nesta máquina o Rust sobe só o
+      // vídeo. Perguntado em paralelo com a subida para não somar ao clique;
+      // `capacidadesDeTela` nunca lança
+      const somPossivel = screenAudio
+        ? capacidadesDeTela().then((c) => c.audioDoSistema)
+        : Promise.resolve(false);
       try {
         // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
         // o mesmo par url+token e reaproveita a sala já conectada.
@@ -1331,6 +1377,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         );
         // a sala pré-conectada foi consumida (ou descartada) pelo Rust
         telaPreparada = null;
+        // esperado **antes** da checagem abaixo: um `await` entre ela e o
+        // `set` deixaria um "parar" no meio ser atropelado por `screenOn: true`
+        const comSom = await somPossivel;
         const valeAinda =
           sala === salaNoInicio &&
           inicioAindaVale({
@@ -1346,7 +1395,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           return;
         }
         telaNativa = true;
-        set({ screenOn: true });
+        set({ screenOn: true, telaComSom: comSom, audioDaTelaMudo: false });
         tocarSom("transmissao-iniciada");
         // O tempo por etapa, para o dia em que alguém disser "demorou": sem
         // isto a única medida é a impressão de quem clicou.
@@ -1357,7 +1406,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch (e) {
         telaPreparada = null;
         telaNativa = false;
-        set({ screenOn: false });
+        set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1380,7 +1429,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       const estava = get().screenOn;
       // uma tela que ainda estava subindo desiste ao terminar (`inicioAindaVale`)
       geracaoDaTransmissao += 1;
-      set({ screenOn: false });
+      set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
       if (estava) tocarSom("transmissao-encerrada");
       encerrarCapturaDaTela();
       const nativa = telaNativa;
@@ -1390,6 +1439,44 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         lp ? despublicarTela(lp) : Promise.resolve(),
       ]);
       get().syncFlags();
+      rerender();
+    },
+
+    /**
+     * O estado só muda depois de o transporte obedecer: marcar "mudo" com o
+     * som ainda saindo para a sala é pior do que o clique não fazer nada.
+     */
+    alternarAudioDaTela: async () => {
+      const { screenOn, telaComSom, audioDaTelaMudo } = get();
+      if (!screenOn || !telaComSom) return;
+      const mudo = !audioDaTelaMudo;
+      if (telaNativa) {
+        try {
+          await silenciarAudioDaTela(mudo);
+        } catch {
+          // app de desktop anterior ao comando: o som segue como estava
+          ui.toast("Atualize o app para silenciar o som da transmissão.", "error");
+          return;
+        }
+      } else {
+        const faixa = Array.from(sala?.localParticipant.trackPublications.values() ?? []).find(
+          (pub) => pub.source === Track.Source.ScreenShareAudio,
+        )?.track;
+        if (!faixa) return;
+        try {
+          // `mute()` e não despublicar: a faixa segue na sala e voltar é
+          // instantâneo, sem renegociar nem reaparecer como publicação nova
+          if (mudo) await faixa.mute();
+          else await faixa.unmute();
+        } catch (e) {
+          ui.toast(errorMessage(e, "Não foi possível silenciar o som da tela"), "error");
+          return;
+        }
+      }
+      // a transmissão pode ter parado enquanto o pedido ia: não ressuscitar o
+      // "mudo" de uma tela que já saiu do ar
+      if (!get().screenOn) return;
+      set({ audioDaTelaMudo: mudo });
       rerender();
     },
 
@@ -1449,6 +1536,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
+    // mesmo tratamento de `silenciados`: vale enquanto a página estiver aberta,
+    // sem storage e sem zerar ao sair da sala
+    alternarTelaSilenciada: (userId) =>
+      set((s) => ({ telaSilenciada: { ...s.telaSilenciada, [userId]: !s.telaSilenciada[userId] } })),
 
 
     // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
@@ -2647,7 +2738,12 @@ if (typeof window !== "undefined" && isTauri()) {
   ouvirTelaEncerrada((motivo) => {
     if (!telaNativa) return;
     telaNativa = false;
-    useVoice.setState((s) => ({ screenOn: false, tick: s.tick + 1 }));
+    useVoice.setState((s) => ({
+      screenOn: false,
+      telaComSom: false,
+      audioDaTelaMudo: false,
+      tick: s.tick + 1,
+    }));
     tocarSom("transmissao-encerrada");
     useVoice.getState().syncFlags();
     ui.toast(

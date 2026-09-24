@@ -48,6 +48,14 @@ import { useVoice } from "@/stores/voice";
  * do app desenha ações, não controles contínuos, mas o Discord resolve o
  * volume ali mesmo, sem abrir nada.
  *
+ * "Silenciar transmissão" só aparece com a pessoa transmitindo tela agora
+ * (`VoiceStateEvent.screen` de `voz.statesOf`, não `opcoes.tela` — esse só
+ * existe quando o menu abriu **de cima da própria tela** e eu já a assisto;
+ * aqui a checagem vale também vindo da barra lateral, de longe). É outro
+ * eixo de "Silenciar": aquele cala a voz da pessoa, este só o som da
+ * transmissão dela (`telaSilenciada` em `stores/voice.ts`) — quem assiste a
+ * uma transmissão com música alta quer calar a música, não a pessoa.
+ *
  * "Silenciar efeitos sonoros" e "Desativar vídeo" são preferências **deste
  * navegador sobre esta pessoa** (`stores/preferencias-por-participante.ts`) —
  * cada uma com efeito num lugar diferente: a primeira faz `soundboard.ts`
@@ -86,6 +94,8 @@ export function abrirMenuDeParticipante(
   const voz = useVoice.getState();
   const volume = user.id in voz.volumes ? voz.volumes[user.id] : 1;
   const silenciado = !!voz.silenciados[user.id];
+  const telaSilenciada = !!voz.telaSilenciada[user.id];
+  const estaTransmitindo = voz.statesOf(opcoes.channelId).some((e) => e.user.id === user.id && e.screen);
   const prefs = usePreferenciasPorParticipante.getState();
 
   // o canal manda no servidor: DM/grupo não tem `guildId`, e aí Apps, convite
@@ -153,6 +163,14 @@ export function abrirMenuDeParticipante(
       control: "checkbox",
       onSelect: () => useVoice.getState().toggleSilenciado(user.id),
     });
+    if (estaTransmitindo) {
+      itens.push({
+        label: telaSilenciada ? "Reativar som da transmissão" : "Silenciar transmissão",
+        checked: telaSilenciada,
+        control: "checkbox",
+        onSelect: () => useVoice.getState().alternarTelaSilenciada(user.id),
+      });
+    }
     itens.push({
       label: "Silenciar efeitos sonoros",
       checked: prefs.efeitosSilenciados(user.id),

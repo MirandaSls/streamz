@@ -621,6 +621,21 @@ export async function pararTelaNativa(): Promise<void> {
   }
 }
 
+/**
+ * Silencia (ou devolve) só o **som** da transmissão nativa, sem tirar a faixa
+ * da sala (`silenciar_audio_da_tela`). O microfone não passa por aqui.
+ *
+ * Diferente de `pararTelaNativa`, **lança** quando a ponte recusa: um app de
+ * desktop anterior a este comando não o conhece, e se o erro fosse engolido a
+ * store marcaria "som mudo" enquanto o som continua saindo para a sala — o
+ * pior tipo de mentira de interface. Quem chama trata e mantém o estado.
+ */
+export async function silenciarAudioDaTela(mudo: boolean): Promise<void> {
+  if (!isTauri()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("silenciar_audio_da_tela", { mudo });
+}
+
 /** Por que a transmissão nativa acabou sem o usuário pedir (`tela:encerrada`). */
 export type MotivoDeEncerramento = "fonteSumiu" | "desconectado" | "falha";
 

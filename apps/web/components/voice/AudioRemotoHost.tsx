@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Track, type Track as TrackTipo } from "livekit-client";
-import { donoDaIdentidade } from "@streamz/shared";
+import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
 import { ouvintesRemotos } from "@/components/voice/audio-remoto";
 import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
@@ -53,19 +53,26 @@ export default function AudioRemotoHost() {
  * Áudio de um participante remoto: **todas** as faixas de áudio dele — o
  * microfone e, quando transmite, o áudio da tela (que no desktop chega pelo
  * participante `#tela`). Um `<audio>` por faixa, todos com o mesmo volume
- * individual e o mesmo "silenciar" da pessoa.
+ * individual; o "silenciar" da pessoa vale para as duas, mas a faixa de tela
+ * também obedece ao silenciar-só-a-tela (`telaSilenciada`).
  */
 export function AudioDoParticipante({ userId }: { userId: string }) {
   useVoice((s) => s.tick);
   const faixas = participantesDe(userId).flatMap((p) =>
     Array.from(p.trackPublications.values())
       .filter((pub) => pub.kind === Track.Kind.Audio && !!pub.track)
-      .map((pub) => ({ sid: pub.trackSid, faixa: pub.track as TrackTipo })),
+      .map((pub) => ({
+        sid: pub.trackSid,
+        faixa: pub.track as TrackTipo,
+        // a faixa é "de tela" pelo `source` (navegador) ou pela identidade
+        // `<userId>#tela` (captura nativa do desktop) — ver `ehIdentidadeDeTela`
+        deTela: pub.source === Track.Source.ScreenShareAudio || ehIdentidadeDeTela(p.identity),
+      })),
   );
   return (
     <>
-      {faixas.map(({ sid, faixa }) => (
-        <AudioDaFaixa key={sid} userId={userId} faixa={faixa} />
+      {faixas.map(({ sid, faixa, deTela }) => (
+        <AudioDaFaixa key={sid} userId={userId} faixa={faixa} deTela={deTela} />
       ))}
     </>
   );
@@ -80,8 +87,20 @@ export function AudioDoParticipante({ userId }: { userId: string }) {
  * passa por um `GainNode`, montado **sob demanda** — `createMediaElementSource`
  * é irreversível e tira o elemento do caminho do `setSinkId`, então quem nunca
  * subiu o volume continua com a saída de áudio escolhida valendo.
+ *
+ * `deTela` distingue a faixa da tela das da voz: quem assiste pode silenciar
+ * só a transmissão de alguém sem silenciar a voz dela, então `telaSilenciada`
+ * só entra na conta quando a faixa é de tela.
  */
-function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
+function AudioDaFaixa({
+  userId,
+  faixa,
+  deTela,
+}: {
+  userId: string;
+  faixa: TrackTipo;
+  deTela: boolean;
+}) {
   const ref = useRef<HTMLAudioElement>(null);
   const grafo = useRef<{ ctx: AudioContext; ganho: GainNode } | null>(null);
   const porPessoa = useVoice((s) => (userId in s.volumes ? s.volumes[userId] : 1));
@@ -89,6 +108,7 @@ function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
   const geral = useVoice((s) => s.audio.saida);
   const volume = porPessoa * geral;
   const silenciado = useVoice((s) => !!s.silenciados[userId]);
+  const telaSilenciada = useVoice((s) => !!s.telaSilenciada[userId]);
   const deafened = useVoicePrefs((s) => s.deafened);
   // testar o microfone ensurdece **localmente** enquanto dura (o Discord faz
   // igual): ninguém do outro lado sabe, e mudo/surdo persistidos não mudam
@@ -141,12 +161,13 @@ function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
     };
   }, []);
 
-  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa
+  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa —
+  // e, na faixa de tela, também pelo silenciar só-da-tela
   return (
     <audio
       ref={ref}
       autoPlay
-      muted={saidaCalada(deafened, testandoMicrofone, silenciado)}
+      muted={saidaCalada(deafened, testandoMicrofone, silenciado || (deTela && telaSilenciada))}
     />
   );
 }
