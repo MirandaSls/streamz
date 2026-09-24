@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Track, type Track as TrackTipo } from "livekit-client";
 import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
 import { ouvintesRemotos } from "@/components/voice/audio-remoto";
+import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
 import { participantesDaSala, participantesDe, useVoice } from "@/stores/voice";
@@ -114,9 +115,16 @@ function AudioDaFaixa({
   // igual): ninguém do outro lado sabe, e mudo/surdo persistidos não mudam
   const testandoMicrofone = useVoice((s) => s.testandoMicrofone);
   const outputId = useVoiceDevicesStore((s) => s.outputId);
+  // o servidor também corta isso no LiveKit (canSubscribe=false), mas
+  // silenciar localmente fecha a janela até a concessão valer
+  const { serverDeaf } = useSilencioDoServidor();
   // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa —
   // e, na faixa de tela, também pelo silenciar só-da-tela
-  const calado = saidaCalada(deafened, testandoMicrofone, silenciado || (deTela && telaSilenciada));
+  const calado = saidaCalada(
+    deafened || serverDeaf,
+    testandoMicrofone,
+    silenciado || (deTela && telaSilenciada),
+  );
 
   // reforça o silêncio no elemento (e no grafo do Web Audio, se existir): o
   // livekit sobrescreve `muted` tanto no `track.attach` quanto no

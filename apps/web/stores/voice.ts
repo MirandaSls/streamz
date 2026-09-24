@@ -112,6 +112,7 @@ import {
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
+import { meuSilencio, microfoneTravado, transicaoDaTrava } from "@/stores/voz-do-servidor";
 import {
   iniciarTeste,
   pararTeste,
@@ -680,6 +681,8 @@ function desmontarSala() {
   // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
   // rodaria num contexto morto na próxima entrada
   void fecharMicrofone();
+  // a trava do servidor era desta sala; a próxima decide a sua na entrada
+  travaDoMicrofone = null;
   desarmarDetectorLocal(() => {});
   // avisos da sala que está fechando não valem para a próxima
   falandoPorAviso.clear();
@@ -931,6 +934,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const lista = evento.connected ? [...semEle, evento] : semEle;
         return { states: { ...s.states, [evento.channelId]: lista } };
       });
+      // o meu próprio estado na minha sala é por onde chega o silêncio imposto
+      // por um moderador (`serverMute`/`serverDeaf`). Depois do `set`: a
+      // reavaliação lê a lista já atualizada
+      if (eu && evento.channelId === meuCanal) reavaliarTravaDoMicrofone();
       // **Outra pessoa** entrou na minha chamada de DM: ela deixou de estar
       // "tocando". O `!eu` é o que fazia o ringback não existir: `startCall`
       // aplica os estados que o `POST /dms/:id/call` devolve, e o primeiro
@@ -1782,7 +1789,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // "voltava ao normal" alguns segundos depois de entrar. Quem decide se o
       // microfone está aberto é `micAberto()`; quem decide se ele está **na
       // sala** é o teste de microfone, e essa parte mora em `aplicarTesteNaSala`
-      void definirMicrofoneAberto(!f.muted)
+      //
+      // Com o microfone travado pelo servidor a faixa já está fechada e isto não
+      // teria o que abrir; a guarda explícita é para a janela em que o fechamento
+      // ainda está na fila do dono — desmutar, apertar o PTT ou falar não pode
+      // reabrir nada nesse meio-tempo. O `f.muted` que vai ao gateway continua
+      // sendo a escolha da pessoa: o mudo próprio e o do servidor são coisas
+      // separadas, como no Discord
+      void definirMicrofoneAberto(!f.muted && !microfoneTravadoAgora())
         .then(rearmarDetectorLocal)
         .catch(() => {});
     },
@@ -2131,6 +2145,15 @@ async function entrarNaSala(
       rerender();
     })
     .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
+    // O LiveKit só aceita a republicação do microfone **depois** de liberar a
+    // fonte na minha permissão; o `voice.state` que diz "liberado" pode chegar
+    // antes disso. Reavaliar nos dois eventos, com a trava somando os dois
+    // lados (`microfoneTravado`), faz a faixa voltar só quando ambos concordam
+    .on(RoomEvent.ParticipantPermissionsChanged, (_antes, participante) => {
+      if (sala !== room || participante !== room.localParticipant) return;
+      reavaliarTravaDoMicrofone();
+      rerender();
+    })
     .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
       // aviso de fala de outro cliente (ver `TOPICO_FALA`); qualquer outro
       // tópico não é deste anel, e sem `participant` não há de quem acender
@@ -2230,6 +2253,20 @@ function ehPermissaoNegada(e: unknown): boolean {
  *    veria o botão mudo e a sala a ouviria.
  */
 async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroDeVoz) {
+  // Silenciado pelo servidor (ou já entrando silenciado: a trava é gravada no
+  // membro e vem no token): nem abre a captura. O `publishTrack` seria recusado
+  // pelo LiveKit e viraria o toast de "não foi possível ligar o microfone" —
+  // falso, o microfone está bom. A decisão fica registrada **antes** de abrir,
+  // para uma trava que chegue durante a abertura ser vista como transição
+  const travado = microfoneTravadoEm(room);
+  travaDoMicrofone = { room, travado };
+  if (travado) {
+    crono.etapa("microfone travado pelo servidor");
+    // "pronto" no sentido da interface: não há abertura em curso para esperar
+    set({ microfonePronto: true });
+    rearmarDetectorLocal();
+    return;
+  }
   // antes do `getUserMedia`: o microfone do WebView2 é um stream de
   // comunicações, e sem isto o Windows abaixa o volume do Discord e da música
   await suspenderAtenuacaoDoWindows();
@@ -2266,16 +2303,81 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
     // o toast culparia o microfone de quem acabou de sair da chamada. O
     // `console.warn` acima fica de qualquer jeito: é o rastro do relato.
     const aviso = `${room.name}|${texto}`;
-    if (sala === room && ultimoAvisoDeMicrofone !== aviso) {
+    // Idem para a trava do servidor que chegou no meio da abertura: a recusa do
+    // LiveKit é consequência dela, não defeito do aparelho
+    if (sala === room && ultimoAvisoDeMicrofone !== aviso && !microfoneTravadoEm(room)) {
       ultimoAvisoDeMicrofone = aviso;
       ui.toast(texto, "error");
     }
   }
   if (sala !== room) return;
-  await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});
+  await definirMicrofoneAberto(
+    useVoicePrefs.getState().micAberto() && !microfoneTravadoEm(room),
+  ).catch(() => {});
   set({ microfonePronto: true });
   // a faixa acabou de nascer: é aqui que o detector local ganha o que medir
   rearmarDetectorLocal();
+}
+
+/**
+ * A trava do servidor já aplicada ao microfone, e em qual sala.
+ *
+ * Guardar a última decisão é o que deixa agir só nas **transições**: o
+ * `voice.state` é reemitido a cada mudo, vídeo ou entrada de alguém, e fechar
+ * ou reabrir a faixa a cada um seria um "entrou/saiu" de microfone para a sala
+ * inteira. A `Room` junto porque a decisão vale para aquela conexão: a sala
+ * nova de uma reconexão decide a sua em `publicarMicrofone`.
+ */
+let travaDoMicrofone: { room: Room; travado: boolean } | null = null;
+
+/**
+ * O microfone está travado pelo servidor nesta sala? Soma o meu `voice.state`
+ * (`serverMute`/`serverDeaf`) à permissão do LiveKit — ver `microfoneTravado`.
+ */
+function microfoneTravadoEm(room: Room): boolean {
+  const { states, channelId } = useVoice.getState();
+  const silencio = meuSilencio(
+    channelId ? states[channelId] : undefined,
+    useAuth.getState().user?.id,
+  );
+  return microfoneTravado(silencio, room.localParticipant.permissions);
+}
+
+function microfoneTravadoAgora(): boolean {
+  return !!sala && microfoneTravadoEm(sala);
+}
+
+/**
+ * Aplica a trava do servidor quando ela muda: fecha a faixa ao travar e a
+ * reabre pelo caminho da entrada ao destravar.
+ *
+ * Fechar, e não só mutar: o LiveKit tira do ar a faixa de uma fonte que deixou
+ * de ser permitida, e o dono (`lib/microfone`) continuaria achando que ela está
+ * publicada — desmutar depois mandaria som para uma publicação que não existe.
+ * Fechar também apaga a luz do microfone, que ninguém vai ouvir mesmo.
+ *
+ * Reabrir passa por `publicarMicrofone` **sempre**, mesmo com a pessoa em mudo
+ * próprio: a faixa sobe mutada, como numa entrada em mudo. Sem faixa viva, o
+ * próximo desmutar não teria o que abrir. A preferência de mudo nunca é tocada
+ * aqui — o mudo do servidor é outro eixo.
+ */
+function reavaliarTravaDoMicrofone() {
+  const room = sala;
+  // antes de `publicarMicrofone` decidir a entrada desta sala não há de onde
+  // transicionar: é ela quem lê a trava inicial
+  if (!room || travaDoMicrofone?.room !== room) return;
+  const agora = microfoneTravadoEm(room);
+  const acao = transicaoDaTrava(travaDoMicrofone.travado, agora);
+  if (!acao) return;
+  travaDoMicrofone = { room, travado: agora };
+  if (acao === "fechar") {
+    // o dono enfileira: uma abertura em curso termina e é fechada em seguida
+    void fecharMicrofone()
+      .then(rearmarDetectorLocal)
+      .catch(() => {});
+    return;
+  }
+  void publicarMicrofone(room, useVoice.setState, cronometroDeVoz("liberarMicrofone"));
 }
 
 /**

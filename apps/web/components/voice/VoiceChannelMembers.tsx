@@ -144,7 +144,7 @@ export default function VoiceChannelMembers({
                   coluna, que foi a queixa.
                 */
                 className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-interactive-background-hover hover:text-text-default ${
-                  e.deafened ? "text-channels-default opacity-30" : "text-channels-default"
+                  e.deafened || e.serverDeaf ? "text-channels-default opacity-30" : "text-channels-default"
                 }`}
               >
                 {/* 24px (`sm`), medido no print. O anel de "está falando" é o
@@ -188,12 +188,28 @@ export default function VoiceChannelMembers({
                 ) : (
                   e.video && <Video size={14} className="shrink-0 text-text-muted" aria-label="Com câmera" />
                 )}
-                {/* Cinza, não vermelho: em 101842.png o microfone cortado de "Md"
-                    (mudo por conta própria) sai #81828a = `channels-default`
-                    (coluna x=348, y 412–425). O Discord só pinta de vermelho o
-                    mudo/ensurdecido **pelo servidor**, estado que o Streamz não
-                    tem (`VoiceStateEvent` só traz muted/deafened). */}
-                {e.deafened ? (
+                {/* Cinza é o mudo por conta própria: em 101842.png o microfone
+                    cortado de "Md" sai #81828a = `channels-default` (coluna
+                    x=348, y 412–425). Vermelho (`status-danger`) é o
+                    imposto por um moderador (`serverMute`/`serverDeaf`,
+                    `useSilencioDoServidor.ts`) — como no Discord, que só
+                    pinta de vermelho o mudo/ensurdecido **pelo servidor**. O
+                    servidor manda sobre o próprio: quem está com o áudio
+                    cortado por um moderador mostra o fone cortado mesmo que
+                    também tenha se silenciado sozinho. */}
+                {e.serverDeaf ? (
+                  <HeadphoneOff
+                    size={14}
+                    className="shrink-0 text-status-danger"
+                    aria-label="Áudio desativado pelo servidor"
+                  />
+                ) : e.serverMute ? (
+                  <MicOff
+                    size={14}
+                    className="shrink-0 text-status-danger"
+                    aria-label="Silenciado pelo servidor"
+                  />
+                ) : e.deafened ? (
                   <HeadphoneOff size={14} className="shrink-0 text-channels-default" aria-label="Sem áudio" />
                 ) : (
                   e.muted && <MicOff size={14} className="shrink-0 text-channels-default" aria-label="Mudo" />
