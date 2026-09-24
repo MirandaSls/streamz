@@ -19,9 +19,9 @@
 //! isso como "sem backend nativo" e cai no `getDisplayMedia` de sempre, que é
 //! o caminho do navegador e do desenvolvimento em Linux.
 //!
-//! Compilar, porém, não é funcionar: o backend do macOS ainda é esqueleto, e
-//! por isso `nativo` **não** é o mesmo que `cfg(tela_nativa)` — ver
-//! `capacidades`.
+//! Compilar, porém, não é a mesma coisa que funcionar: enquanto o backend do
+//! macOS não estiver todo de pé, `nativo` **não** é o mesmo que
+//! `cfg(tela_nativa)` — ver `capacidades`.
 
 use serde::Serialize;
 
@@ -39,6 +39,12 @@ mod captura;
 mod fontes;
 #[cfg(tela_nativa)]
 mod icone;
+// Helpers do ScreenCaptureKit (permissão, `SCShareableContent`, escala do
+// display). `fontes`, `captura`, `audio` e `icone` chamam
+// `crate::tela::sck::*` do lado macOS deles, daí `pub(crate)` em vez de
+// privado ao módulo.
+#[cfg(target_os = "macos")]
+pub(crate) mod sck;
 #[cfg(tela_nativa)]
 mod transmissao;
 
@@ -145,6 +151,36 @@ pub fn capacidades_de_tela() -> Capacidades {
     capacidades()
 }
 
+/// Pede a autorização de gravação de tela ao usuário.
+///
+/// No macOS chama `CGRequestScreenCaptureAccess`, que dispara o diálogo do
+/// sistema **só na primeira vez**; depois disso (permissão já concedida,
+/// negada ou já perguntada antes) ela abre direto os Ajustes > Privacidade e
+/// devolve `false` sem perguntar de novo — daí não dar para tratar o retorno
+/// como "o usuário concedeu agora". O TCC também só passa a valer depois de o
+/// app **reiniciar**: conceder a chave nos Ajustes não muda nada no processo
+/// já rodando, e é por isso que a web, ao ver `Faltando` depois de chamar
+/// isto, oferece um botão "Reiniciar" em vez de tentar de novo no mesmo
+/// processo. Roda em `spawn_blocking` porque `CGRequestScreenCaptureAccess`
+/// bloqueia até o usuário responder ao diálogo (ou devolve na hora, se não há
+/// diálogo a mostrar).
+///
+/// Nos outros alvos não existe o que pedir — `NaoPrecisa` já cobre isso —
+/// então devolve `true` direto.
+#[tauri::command]
+pub async fn pedir_permissao_de_tela() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(sck::pedir_permissao)
+            .await
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 /// **O invariante:** `nativo` quer dizer "há backend de captura que funciona",
 /// nunca "o módulo `tela` compilou neste alvo". A web decide por ele entre a
 /// grade de miniaturas nossa e o `getDisplayMedia` do webview, e prometer a
@@ -153,9 +189,9 @@ pub fn capacidades_de_tela() -> Capacidades {
 /// `tela_nativa` com o `captura::mac` ainda em esqueleto.
 ///
 /// Por isso a resposta vem do backend (`Backend::implementado`), e não do
-/// `cfg`: no dia em que o ScreenCaptureKit entrar, o macOS vira `nativo: true`
-/// com tudo o que vem junto — backend, recorte, som, permissão — sem ninguém
-/// precisar lembrar deste arquivo.
+/// `cfg`: no dia em que o `captura::mac` também estiver implementado, o
+/// macOS vira `nativo: true` com tudo o que vem junto — backend, recorte,
+/// som, permissão — sem ninguém precisar lembrar deste arquivo.
 #[cfg(tela_nativa)]
 fn capacidades() -> Capacidades {
     let backend = captura::backend();
@@ -181,13 +217,17 @@ fn permissao() -> Permissao {
     Permissao::NaoPrecisa
 }
 
-/// No macOS a resposta verdadeira vem do TCC, e lê-la é outro cartão. Até lá,
-/// `Faltando` é o palpite conservador: responder `Concedida` sem ter
-/// perguntado devolveria uma grade vazia e sem explicação — exatamente o
-/// defeito que este eixo existe para evitar.
+/// No macOS a resposta vem do TCC de verdade, via
+/// `CGPreflightScreenCaptureAccess` (`sck::tem_permissao`) — sem chamar
+/// `CGRequestScreenCaptureAccess`, que dispararia o diálogo do sistema; isto
+/// aqui só lê o estado atual.
 #[cfg(all(tela_nativa, target_os = "macos"))]
 fn permissao() -> Permissao {
-    Permissao::Faltando
+    if sck::tem_permissao() {
+        Permissao::Concedida
+    } else {
+        Permissao::Faltando
+    }
 }
 
 #[cfg(not(tela_nativa))]
