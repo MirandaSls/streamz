@@ -2457,10 +2457,11 @@ function rearmarDetectorLocal() {
  * O aparelho de entrada a pedir ao navegador — com `"default"` **resolvido**.
  *
  * O `"default"` do Chromium não é um microfone: é um ponteiro para o que o
- * sistema chamar de padrão agora, e a mesma lista traz o aparelho de verdade
- * numa segunda entrada, com o mesmo `groupId` (é o que o Jitsi usa desde o bug
- * 997689 do Chrome, e o que o Element Call faz antes de capturar). Resolver
- * tem duas consequências boas aqui: a captura passa a apontar para um aparelho
+ * sistema chamar de padrão agora. Quem resolve o aparelho físico por trás
+ * desse apelido é a `useVoiceDevicesStore` (`entradaPadrao`, casando pelo
+ * mesmo `groupId` — é o que o Jitsi usa desde o bug 997689 do Chrome, e o que
+ * o Element Call faz antes de capturar); esta função só repassa. Resolver tem
+ * duas consequências boas: a captura passa a apontar para um aparelho
  * concreto — e não para um alias que o sistema pode remapear no meio da
  * chamada, encerrando a faixa — e o `deviceId` vai **sempre explícito**, o que
  * importa porque `LocalTrack.restart` do livekit-client monta
@@ -2468,26 +2469,16 @@ function rearmarDetectorLocal() {
  * reabertura do SDK jogaria fora o processamento inteiro.
  *
  * Quando não dá para resolver (Firefox e Safari não publicam a entrada
- * `"default"`; lista ainda anônima, sem permissão) devolvemos `undefined` e o
- * comportamento é o de antes. Não inventamos "o primeiro da lista": aí sim
- * seria escolher um microfone no lugar da pessoa.
+ * `"default"`; lista ainda anônima, sem permissão) `entradaPadrao` vem `null`
+ * e devolvemos `undefined` — comportamento igual ao de antes. Não inventamos
+ * "o primeiro da lista": aí sim seria escolher um microfone no lugar da
+ * pessoa.
  */
 function aparelhoDeEntrada(): string | undefined {
-  const { inputId, inputs } = useVoiceDevicesStore.getState();
+  const { inputId, entradaPadrao } = useVoiceDevicesStore.getState();
   // escolha explícita de um aparelho concreto: nada a resolver
   if (inputId && inputId !== "default") return inputId;
-  const padrao = inputs.find((d) => d.deviceId === "default");
-  if (!padrao?.groupId) return undefined;
-  const fisico = inputs.find(
-    (d) =>
-      d.groupId === padrao.groupId &&
-      d.deviceId !== "default" &&
-      // `communications` é o outro alias do Chromium (o "dispositivo de
-      // comunicação" do Windows), e tem o mesmo problema do `default`
-      d.deviceId !== "communications" &&
-      d.deviceId !== "",
-  );
-  return fisico?.deviceId;
+  return entradaPadrao ?? undefined;
 }
 
 /**
@@ -2969,20 +2960,30 @@ if (typeof window !== "undefined" && isTauri()) {
 // ela só troca no próximo `setCameraEnabled`, porque republicar vídeo no meio
 // de uma frase pisca a imagem para todo mundo.
 if (typeof window !== "undefined") {
-  let anteriores = "";
+  let entradaAnterior = "";
+  let saidaAnterior = "";
   useVoiceDevicesStore.subscribe((devices) => {
-    const chave = `${devices.inputId}|${devices.outputId}`;
-    if (chave === anteriores) return;
-    anteriores = chave;
+    // A chave de entrada segue o aparelho **efetivo**, não a escolha bruta:
+    // com "Padrão do sistema" (`inputId` null) o alias em si nunca muda, mas
+    // `entradaPadrao` muda quando o usuário troca o microfone padrão do SO no
+    // meio da call — sem isso a captura ficava presa no aparelho antigo.
+    const entrada = devices.inputId ?? devices.entradaPadrao ?? "";
+    const saida = devices.outputId ?? "";
+    const mudouEntrada = entrada !== entradaAnterior;
+    const mudouSaida = saida !== saidaAnterior;
+    entradaAnterior = entrada;
+    saidaAnterior = saida;
+    if (!mudouEntrada && !mudouSaida) return;
     const room = sala;
     if (!room) return;
     // A entrada passa pelo dono da faixa, que reinicia a captura com a cadeia
     // junto — e não por `switchActiveDevice`, que mexeria na faixa por baixo
     // dele. Reiniciar a faixa troca a identidade dela sem emitir
     // `LocalTrackPublished`: sem rearmar, o anel de fala local morre ao trocar
-    // de microfone.
-    void republicarMicrofone(useVoice.getState().audio);
-    if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
+    // de microfone. Separado de saída para não reabrir o microfone numa troca
+    // de fone/caixa e vice-versa.
+    if (mudouEntrada) void republicarMicrofone(useVoice.getState().audio);
+    if (mudouSaida && devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
   });
 }
 

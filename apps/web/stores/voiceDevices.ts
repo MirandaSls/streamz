@@ -88,6 +88,12 @@ export interface VoiceDevicesState {
    */
   saidaSelecionavel: boolean;
   motivo: MotivoDeMidia;
+  /**
+   * O aparelho físico para o qual o "Padrão do sistema" aponta agora, ou
+   * `null` quando o navegador não conta (Firefox, Safari, ou lista anônima
+   * sem "default"). Ver `resolverEntradaPadrao`.
+   */
+  entradaPadrao: string | null;
   setInput: (id: string | null) => void;
   setOutput: (id: string | null) => void;
   setCamera: (id: string | null) => void;
@@ -200,6 +206,37 @@ function temSetSinkId(): boolean {
  */
 export function aparelhosReais(lista: MediaDeviceInfo[]): MediaDeviceInfo[] {
   return lista.filter((d) => d.deviceId !== "default" && d.deviceId !== "communications");
+}
+
+/**
+ * Para qual aparelho físico o apelido "default" aponta agora.
+ *
+ * `aparelhoDeEntrada()` (em `voice.ts`) tentava achar "default" dentro de
+ * `inputs` desta store para resolvê-lo — mas `inputs` já passou por
+ * `aparelhosReais`, que tira exatamente "default" e "communications". A busca
+ * nunca batia. Esta função resolve **antes** desse filtro: o Chromium agrupa o
+ * apelido com o aparelho de verdade pelo mesmo `groupId`, e é isso que se usa
+ * para achar o físico por trás da linha "Padrão do sistema".
+ *
+ * Filtra por `kind === "audioinput"` porque `groupId` é compartilhado entre
+ * entrada e saída do mesmo hardware — sem o filtro, uma saída do grupo certo
+ * passaria por entrada.
+ *
+ * Firefox e Safari não publicam "default": `null` é o comportamento esperado
+ * ali, e nunca vale chutar "o primeiro aparelho da lista" para compensar.
+ */
+export function resolverEntradaPadrao(todos: MediaDeviceInfo[]): string | null {
+  const entradas = todos.filter((d) => d.kind === "audioinput");
+  const padrao = entradas.find((d) => d.deviceId === "default");
+  if (!padrao || !padrao.groupId) return null;
+  const fisico = entradas.find(
+    (d) =>
+      d.groupId === padrao.groupId &&
+      d.deviceId !== "default" &&
+      d.deviceId !== "communications" &&
+      d.deviceId !== "",
+  );
+  return fisico?.deviceId ?? null;
 }
 
 /** Um rótulo por dispositivo, igual em todo lugar que mostra a lista. */
@@ -342,6 +379,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   autorizado: false,
   saidaSelecionavel: true,
   motivo: "ok",
+  entradaPadrao: null,
 
   setInput: (id) => {
     preferidos = { ...preferidos, inputId: id };
@@ -378,6 +416,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
           inputs: [],
           outputs: [],
           cameras: [],
+          entradaPadrao: null,
         });
         return;
       }
@@ -430,6 +469,9 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
       const inputs = aparelhosReais(todos.filter((d) => d.kind === "audioinput"));
       const outputs = aparelhosReais(todos.filter((d) => d.kind === "audiooutput"));
       const cameras = aparelhosReais(todos.filter((d) => d.kind === "videoinput"));
+      // a partir de `todos`, a lista completa, e não de `inputs`: é o
+      // apelido "default" que resolve o físico, e `aparelhosReais` já o tirou
+      const entradaPadrao = resolverEntradaPadrao(todos);
       set({
         autorizado: temRotulo(todos),
         saidaSelecionavel: temSetSinkId(),
@@ -437,6 +479,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
         inputs,
         outputs,
         cameras,
+        entradaPadrao,
       });
 
       // Aparelho escolhido que não está na lista agora vira "padrão do
