@@ -5,11 +5,16 @@ import {
   explicarMidia,
   nomeEscolhido,
   opcoesDe,
+  resolverEntradaPadrao,
   useVoiceDevicesStore,
 } from "./voiceDevices";
 
-const d = (deviceId: string, label: string, kind: MediaDeviceKind = "audioinput") =>
-  ({ deviceId, label, kind, groupId: "g", toJSON: () => ({}) }) as MediaDeviceInfo;
+const d = (
+  deviceId: string,
+  label: string,
+  kind: MediaDeviceKind = "audioinput",
+  groupId = "g",
+) => ({ deviceId, label, kind, groupId, toJSON: () => ({}) }) as MediaDeviceInfo;
 
 describe("opcoesDe", () => {
   it("usa o nome do aparelho quando ele veio", () => {
@@ -51,6 +56,40 @@ describe("aparelhosReais", () => {
       d("abc", "Fone (Realtek)"),
     ];
     expect(aparelhosReais(lista).map((x) => x.deviceId)).toEqual(["abc"]);
+  });
+});
+
+describe("resolverEntradaPadrao", () => {
+  it("acha o físico pelo groupId do apelido 'default'", () => {
+    const lista = [
+      d("default", "Padrão - Fone (Realtek)", "audioinput", "g1"),
+      d("abc", "Fone (Realtek)", "audioinput", "g1"),
+      d("xyz", "Webcam Mic", "audioinput", "g2"),
+    ];
+    expect(resolverEntradaPadrao(lista)).toBe("abc");
+  });
+
+  it("ignora audiooutput do mesmo groupId: o grupo é compartilhado com a saída", () => {
+    const lista = [
+      d("default", "Padrão - Fone (Realtek)", "audioinput", "g1"),
+      d("saida-fone", "Fone (Realtek)", "audiooutput", "g1"),
+      d("mic-real", "Fone (Realtek)", "audioinput", "g1"),
+    ];
+    expect(resolverEntradaPadrao(lista)).toBe("mic-real");
+  });
+
+  it("sem entrada 'default' na lista é null — o caso do Firefox e do Safari", () => {
+    const lista = [d("abc", "Fone (Realtek)", "audioinput", "g1")];
+    expect(resolverEntradaPadrao(lista)).toBeNull();
+  });
+
+  it("grupo só com 'communications' ou vazio também é null: não chuta o primeiro da lista", () => {
+    const lista = [
+      d("default", "Padrão - Fone (Realtek)", "audioinput", "g1"),
+      d("communications", "Comunicações - Fone (Realtek)", "audioinput", "g1"),
+      d("", "", "audioinput", "g1"),
+    ];
+    expect(resolverEntradaPadrao(lista)).toBeNull();
   });
 });
 
