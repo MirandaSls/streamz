@@ -151,11 +151,7 @@ export default function VoiceChannelMembers({
                   coluna, que foi a queixa.
                 */
                 className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm transition-opacity hover:bg-interactive-background-hover hover:text-text-default ${
-                  e.deafened || e.serverDeaf
-                    ? "text-channels-default opacity-30"
-                    : ausente
-                      ? "text-channels-default opacity-60"
-                      : "text-channels-default"
+                  ausente ? "text-channels-default opacity-60" : "text-channels-default"
                 }`}
               >
                 {/* 24px (`sm`), medido no print. O anel de "está falando" é o
