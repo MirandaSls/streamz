@@ -16,6 +16,7 @@ import {
   type OrigemDaAbertura,
 } from "@/stores/voice-entrada";
 import { useVoice } from "@/stores/voice";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 
 /**
  * Canais do servidor ativo: lista, canal de texto aberto, canal de voz em que
@@ -207,7 +208,11 @@ export const useChannels = create<ChannelsState>((set, get) => {
       const chatAtivo = s.voiceChannelId === null
         ? s.channels.find((c) => c.id === s.activeChannelId)
         : undefined;
-      const chatDeTextoNaTela = !!chatAtivo && isTextChannel(chatAtivo);
+      // No celular não há coluna 3 ao lado: o toque sempre vem da lista de
+      // canais, nunca de um chat já na tela (mesmo com `activeChannelId`
+      // apontando pro 1º canal de texto desde o `loadForGuild`). Sem isto o
+      // toque num canal de voz entrava na call sem abrir o palco.
+      const chatDeTextoNaTela = !ehMobileAgora() && !!chatAtivo && isTextChannel(chatAtivo);
 
       // Canal de voz também é canal aberto: ele tem chat de texto próprio, e a
       // coluna 3 empilha o palco em cima da conversa dele (ver `CallSplit`).

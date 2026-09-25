@@ -38,6 +38,11 @@ vi.mock("@/stores/socket-adapter", () => ({
 
 vi.mock("@/stores/ui", () => ({ ui: { toast: vi.fn(), esquecerChatDaCall: vi.fn() } }));
 
+// leiaute: os testes de `select` cobrem o desktop por padrão (mock `false`);
+// o caso mobile troca isto para `true` e restaura no fim do próprio `it`.
+const ehMobile = vi.hoisted(() => vi.fn(() => false));
+vi.mock("@/hooks/useEhMobile", () => ({ ehMobileAgora: ehMobile }));
+
 import { useChannels } from "./channels";
 
 function canal(id: string, type: Channel["type"] = "TEXT"): Channel {
@@ -68,6 +73,9 @@ const outraSala = canal("outraSala", "VOICE");
 beforeEach(() => {
   vi.clearAllMocks();
   vozState.channelId = null;
+  // `clearAllMocks` não desfaz a implementação de `mockReturnValue`: sem isto,
+  // um teste que ligasse o mobile vazaria `true` para os testes seguintes.
+  ehMobile.mockReturnValue(false);
   useChannels.setState({
     guildId: null,
     channels: [],
@@ -244,5 +252,25 @@ describe("select", () => {
     useChannels.getState().select(sala, "clique", { som: false });
 
     expect(conectar).toHaveBeenCalledWith(sala, { som: false });
+  });
+
+  it("no celular, tocar num canal de voz abre o palco mesmo com um canal de texto ativo", () => {
+    // no `ShellMobile` o toque sempre vem da lista (nunca há chat na tela ao
+    // lado); `activeChannelId` aponta pro 1º canal de texto desde o
+    // `loadForGuild`, mas isso não pode impedir o palco de assumir a tela
+    ehMobile.mockReturnValue(true);
+    useChannels.setState({
+      guildId: "g1",
+      channels: [geral, sala],
+      activeChannelId: "geral",
+      voiceChannelId: null,
+    });
+
+    useChannels.getState().select(sala, "clique");
+
+    const s = useChannels.getState();
+    expect(s.activeChannelId).toBe("sala");
+    expect(s.voiceChannelId).toBe("sala");
+    expect(conectar).toHaveBeenCalledWith(sala, undefined);
   });
 });
