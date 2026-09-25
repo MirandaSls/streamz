@@ -16,7 +16,9 @@
 #
 # É idempotente: rodar duas vezes no mesmo commit reaproveita as imagens que já
 # existem no disco (use --refazer-imagens para forçar) e o `up -d` não mexe em
-# contêiner que já está na tag certa.
+# contêiner que já está na tag certa. Publicação bem-sucedida também faz a
+# própria faxina: apaga a worktree desta publicação e guarda só as
+# $IMAGENS_GUARDADAS imagens mais recentes de cada app (ver passo 5).
 #
 # O que NÃO cobre: o instalador `.exe` do desktop (job `instalador .exe` do
 # desktop.yml) e o `clippy` do Rust — os dois exigem Windows. Ver §3.6 e §5 do
@@ -28,6 +30,7 @@ STACK=/opt/stack/streamz
 REPO=ghcr.io/mirandasls
 IMAGEM_NODE=node:22
 ESPERA_SEGUNDOS=180
+IMAGENS_GUARDADAS=3  # imagens guardadas por app (as mais recentes) — dá para voltar versão sem rebuild
 
 # As mesmas `gh variable list` do repositório — NEXT_PUBLIC_* é embutida no
 # bundle em tempo de build, então elas moram no build-arg, não no .env.
@@ -67,7 +70,9 @@ log "alvo $alvo → $curto ($(git log -1 --format=%s "$commit" | cut -c1-60))"
 # ── worktree limpa do commit ─────────────────────────────────
 # NUNCA dar checkout em $STACK: o HEAD é compartilhado com as outras sessões e
 # é o que descreve o compose que está no ar. Cada publicação ganha sua worktree
-# destacada, reaproveitada se já existir no commit certo.
+# destacada, reaproveitada se já existir no commit certo — inclusive a de uma
+# publicação anterior que falhou no meio, já que só a bem-sucedida se apaga
+# sozinha no passo 5 (faxina).
 arvore="$STACK/.claude/worktrees/publicar-$curto"
 if [[ -d "$arvore" ]]; then
   atual="$(git -C "$arvore" rev-parse HEAD 2>/dev/null || true)"
@@ -178,6 +183,58 @@ fi
 saude="$(curl -fsS https://api.streamz.chat/api/health || echo '(sem resposta)')"
 web_http="$(curl -s -o /dev/null -w '%{http_code}' https://streamz.chat/ || echo '000')"
 
+# ── 5. faxina ──────────────────────────────────────────────────
+# Só chega aqui quem passou pela prova de saúde — publicação que falhou já saiu
+# por `falhar` (set -euo pipefail), então nada abaixo roda numa publicação
+# malsucedida. Nada aqui pode derrubar uma publicação que já deu certo: toda
+# falha de remoção vira só `log`, nunca `falhar`.
+
+# A worktree não é mais necessária: a imagem já foi buildada e o contêiner roda
+# dela, não da pasta. `--force` porque git recusaria remover com mudanças (não
+# deveria haver nenhuma, mas não é motivo para travar a faxina).
+if git -C "$STACK" worktree remove --force "$arvore" 2>/dev/null; then
+  git -C "$STACK" worktree prune --quiet 2>/dev/null || true
+  log "faxina: worktree removida ($arvore)"
+else
+  log "faxina: não consegui remover $arvore — verifique à mão"
+fi
+
+# Guarda só as $IMAGENS_GUARDADAS mais novas de cada app. A tag recém-publicada
+# e a que o contêiner está rodando agora nunca são apagadas, mesmo que por
+# algum motivo não estejam entre as mais novas (ex.: publicação de uma
+# referência antiga, voltando versão) — por isso elas contam posição na lista
+# mas pulam o `docker rmi` em vez de ficarem de fora da ordenação.
+guardadas=()
+for app in api web; do
+  imagem_em_uso="$(docker inspect -f '{{.Config.Image}}' "streamz-$app" 2>/dev/null || true)"
+  tags=()
+  # `sort -r` sobre `CreatedAt\tTag` funciona porque o timestamp do docker vem
+  # com largura fixa; `|| true` no fim evita que o `grep` sem match (nenhuma
+  # imagem `sha-*` ainda) derrube o script sob pipefail.
+  mapfile -t tags < <(
+    docker images "$REPO/streamz-$app" --format '{{.CreatedAt}}\t{{.Tag}}' \
+      | grep -E $'\t''sha-[0-9a-f]{7}$' \
+      | sort -r \
+      | cut -f2 \
+      || true
+  )
+  posicao=0
+  for t in "${tags[@]}"; do
+    [[ -z "$t" ]] && continue
+    ((++posicao))
+    imagem="$REPO/streamz-$app:$t"
+    if ((posicao <= IMAGENS_GUARDADAS)) || [[ "$t" == "$tag" ]] || [[ "$imagem" == "$imagem_em_uso" ]]; then
+      guardadas+=("$imagem")
+      continue
+    fi
+    if docker rmi "$imagem" >/dev/null 2>&1; then
+      log "faxina: imagem $imagem removida"
+    else
+      log "faxina: não consegui remover $imagem (provavelmente em uso) — deixei"
+    fi
+  done
+done
+
 echo
 log "publicado"
 printf '  imagens : %s/streamz-api:%s\n            %s/streamz-web:%s\n' "$REPO" "$tag" "$REPO" "$tag"
@@ -185,3 +242,4 @@ printf '  em pé   : %s\n' "$(docker ps --filter name=streamz --format '{{.Names
 printf '  health  : %s\n' "$saude"
 printf '  web     : HTTP %s\n' "$web_http"
 printf '  não fez : instalador .exe do desktop e clippy do Rust (exigem Windows)\n'
+printf '  guardadas: %s\n' "$(IFS=' '; echo "${guardadas[*]:-nenhuma}")"
