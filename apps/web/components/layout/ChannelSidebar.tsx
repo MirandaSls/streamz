@@ -499,7 +499,11 @@ export default function ChannelSidebar() {
    */
   function ocultoPorSilencio(channel: Channel): boolean {
     if (!ocultarSilenciados) return false;
-    if (channel.id === activeChannelId || channel.id === voiceChannelId) return false;
+    // `vozAqui` cobre o intervalo entre o 1º clique (já conectado) e o palco
+    // montado (`voiceChannelId`, só no 2º clique) — sem isso a linha some da
+    // coluna assim que a call entra, mesmo com a pessoa dentro dela.
+    if (channel.id === activeChannelId || channel.id === voiceChannelId || channel.id === vozAqui)
+      return false;
     if (channel.mentionCount > 0) return false;
     return estaSilenciado(channel);
   }
@@ -601,7 +605,9 @@ export default function ChannelSidebar() {
       (c) =>
         canalVisivel({
           recolhida: fechada,
-          ativo: c.id === activeChannelId || c.id === voiceChannelId,
+          // mesmo motivo do `ocultoPorSilencio` acima: conta como ativo desde
+          // o 1º clique, antes do palco (`voiceChannelId`) existir.
+          ativo: c.id === activeChannelId || c.id === voiceChannelId || c.id === vozAqui,
           naoLido: !estaSilenciado(c) && isUnread(c),
           mencoes: c.mentionCount,
         }) && !ocultoPorSilencio(c),
