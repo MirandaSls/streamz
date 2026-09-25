@@ -364,6 +364,18 @@ function VideoNaJanela({
       autoPlay
       playsInline
       muted
+      // Janela solta é outro `document`: o CSS global do app não chega nela,
+      // e o WKWebView do app de Mac desenha o botão nativo de play/pause por
+      // cima do vídeo mesmo sem o atributo `controls` — os três atributos
+      // abaixo tiram os controles nativos (inclusive PiP e AirPlay/Cast, que
+      // não fazem sentido numa faixa ao vivo sem origem para retomar).
+      controls={false}
+      disablePictureInPicture
+      disableRemotePlayback
+      // Alguém consegue pausar mesmo sem controles (barra de espaço com o
+      // vídeo focado, por exemplo); como no Discord, a faixa ao vivo nunca
+      // fica pausada.
+      onPause={(e) => e.currentTarget.play().catch(() => {})}
       // `contain` sempre: numa janela que a pessoa redimensiona à vontade,
       // cortar a borda de uma tela é cortar o texto que ela abriu para ler
       className={`h-full w-full bg-black object-contain ${espelhar ? "-scale-x-100" : ""}`}
