@@ -1085,3 +1085,78 @@ function extensaoDoNome(nome: string): string {
   const extensao = ponto > 0 ? nome.slice(ponto + 1).toLowerCase() : "";
   return /^[a-z0-9]{1,5}$/.test(extensao) ? extensao : "png";
 }
+
+// ── Touch Bar (macOS) ───────────────────────────────────────────────────────
+
+/** O que a Touch Bar mostra no lugar dos controles de mídia do WKWebView. */
+export interface EstadoDaTouchBar {
+  mudo: boolean;
+  surdo: boolean;
+  camera: boolean;
+  tela: boolean;
+}
+
+/** Botão tocado na Touch Bar (`"touch-bar:acao"`). */
+export type AcaoDaTouchBar = "mudo" | "surdo" | "camera" | "tela" | "sair";
+
+const ACOES_DA_TOUCH_BAR: readonly AcaoDaTouchBar[] = [
+  "mudo",
+  "surdo",
+  "camera",
+  "tela",
+  "sair",
+];
+
+/**
+ * Troca a Touch Bar pelos nossos botões de call (mudo, surdo, câmera, tela,
+ * desligar). `null` devolve a barra ao WebKit — é o estado de "sem call".
+ *
+ * Só no macOS (`ehMacNoTauri()`): nas outras plataformas não há Touch Bar, e o
+ * comando nem existe do lado Rust. Best-effort, como o resto desta ponte — a
+ * barra é enfeite, não pode derrubar a call.
+ */
+export async function atualizarTouchBar(estado: EstadoDaTouchBar | null): Promise<void> {
+  if (!ehMacNoTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("atualizar_touch_bar", { estado });
+  } catch {
+    // sem a ponte, a Touch Bar fica com os controles padrão do WebKit
+  }
+}
+
+/**
+ * Ouve o toque num botão da Touch Bar. Fora do macOS é no-op (devolve função
+ * vazia): não há barra, não há evento.
+ *
+ * Payload desconhecido é ignorado — um app nativo mais novo que este bundle da
+ * web poderia mandar uma ação que ainda não existe aqui.
+ *
+ * O `unlisten` tem de funcionar mesmo chamado antes do `listen()` resolver
+ * (mesma corrida de `ouvirTelaEncerrada`/`ouvirSaidaDoApp`): `cancelado` marca
+ * a intenção na hora, e a função nativa de parar é aplicada assim que o
+ * `import()`/`listen()` assíncrono finalmente chega.
+ */
+export function ouvirTouchBar(ouvinte: (acao: AcaoDaTouchBar) => void): () => void {
+  if (!ehMacNoTauri()) return () => {};
+  let parar: (() => void) | null = null;
+  let cancelado = false;
+  void (async () => {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const desligar = await listen<string>("touch-bar:acao", ({ payload }) => {
+        if ((ACOES_DA_TOUCH_BAR as readonly string[]).includes(payload)) {
+          ouvinte(payload as AcaoDaTouchBar);
+        }
+      });
+      if (cancelado) desligar();
+      else parar = desligar;
+    } catch {
+      // sem o evento, os botões da Touch Bar ficam mudos — degradado, não quebrado
+    }
+  })();
+  return () => {
+    cancelado = true;
+    parar?.();
+  };
+}

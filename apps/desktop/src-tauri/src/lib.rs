@@ -49,6 +49,13 @@ mod atenuacao;
 #[cfg(target_os = "linux")]
 mod permissoes_linux;
 
+// A Touch Bar do MacBook durante a call: mudo, ensurdecer, câmera, tela e
+// desligar no lugar dos controles de mídia do WKWebView. Só existe nesse
+// alvo — é o único sistema com Touch Bar, e a web só chama isto dentro do
+// app de Mac. Ver `src/touch_bar.rs`.
+#[cfg(target_os = "macos")]
+mod touch_bar;
+
 // Só o handshake de saída usa isto, e ele é desktop apenas (ver
 // `RunEvent::ExitRequested` em `run`).
 #[cfg(desktop)]
@@ -184,6 +191,8 @@ pub fn run() {
             tela::silenciar_audio_da_tela,
             suspender_atenuacao_do_windows,
             restaurar_atenuacao_do_windows,
+            #[cfg(target_os = "macos")]
+            touch_bar::atualizar_touch_bar,
         ])
         .setup(|app| {
             // --- Janela principal --------------------------------------------
