@@ -11,9 +11,12 @@ import { useMessages } from "@/stores/messages";
 import {
   ORIGEM_PADRAO,
   deveEntrarNaChamada,
+  deveTrocarATela,
+  type CliqueNoCanal,
   type OrigemDaAbertura,
 } from "@/stores/voice-entrada";
 import { useVoice } from "@/stores/voice";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 
 /**
  * Canais do servidor ativo: lista, canal de texto aberto, canal de voz em que
@@ -63,7 +66,11 @@ interface ChannelsState {
    * Abre o canal na coluna 3. `origem` diz de onde veio o pedido, e é o que
    * decide se um canal de VOZ também entra na chamada (ver `voice-entrada.ts`).
    */
-  select: (channel: Channel, origem?: OrigemDaAbertura) => void;
+  select: (
+    channel: Channel,
+    origem?: OrigemDaAbertura,
+    opcoes?: { som?: boolean },
+  ) => void;
   leaveVoice: () => void;
   create: (guildId: string, input: CreateChannelInput) => Promise<boolean>;
   rename: (channel: Channel) => Promise<void>;
@@ -185,17 +192,48 @@ export const useChannels = create<ChannelsState>((set, get) => {
       useMessages.getState().closeChannel();
     },
 
-    select: (channel, origem = ORIGEM_PADRAO) => {
+    select: (channel, origem = ORIGEM_PADRAO, opcoes) => {
+      // Tudo isto é lido **antes** de qualquer `set`: a pergunta "o que está
+      // na tela agora" só faz sentido com o estado de antes do clique.
+      const voz = useVoice.getState();
+      const abertura: Omit<CliqueNoCanal, "chatDeTextoNaTela"> = {
+        origem,
+        ehCanalDeVoz: channel.type === "VOICE",
+        jaConectadoAqui: voz.channelId === channel.id,
+      };
+      const s = get();
+      // sem voz em andamento, com um chat de texto de verdade aberto na
+      // coluna 3 — é a única situação em que entrar na call não pode levar
+      // a tela junto (ver `deveTrocarATela`)
+      const chatAtivo = s.voiceChannelId === null
+        ? s.channels.find((c) => c.id === s.activeChannelId)
+        : undefined;
+      // No celular não há coluna 3 ao lado: o toque sempre vem da lista de
+      // canais, nunca de um chat já na tela (mesmo com `activeChannelId`
+      // apontando pro 1º canal de texto desde o `loadForGuild`). Sem isto o
+      // toque num canal de voz entrava na call sem abrir o palco.
+      const chatDeTextoNaTela = !ehMobileAgora() && !!chatAtivo && isTextChannel(chatAtivo);
+
       // Canal de voz também é canal aberto: ele tem chat de texto próprio, e a
       // coluna 3 empilha o palco em cima da conversa dele (ver `CallSplit`).
       // Só `voiceChannelId` muda de significado entre os dois casos — é ele que
       // diz se há palco a montar.
-      set({
-        voiceChannelId: channel.type === "VOICE" ? channel.id : null,
-        activeChannelId: channel.id,
-      });
-      void useMessages.getState().open(channel.id);
-      void get().markRead(channel.id);
+      //
+      // Clicar num canal de voz com um chat de texto na tela **entra na
+      // chamada sem trocar a coluna 3** — a pessoa continua lendo o chat, só
+      // com o microfone aberto. O palco só assume a tela no segundo clique,
+      // já conectada ali (`jaConectadoAqui`): é esse segundo clique que passa
+      // por `deveTrocarATela` com `chatDeTextoNaTela` calculado de novo e
+      // encontra `false` para `chatAtivo`, porque a call agora é que está com
+      // `voiceChannelId` preenchido.
+      if (deveTrocarATela({ ...abertura, chatDeTextoNaTela })) {
+        set({
+          voiceChannelId: channel.type === "VOICE" ? channel.id : null,
+          activeChannelId: channel.id,
+        });
+        void useMessages.getState().open(channel.id);
+        void get().markRead(channel.id);
+      }
 
       // **Clicar no canal de voz entra na chamada** — é o clique do Discord, e
       // é este o caminho que o #131 tinha perdido junto com o `useEffect` de
@@ -203,15 +241,10 @@ export const useChannels = create<ChannelsState>((set, get) => {
       // vista; a tabela inteira está em `voice-entrada.ts`. A leitura da store
       // de voz é em tempo de clique, como o `ui.ts` faz com esta aqui: o laço de
       // importação entre as duas nunca chega a ser avaliado.
-      const voz = useVoice.getState();
-      if (
-        deveEntrarNaChamada({
-          origem,
-          ehCanalDeVoz: channel.type === "VOICE",
-          jaConectadoAqui: voz.channelId === channel.id,
-        })
-      ) {
-        void voz.connect(channel);
+      if (deveEntrarNaChamada(abertura)) {
+        // "Entrar sem som de entrada" repassa `som: false`; sem opções, o
+        // `connect` toca o aviso como sempre.
+        void voz.connect(channel, opcoes?.som === false ? { som: false } : undefined);
       }
     },
 

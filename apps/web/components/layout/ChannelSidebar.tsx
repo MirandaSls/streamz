@@ -175,17 +175,15 @@ export default function ChannelSidebar() {
   /**
    * "Entrar sem som de entrada" (menu de contexto do canal de VOZ, item G).
    *
-   * O clique normal é `select(canal, "clique")`: ele marca como lido, abre a
-   * coluna **e** entra na chamada tocando o som (`voice-entrada.ts`). Aqui a
-   * abertura é `"navegacao"` — mesma marcação de lido e mesma troca de coluna,
-   * mas ela **não** entra sozinha (só `"clique"` entra) — e quem entra é o
-   * `connect` direto, com `som: false`. As guardas de entrada (já conectado
-   * aqui, WebRTC indisponível) são as do próprio `connect`; não há checagem
-   * duplicada aqui, é o mesmo caminho do clique menos o aviso sonoro.
+   * É o mesmo caminho do clique normal — `select(canal, "clique", { som:
+   * false })` —, só sem o aviso sonoro de entrada (`voice-entrada.ts`). Quem
+   * decide se a coluna 3 troca de tela é o próprio `select`: se ela já estava
+   * num chat de texto, a call entra em segundo plano e o palco só abre no
+   * próximo clique; se já estava na voz (ou vazia), abre igual ao clique
+   * comum. Nenhuma regra é duplicada aqui.
    */
   function entrarSemSomDeEntrada(channel: Channel) {
-    select(channel, "navegacao");
-    void useVoice.getState().connect(channel, { som: false });
+    select(channel, "clique", { som: false });
   }
 
   /** "Duplicar canal" (F/G): cria uma cópia do canal na mesma categoria. */
@@ -501,7 +499,11 @@ export default function ChannelSidebar() {
    */
   function ocultoPorSilencio(channel: Channel): boolean {
     if (!ocultarSilenciados) return false;
-    if (channel.id === activeChannelId || channel.id === voiceChannelId) return false;
+    // `vozAqui` cobre o intervalo entre o 1º clique (já conectado) e o palco
+    // montado (`voiceChannelId`, só no 2º clique) — sem isso a linha some da
+    // coluna assim que a call entra, mesmo com a pessoa dentro dela.
+    if (channel.id === activeChannelId || channel.id === voiceChannelId || channel.id === vozAqui)
+      return false;
     if (channel.mentionCount > 0) return false;
     return estaSilenciado(channel);
   }
@@ -603,7 +605,9 @@ export default function ChannelSidebar() {
       (c) =>
         canalVisivel({
           recolhida: fechada,
-          ativo: c.id === activeChannelId || c.id === voiceChannelId,
+          // mesmo motivo do `ocultoPorSilencio` acima: conta como ativo desde
+          // o 1º clique, antes do palco (`voiceChannelId`) existir.
+          ativo: c.id === activeChannelId || c.id === voiceChannelId || c.id === vozAqui,
           naoLido: !estaSilenciado(c) && isUnread(c),
           mencoes: c.mentionCount,
         }) && !ocultoPorSilencio(c),

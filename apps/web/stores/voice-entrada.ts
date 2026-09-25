@@ -27,6 +27,9 @@ export type OrigemDaAbertura =
   /**
    * Clique na linha do canal, na coluna de canais. **A única que entra.** É o
    * que o Discord faz: o canal de voz não é uma tela para visitar, é a sala.
+   *
+   * Entrar não é sempre trocar a coluna 3: se ela estiver num chat de texto,
+   * o clique entra na call e deixa o chat na tela — ver `deveTrocarATela`.
    */
   | "clique"
   /**
@@ -82,4 +85,29 @@ export function deveEntrarNaChamada({
 }: AberturaDeCanal): boolean {
   if (!ehCanalDeVoz || jaConectadoAqui) return false;
   return origem === "clique";
+}
+
+export interface CliqueNoCanal extends AberturaDeCanal {
+  /** a coluna 3 mostra agora a conversa de um canal de texto (não um palco nem a vista de um canal de voz). */
+  chatDeTextoNaTela: boolean;
+}
+
+/**
+ * Abrir o canal também troca o que a coluna 3 mostra?
+ *
+ * Pedido do dono do produto: entrar numa call não é pedir para largar a
+ * leitura. Se a pessoa está lendo um chat de texto e clica num canal de voz,
+ * ela entra na chamada (`deveEntrarNaChamada`) mas continua vendo o chat —
+ * o palco (a grade da call) não aparece sozinho. Só quando ela clica de
+ * novo no canal em que já está — `jaConectadoAqui` true, `deveEntrarNaChamada`
+ * vira false — é que o clique deixa de ser "entrar" e vira o pedido explícito
+ * de ver o palco, e aí a tela troca.
+ *
+ * Fora desse caso (a coluna já mostra um palco, a vista de outro canal de
+ * voz, ou é canal de texto) nada muda: o comportamento de hoje continua,
+ * abre o canal clicado.
+ */
+export function deveTrocarATela(clique: CliqueNoCanal): boolean {
+  if (deveEntrarNaChamada(clique) && clique.chatDeTextoNaTela) return false;
+  return true;
 }

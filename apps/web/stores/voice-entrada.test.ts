@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ORIGEM_PADRAO, deveEntrarNaChamada, type OrigemDaAbertura } from "./voice-entrada";
+import {
+  ORIGEM_PADRAO,
+  deveEntrarNaChamada,
+  deveTrocarATela,
+  type OrigemDaAbertura,
+} from "./voice-entrada";
 
 /** Atalho: canal de voz, ninguém conectado, só a origem varia. */
 const aoAbrir = (origem: OrigemDaAbertura, jaConectadoAqui = false) =>
@@ -47,5 +52,89 @@ describe("deveEntrarNaChamada", () => {
   it("call site que não declara a origem não entra", () => {
     // o padrão erra para o lado de não abrir o microfone de ninguém
     expect(aoAbrir(ORIGEM_PADRAO)).toBe(false);
+  });
+});
+
+describe("deveTrocarATela", () => {
+  it("clique que entra na call com chat de texto na tela não troca a tela", () => {
+    // pedido do dono do produto: entrar na call não é largar a leitura
+    expect(
+      deveTrocarATela({
+        origem: "clique",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("segundo clique no canal em que já estou, com chat na tela, abre o palco", () => {
+    // já conectado: `deveEntrarNaChamada` vira false, o clique deixa de ser
+    // "entrar" e vira o pedido explícito de ver o palco
+    expect(
+      deveTrocarATela({
+        origem: "clique",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: true,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("clique que entra na call sem chat de texto na tela troca a tela — comportamento de hoje", () => {
+    // coluna já mostra palco ou a vista de outro canal de voz: nada muda
+    expect(
+      deveTrocarATela({
+        origem: "clique",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("balão com chat de texto na tela troca a tela — não entra na call, então a regra nova não se aplica", () => {
+    expect(
+      deveTrocarATela({
+        origem: "balao",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("navegação com chat de texto na tela troca a tela", () => {
+    expect(
+      deveTrocarATela({
+        origem: "navegacao",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("retomada (F5) com chat de texto na tela troca a tela", () => {
+    expect(
+      deveTrocarATela({
+        origem: "retomada",
+        ehCanalDeVoz: true,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("canal de texto (ehCanalDeVoz false) sempre troca a tela", () => {
+    // não entra na chamada de jeito nenhum, então a regra nova não entra em jogo
+    expect(
+      deveTrocarATela({
+        origem: "clique",
+        ehCanalDeVoz: false,
+        jaConectadoAqui: false,
+        chatDeTextoNaTela: true,
+      }),
+    ).toBe(true);
   });
 });
