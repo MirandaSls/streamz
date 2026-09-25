@@ -308,8 +308,8 @@ fn aplicar(
 ) -> Result<(), String> {
     let Some(estado) = estado else {
         // Fim da call. Nada de destruir a barra: a próxima call a reaproveita.
-        if EM_CALL.replace(false) {
-            reconsultar(webview);
+        if EM_CALL.get() {
+            reconsultar(webview, false);
         }
         return Ok(());
     };
@@ -335,8 +335,8 @@ fn aplicar(
         }
     });
 
-    if !EM_CALL.replace(true) {
-        reconsultar(webview);
+    if !EM_CALL.get() {
+        reconsultar(webview, true);
     }
     Ok(())
 }
@@ -427,14 +427,26 @@ unsafe extern "C-unwind" fn touch_bar_do_webview(este: *mut AnyObject, cmd: Sel)
     }
 }
 
-/// Avisa o AppKit (por KVO) que a `touchBar` do webview mudou. Ver o doc do
-/// módulo para o porquê de não usar o *first responder*.
-fn reconsultar(webview: &AnyObject) {
+/// Troca `EM_CALL` para `em_call` e avisa o AppKit (por KVO) que a
+/// `touchBar` do webview mudou. Ver o doc do módulo para o porquê de não usar
+/// o *first responder*.
+///
+/// A troca fica entre os dois avisos porque é o contrato do KVO: no
+/// `willChange…` o observador pode ler o valor antigo (opções `Prior`/`Old`)
+/// e, no `didChange…`, o novo. Trocando antes, os dois leriam a mesma barra e
+/// o sistema concluiria que nada mudou.
+fn reconsultar(webview: &AnyObject, em_call: bool) {
     let chave = ns_string!("touchBar");
     // SAFETY: métodos do protocolo informal de KVO, presentes em todo
-    // NSObject; a chave é uma NSString válida. Estamos na main thread.
+    // NSObject; a chave é uma NSString válida. Estamos na main thread. O
+    // getter pode ser chamado de dentro de qualquer um dos dois avisos, e só
+    // lê `Cell`s — nenhum empréstimo fica aberto aqui durante as chamadas.
     unsafe {
         let _: () = msg_send![webview, willChangeValueForKey: chave];
+    }
+    EM_CALL.set(em_call);
+    // SAFETY: idem acima; fecha o par aberto pelo `willChange…`.
+    unsafe {
         let _: () = msg_send![webview, didChangeValueForKey: chave];
     }
 }
