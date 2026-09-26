@@ -17,12 +17,13 @@
 //! e o fim natural (janela fechada) disputarem quem desliga o quê.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use livekit::options::{AudioEncoding, TrackPublishOptions, VideoEncoding};
 use livekit::prelude::*;
+use livekit::rtc_engine::lk_runtime::LkRuntime;
 use livekit::webrtc::audio_source::native::NativeAudioSource;
 use livekit::webrtc::native::yuv_helper;
 use livekit::webrtc::prelude::*;
@@ -164,6 +165,21 @@ struct Preparada {
 pub struct Transmissao {
     atual: Mutex<Option<EmCurso>>,
     preparada: Mutex<Option<Preparada>>,
+    /// Uma operação de cada vez entre `preparar`, `descartar`, `iniciar` e
+    /// `parar`. Os dois `Mutex` acima só protegem a troca do valor; entre o
+    /// `parar` do começo de `iniciar` e o `guardar` do fim há vários `await`,
+    /// e um duplo clique (ou trocar de fonte rápido) punha duas `Room` com a
+    /// mesma identidade `#tela` no ar, com a segunda descartando a primeira
+    /// sem desligar a thread dela. Do tokio porque é segurada através de
+    /// `await`.
+    trava: tokio::sync::Mutex<()>,
+    /// Referência forte à fábrica do WebRTC. O SDK guarda só um `Weak` dela:
+    /// sem ninguém segurando, cada sala que fecha derruba o
+    /// `PeerConnectionFactory` (threads, encoders, módulo de áudio) e a
+    /// próxima o recria dentro do nosso processo. Criada na primeira
+    /// preparação, não no boot — quem nunca transmite não paga por ela — e
+    /// vive até o app sair.
+    fabrica: OnceLock<Arc<LkRuntime>>,
 }
 
 impl Transmissao {
@@ -171,11 +187,24 @@ impl Transmissao {
         self.atual.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
 
-    fn guardar(&self, em_curso: EmCurso) {
-        *self.atual.lock().unwrap_or_else(|e| e.into_inner()) = Some(em_curso);
+    /// Guarda a transmissão nova e devolve a que estivesse no lugar, para
+    /// quem chama encerrá-la fora do runtime. Com a `trava` não deveria haver
+    /// nenhuma; se houver, sobrescrever soltaria a thread dela publicando numa
+    /// sala que ninguém mais fecha.
+    #[must_use]
+    fn guardar(&self, em_curso: EmCurso) -> Option<EmCurso> {
+        self.atual
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace(em_curso)
     }
 
-    fn transmitindo(&self) -> bool {
+    /// Mantém a fábrica do WebRTC viva daqui em diante (ver `fabrica`).
+    fn segurar_fabrica(&self) {
+        self.fabrica.get_or_init(LkRuntime::instance);
+    }
+
+    pub(crate) fn transmitindo(&self) -> bool {
         self.atual
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -189,8 +218,14 @@ impl Transmissao {
             .take()
     }
 
-    fn guardar_preparada(&self, preparada: Preparada) {
-        *self.preparada.lock().unwrap_or_else(|e| e.into_inner()) = Some(preparada);
+    /// Mesma ideia do `guardar`: devolve a sala pronta anterior para ser
+    /// fechada, em vez de deixá-la conectada como `#tela` fantasma.
+    #[must_use]
+    fn guardar_preparada(&self, preparada: Preparada) -> Option<Preparada> {
+        self.preparada
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace(preparada)
     }
 
     /// Já há uma sala pronta com esta credencial?
@@ -262,26 +297,37 @@ fn fechar_em_outra_thread(sala: Room) {
 /// única no LiveKit: uma segunda conexão com ela expulsaria a que está no ar.
 /// Reabrir o seletor para trocar de fonte cai no caminho de sempre.
 pub async fn preparar(estado: &Transmissao, preparo: Preparo) -> Result<(), String> {
+    let _vez = estado.trava.lock().await;
     if estado.transmitindo() || estado.tem_preparada(&preparo.url, &preparo.token) {
         return Ok(());
     }
-    descartar(estado).await;
+    descartar_sem_trava(estado).await;
+    estado.segurar_fabrica();
     let mut opcoes = RoomOptions::default();
     opcoes.auto_subscribe = false;
     let (sala, eventos) = Room::connect(&preparo.url, &preparo.token, opcoes)
         .await
         .map_err(|e| format!("não foi possível entrar na sala: {e}"))?;
-    estado.guardar_preparada(Preparada {
+    let antiga = estado.guardar_preparada(Preparada {
         url: preparo.url,
         token: preparo.token,
         sala,
         eventos,
     });
+    if let Some(antiga) = antiga {
+        let _ = antiga.sala.close().await;
+    }
     Ok(())
 }
 
 /// Derruba a sala pré-conectada, se houver: o seletor fechou sem escolha.
 pub async fn descartar(estado: &Transmissao) {
+    let _vez = estado.trava.lock().await;
+    descartar_sem_trava(estado).await;
+}
+
+/// O `descartar` para quem já está com a `trava` (o `preparar`).
+async fn descartar_sem_trava(estado: &Transmissao) {
     if let Some(preparada) = estado.tomar_preparada() {
         let _ = preparada.sala.close().await;
     }
@@ -292,11 +338,13 @@ pub async fn iniciar(
     estado: &Transmissao,
     pedido: Pedido,
 ) -> Result<Tempos, String> {
+    let _vez = estado.trava.lock().await;
     let comeco = Instant::now();
     let mut tempos = Tempos::default();
 
     // Uma transmissão por vez: começar outra é trocar de fonte.
-    parar(estado).await;
+    parar_sem_trava(estado).await;
+    estado.segurar_fabrica();
 
     let alvo = fontes::alvo(&pedido.fonte_id)
         .ok_or_else(|| "A janela ou tela escolhida não existe mais".to_string())?;
@@ -483,24 +531,37 @@ pub async fn iniciar(
             .ok()
     });
 
-    estado.guardar(EmCurso {
+    let antiga = estado.guardar(EmCurso {
         parar: parar_bandeira,
         thread,
         audio,
         faixa_audio,
     });
+    if let Some(antiga) = antiga {
+        esperar_fora_do_runtime(antiga).await;
+    }
     tempos.total_ms = comeco.elapsed().as_millis() as u64;
     Ok(tempos)
 }
 
 /// Para a transmissão em curso, se houver, e espera a thread sair da sala.
 pub async fn parar(estado: &Transmissao) {
+    let _vez = estado.trava.lock().await;
+    parar_sem_trava(estado).await;
+}
+
+/// O `parar` para quem já está com a `trava` (o `iniciar`).
+async fn parar_sem_trava(estado: &Transmissao) {
     if let Some(em_curso) = estado.tomar() {
-        // Esperar fora do runtime: a thread pode estar no meio de um
-        // `block_on(sala.close())`, e bloquear uma thread do tokio esperando
-        // por isso é pedir um impasse.
-        let _ = tauri::async_runtime::spawn_blocking(move || em_curso.encerrar()).await;
+        esperar_fora_do_runtime(em_curso).await;
     }
+}
+
+/// Esperar fora do runtime: a thread pode estar no meio de um
+/// `block_on(sala.close())`, e bloquear uma thread do tokio esperando por
+/// isso é pedir um impasse.
+async fn esperar_fora_do_runtime(em_curso: EmCurso) {
+    let _ = tauri::async_runtime::spawn_blocking(move || em_curso.encerrar()).await;
 }
 
 /// Fila da fonte de áudio, em ms (múltiplo de 10, exigência do SDK). É o
