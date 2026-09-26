@@ -12,10 +12,10 @@ import { persist } from "zustand/middleware";
  * padrão de outras preferências "deste aparelho, sobre outra pessoa" já
  * persistidas (`stores/sons.ts`, `stores/soundboard.ts`): sem rota no
  * contrato, guardadas por navegador — sobrevivem a um F5, mas não trocam de
- * máquina. `silenciados`/`volumes` de `stores/voice.ts` são parecidos, mas
- * ficam de fora daqui de propósito: são estado **da chamada em curso** (não
- * persistido), enquanto os dois campos abaixo são preferência que deveria
- * continuar valendo na próxima vez que a pessoa entrar numa sala.
+ * máquina. `silenciados`/`volumes` de `stores/voice.ts` são parecidos e
+ * também persistidos (chaves `voiceSilenciadosPorPessoa`/
+ * `voiceVolumesPorPessoa`); ficam de fora **desta** store só porque moram
+ * junto do resto do estado de voz, não porque sumam ao fechar a aba.
  *
  * A chave é o id do usuário, e o valor ausente (`false`) é o padrão — quem
  * nunca mexeu no menu continua ouvindo/vendo todo mundo.

@@ -587,6 +587,56 @@ function gravarNoStorage(chave: string, valor: string) {
   }
 }
 
+const VOLUMES_KEY = "voiceVolumesPorPessoa";
+const SILENCIADOS_KEY = "voiceSilenciadosPorPessoa";
+
+/** O mesmo clamp de `setVolume`, também usado para validar o que vem do storage. */
+export function clampVolume(volume: number): number {
+  return Math.max(0, Math.min(2, volume));
+}
+
+/**
+ * Volume por pessoa (Discord-like: lembrado entre sessões). JSON inválido,
+ * storage bloqueado ou uma entrada que não é `number` finito não derruba o
+ * resto — a entrada ruim some, e só.
+ */
+export function carregarVolumes(): Record<string, number> {
+  try {
+    const raw = lerDoStorage(VOLUMES_KEY);
+    if (!raw) return {};
+    const lido = JSON.parse(raw) as unknown;
+    if (typeof lido !== "object" || lido === null) return {};
+    const volumes: Record<string, number> = {};
+    for (const [userId, valor] of Object.entries(lido as Record<string, unknown>)) {
+      if (typeof valor === "number" && Number.isFinite(valor)) volumes[userId] = clampVolume(valor);
+    }
+    return volumes;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Quem eu silenciei localmente (lembrado entre sessões). Só `true` é guardado
+ * — `toggleSilenciado` apaga a chave em vez de gravar `false`, então qualquer
+ * outro valor lido daqui é lixo de fora e é descartado.
+ */
+export function carregarSilenciados(): Record<string, boolean> {
+  try {
+    const raw = lerDoStorage(SILENCIADOS_KEY);
+    if (!raw) return {};
+    const lido = JSON.parse(raw) as unknown;
+    if (typeof lido !== "object" || lido === null) return {};
+    const silenciados: Record<string, boolean> = {};
+    for (const [userId, valor] of Object.entries(lido as Record<string, unknown>)) {
+      if (valor === true) silenciados[userId] = true;
+    }
+    return silenciados;
+  } catch {
+    return {};
+  }
+}
+
 function carregarAudio(): AudioPrefs {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
@@ -845,8 +895,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     cameraFps: lerCameraFps(lerDoStorage(CAMERA_FPS_KEY)),
     audio: carregarAudio(),
     erroDeSupressao: null,
-    volumes: {},
-    silenciados: {},
+    volumes: carregarVolumes(),
+    silenciados: carregarSilenciados(),
     telaSilenciada: {},
     focado: null,
     focoAutomatico: true,
@@ -1594,12 +1644,27 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     setVolume: (userId, volume) =>
-      set((s) => ({ volumes: { ...s.volumes, [userId]: Math.max(0, Math.min(2, volume)) } })),
+      set((s) => {
+        const volumes = { ...s.volumes, [userId]: clampVolume(volume) };
+        gravarNoStorage(VOLUMES_KEY, JSON.stringify(volumes));
+        return { volumes };
+      }),
 
     toggleSilenciado: (userId) =>
-      set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
-    // mesmo tratamento de `silenciados`: vale enquanto a página estiver aberta,
-    // sem storage e sem zerar ao sair da sala
+      set((s) => {
+        const { [userId]: _fora, ...resto } = s.silenciados;
+        // só `true` é gravado — desmarcar apaga a chave em vez de guardar
+        // `false`, senão o storage cresceria para sempre com quem já foi
+        // silenciado e desmutado de novo
+        const silenciados = s.silenciados[userId] ? resto : { ...resto, [userId]: true };
+        gravarNoStorage(SILENCIADOS_KEY, JSON.stringify(silenciados));
+        return { silenciados };
+      }),
+    // ao contrário de `silenciados`, isto NÃO é persistido: vale só enquanto a
+    // página estiver aberta, e some ao sair da sala/dar F5. Silenciar a pessoa
+    // é uma preferência sobre alguém; silenciar a transmissão dela agora é
+    // reação a "está com música alta hoje" — não faz sentido lembrar disso na
+    // próxima vez que ela ligar a tela
     alternarTelaSilenciada: (userId) =>
       set((s) => ({ telaSilenciada: { ...s.telaSilenciada, [userId]: !s.telaSilenciada[userId] } })),
 
