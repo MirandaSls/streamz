@@ -64,6 +64,7 @@ export function getSocket(): Socket {
   });
 
   s.on("connect", () => {
+    console.info("[voz] socket conectado");
     tentouRenovar = false;
     for (const channelId of salas) s.emit(WS_EVENTS.CHANNEL_JOIN, channelId);
     if (jaConectou) {
@@ -82,6 +83,7 @@ export function getSocket(): Socket {
   s.on("connect_error", () => void renovarEReconectar(s));
 
   s.on("disconnect", (motivo) => {
+    console.info("[voz] socket caiu", { motivo });
     // o gateway derruba a conexão quando o token não valida; nesse caso o
     // Socket.IO não reconecta sozinho — quem fechou foi o servidor
     if (motivo === "io server disconnect") void renovarEReconectar(s);
@@ -103,6 +105,7 @@ export function getSocket(): Socket {
   // mesmo evento do botão "Sair", e o gateway já remove na hora, sem carência.
   // O `disconnect()` vem depois só para fechar o socket de propósito.
   ouvirSaidaDoApp(() => {
+    console.info("[voz] app saindo: voice.leave + disconnect");
     socket?.emit(WS_EVENTS.VOICE_LEAVE);
     socket?.disconnect();
   });

@@ -765,6 +765,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
    */
   function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
     const { channelId, guildId, call } = get();
+    console.info("[voz] sairDaSalaAtual", { motivo, channelId });
     // sair da call encerra o teste: ele existe para dizer "o outro lado vai te
     // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
     // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
@@ -783,7 +784,15 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         !!guildId && !!channelId && useChannels.getState().voiceChannelId === channelId,
     });
     // expulso não tem som: o que a pessoa ouve é o toast explicando
-    if (channelId && decisao.avisaGateway) tocarSom("sair");
+    const tocaSom = !!channelId && decisao.avisaGateway;
+    console.info("[voz] sairDaSalaAtual decisão", {
+      motivo,
+      channelId,
+      avisaGateway: decisao.avisaGateway,
+      fechaColuna: decisao.fechaColuna,
+      tocouSair: tocaSom,
+    });
+    if (tocaSom) tocarSom("sair");
     // `fecharSala` tira os ouvintes antes de desconectar, então o
     // `RoomEvent.Disconnected` do LiveKit não vem depois marcar queda de mídia
     fecharSala();
@@ -919,7 +928,15 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         conectadoEm: get().channelId,
         lembrada: salaLembrada(),
       });
-      if (!alvo) return;
+      if (!alvo) {
+        console.info("[voz] retomarSeReconectando", { achou: false });
+        return;
+      }
+      console.info("[voz] retomarSeReconectando", {
+        achou: true,
+        channelId: alvo.channelId,
+        guildId: alvo.guildId,
+      });
       // duas cargas podem terminar quase juntas (servidor ativo + sala
       // lembrada): a primeira a chegar aqui esquece a sala e a segunda não
       // acha nada. `connect` volta a lembrar
@@ -947,9 +964,27 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         (e) => e.user.id === evento.user.id,
       );
       // entrar e sair da **minha** sala tem som, como no Discord; movimento em
-      // outro canal é ruído para quem não está lá
-      if (!eu && evento.channelId === meuCanal && evento.connected !== jaEstava) {
-        tocarSom(evento.connected ? "alguem-entrou" : "alguem-saiu");
+      // outro canal é ruído para quem não está lá (por isso só logamos aqui
+      // dentro, e não para eventos de outras salas)
+      if (!eu && evento.channelId === meuCanal) {
+        if (evento.connected !== jaEstava) {
+          console.info("[voz] applyState som", {
+            som: evento.connected ? "alguem-entrou" : "alguem-saiu",
+            userId: evento.user.id,
+            channelId: evento.channelId,
+          });
+          tocarSom(evento.connected ? "alguem-entrou" : "alguem-saiu");
+        } else {
+          // `connected === jaEstava`: o som não toca. Isto é o que mostra o
+          // fantasma de carência — o evento de reconexão chegando como se
+          // nada tivesse mudado
+          console.info("[voz] applyState sem som (connected === jaEstava)", {
+            userId: evento.user.id,
+            channelId: evento.channelId,
+            connected: evento.connected,
+            reconnecting: evento.reconnecting,
+          });
+        }
       }
       set((s) => {
         const atual = s.states[evento.channelId] ?? [];
@@ -1025,14 +1060,26 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     connect: async (channel, opcoes) => {
       const anterior = get().channelId;
+      console.info("[voz] connect", {
+        channelId: channel.id,
+        guildId: channel.guildId,
+        anterior,
+        som: opcoes?.som,
+      });
       // já estou (ou estou entrando) nesta sala: o pedido não tem o que fazer.
       // Sem esta linha, o segundo clique no mesmo canal abria uma **segunda**
       // `Room` com a mesma identidade e o LiveKit derrubava a primeira — a
       // "queda de alguns segundos" que também levava a tela compartilhada
-      if (!opcoes?.forcar && jaNaChamada(instantaneo(get()), channel.id)) return;
+      if (!opcoes?.forcar && jaNaChamada(instantaneo(get()), channel.id)) {
+        console.info("[voz] connect retorno cedo: já estou na chamada", { channelId: channel.id });
+        return;
+      }
       // sem WebRTC não há sala a abrir: nem `voice.join` (os outros me veriam
       // numa chamada em que não estou), nem troca de sala
-      if (recusadoSemWebRTC({ guildId: channel.guildId, channelId: channel.id })) return;
+      if (recusadoSemWebRTC({ guildId: channel.guildId, channelId: channel.id })) {
+        console.info("[voz] connect retorno cedo: sem WebRTC", { channelId: channel.id });
+        return;
+      }
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
 
@@ -1062,7 +1109,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       lembrarSala({ channelId: channel.id, guildId: channel.guildId, name: channel.name ?? "" });
       // `som: false` é de quem já tocou o próprio aviso — hoje só o `movido`,
       // que tem som próprio e não pode soar como uma entrada que eu escolhi
-      if (opcoes?.som !== false) tocarSom("entrar");
+      const tocouEntrar = opcoes?.som !== false;
+      console.info("[voz] connect", { channelId: channel.id, tocouEntrar });
+      if (tocouEntrar) tocarSom("entrar");
 
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
@@ -1094,6 +1143,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     expulsoDaVoz: ({ channelId, novoCanalId }) => {
+      console.info("[voz] expulsoDaVoz", { channelId, novoCanalId });
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
       // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
@@ -1108,6 +1158,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     movidoDeCanal: async (evento) => {
+      console.info("[voz] movidoDeCanal", { channelId: evento.channelId, anterior: get().channelId });
       if (decidirMovido(evento, get().channelId) === "ignorar") return;
       // o servidor já me tirou do canal antigo e me pôs no novo: `movido` não
       // manda `voice.leave` (desfaria o move) nem toca o som de sair, e mantém
