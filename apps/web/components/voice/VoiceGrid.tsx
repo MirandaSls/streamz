@@ -25,6 +25,8 @@ import {
   melhorArranjo,
   palcoUsaFoco,
   posicionarGrade,
+  type Arranjo,
+  type Retangulo,
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -132,6 +134,21 @@ if (typeof window !== "undefined") {
 type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
 
 /**
+ * Id/sid e tipo (câmera, tela ou convite) de cada vaga, numa string estável.
+ *
+ * É só isto que decide quantas colunas a grade tem e o tamanho de cada tile
+ * (`melhorArranjo`/`posicionarGrade`, em `grid-layout.ts`) — nunca o estado de
+ * mídia (mudo, câmera ligada) de quem já está numa vaga. Serve de chave para o
+ * memo manual do leiaute (`memoDaGrade`, em `VoiceGrid`): mesma assinatura,
+ * mesmo arranjo, sem refazer a conta.
+ */
+function assinaturaDasCelulas(celulas: readonly Celula[]): string {
+  return celulas
+    .map((c) => (c.tipo === "tile" ? `t:${c.t.key}:${c.t.tela ? "tela" : "pessoa"}` : "convite"))
+    .join("|");
+}
+
+/**
  * A transmissão que sobe ao destaque **sozinha**, ou `null` para deixar a
  * grade como está.
  *
@@ -178,6 +195,20 @@ export function estiloDaTira(
     height: FAIXA_ALTURA,
     ...(animar ? { transition: TRANSICAO_DE_REFLOW } : {}),
   };
+}
+
+/**
+ * A vaga de uma miniatura fora da vista da tira do modo foco.
+ *
+ * Mesmo tamanho fixo do `VoiceTile` (a vaga já vem pronta de `estiloDoTile`,
+ * aqui só o **conteúdo** muda), mas sem `<video>` nenhum: `TileDeVoz.tsx` não
+ * tem uma prop para pedir "não anexa vídeo" (e não é deste cartão criar uma
+ * ali), então o substituto mora aqui. Só aparece enquanto o
+ * `IntersectionObserver` da tira confirma que a miniatura está fora do campo
+ * de visão — ver `foraDeVista` em `VoiceGrid`.
+ */
+function MiniaturaForaDaVista() {
+  return <div className="h-full w-full rounded-lg bg-chat-background-default" aria-hidden="true" />;
 }
 
 export default function VoiceGrid({
@@ -358,6 +389,95 @@ export default function VoiceGrid({
     },
   };
 
+  // **Virtualização da tira de miniaturas do modo foco.** A tira rola de lado
+  // e pode ter miniaturas fora do campo de visão o tempo todo (dez pessoas na
+  // faixa de 188px cada) — cada uma com um `<video>` decodificando quadro que
+  // ninguém está vendo. O `IntersectionObserver` diz quais chaves estão fora
+  // da tira; só essas trocam `VoiceTile` por um retângulo vazio do mesmo
+  // tamanho (`MiniaturaForaDaVista`) — a vaga continua lá (`estiloDoTile` não
+  // muda), só o conteúdo caro some, e o scroll não pula.
+  //
+  // Começa tudo "dentro" (nada em `foraDeVista` no primeiro quadro, e nunca no
+  // servidor, onde não há `IntersectionObserver`): o observer é quem prova
+  // que uma miniatura está fora, nunca o contrário — assim a chamada nunca
+  // perde vídeo por engano antes de o navegador confirmar que ele não está à
+  // vista.
+  const [faixaEl, setFaixaEl] = useState<HTMLDivElement | null>(null);
+  const [foraDeVista, setForaDeVista] = useState<ReadonlySet<string>>(() => new Set());
+  // elemento montado de cada miniatura, para o observer saber o que observar
+  // assim que ele nasce (a montagem de um filho pode chegar antes do efeito
+  // que cria o observer rodar).
+  const miniaturasMontadasRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const observerDaFaixaRef = useRef<IntersectionObserver | null>(null);
+  // uma função de `ref` por chave, cacheada: um `ref` inline novo a cada
+  // render faria o React soltar o nó velho e pegar o novo em toda
+  // renderização, e cada uma dessas trocas mexe no observer — o oposto de "só
+  // recalcula quando muda".
+  const criadoresDeRefRef = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
+  function refDaMiniatura(chave: string) {
+    let fn = criadoresDeRefRef.current.get(chave);
+    if (!fn) {
+      fn = (el: HTMLDivElement | null) => {
+        const montadas = miniaturasMontadasRef.current;
+        const anterior = montadas.get(chave);
+        if (anterior && anterior !== el) observerDaFaixaRef.current?.unobserve(anterior);
+        if (el) {
+          montadas.set(chave, el);
+          observerDaFaixaRef.current?.observe(el);
+        } else {
+          montadas.delete(chave);
+        }
+      };
+      criadoresDeRefRef.current.set(chave, fn);
+    }
+    return fn;
+  }
+  useEffect(() => {
+    if (!faixaEl || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entradas) => {
+        setForaDeVista((atual) => {
+          let mudou = false;
+          const proximo = new Set(atual);
+          for (const entrada of entradas) {
+            const chave = (entrada.target as HTMLElement).dataset.miniatura;
+            if (!chave) continue;
+            if (entrada.isIntersecting) {
+              if (proximo.delete(chave)) mudou = true;
+            } else if (!proximo.has(chave)) {
+              proximo.add(chave);
+              mudou = true;
+            }
+          }
+          return mudou ? proximo : atual;
+        });
+      },
+      // ~1 miniatura de folga de cada lado: decodifica um pouco antes de
+      // entrar de fato na tira, para o vídeo não "acender" durante o scroll.
+      { root: faixaEl, rootMargin: `0px ${FAIXA_LARGURA + FAIXA_GAP}px` },
+    );
+    observerDaFaixaRef.current = observer;
+    for (const el of miniaturasMontadasRef.current.values()) observer.observe(el);
+    return () => {
+      observer.disconnect();
+      observerDaFaixaRef.current = null;
+    };
+  }, [faixaEl]);
+
+  // O arranjo da grade (`melhorArranjo`/`posicionarGrade`, mais abaixo) só
+  // depende da CONTAGEM, do TIPO de cada vaga e do TAMANHO do palco — nunca do
+  // estado de mídia de quem já está nele. `s.tick` sobe em ~12 eventos do
+  // Room, silenciar/dessilenciar entre eles: sem este memo manual, apertar o
+  // mudo de alguém recalculava colunas, linhas e todos os retângulos da grade
+  // à toa. `useMemo` não serve aqui porque as duas contas moram em ramos
+  // condicionais (foco × grade) depois de vários `return` — um Hook não pode
+  // ficar num ramo que nem sempre executa. A saída é este cache manual num
+  // `ref`, comparado por uma assinatura estável.
+  const memoDoFoco = useRef<{ assinatura: string; arranjo: Arranjo } | null>(null);
+  const memoDaGrade = useRef<{ assinatura: string; arranjo: Arranjo; vagas: Retangulo[] } | null>(
+    null,
+  );
+
   if (tiles.length === 0) {
     return (
       <div className="grid h-full place-items-center px-6 text-center">
@@ -450,7 +570,18 @@ export default function VoiceGrid({
     // O medido é a área **inteira** do palco (a raiz), e não o invólucro do
     // destaque: a decisão entre foco e grade precisa de uma medida que não
     // dependa do leiaute escolhido, ou os dois modos se mediriam um ao outro.
-    const foco = melhorArranjo(1, tamanho.largura, alturaDoDestaque(tamanho.altura, resto.length));
+    //
+    // Memo manual (ver o comentário de `memoDoFoco` lá em cima): o destaque só
+    // muda de tamanho quando `resto.length` ou o palco medido mudam — mute de
+    // quem está na tira não é nenhum dos dois.
+    const assinaturaDoFoco = `${resto.length}@${tamanho.largura}x${tamanho.altura}`;
+    let foco: Arranjo;
+    if (memoDoFoco.current?.assinatura === assinaturaDoFoco) {
+      foco = memoDoFoco.current.arranjo;
+    } else {
+      foco = melhorArranjo(1, tamanho.largura, alturaDoDestaque(tamanho.altura, resto.length));
+      memoDoFoco.current = { assinatura: assinaturaDoFoco, arranjo: foco };
+    }
     return (
       <div
         ref={setPalco}
@@ -479,8 +610,11 @@ export default function VoiceGrid({
              explícita é o que mantém o comportamento de antes — centralizada
              enquanto cabe (`justify-center`) e rolável de lado quando não cabe
              (`overflow-x-auto`), que é o que o Discord faz com dez miniaturas.
-             Por que essa largura também **anima**: `estiloDaTira`. */
+             Por que essa largura também **anima**: `estiloDaTira`. É também a
+             raiz do `IntersectionObserver` que decide quem, aqui dentro, ainda
+             merece `<video>` — ver o comentário de `faixaEl` lá em cima. */
           <div
+            ref={setFaixaEl}
             className="flex shrink-0 justify-center overflow-x-auto"
             style={{ height: FAIXA_ALTURA }}
           >
@@ -488,6 +622,8 @@ export default function VoiceGrid({
               {resto.map((t, i) => (
                 <div
                   key={t.key}
+                  ref={refDaMiniatura(t.key)}
+                  data-miniatura={t.key}
                   className="absolute"
                   style={estiloDoTile(
                     {
@@ -499,7 +635,11 @@ export default function VoiceGrid({
                     animar,
                   )}
                 >
-                  <VoiceTile tile={t} {...acoes} compacto />
+                  {foraDeVista.has(t.key) ? (
+                    <MiniaturaForaDaVista />
+                  ) : (
+                    <VoiceTile tile={t} {...acoes} compacto />
+                  )}
                 </div>
               ))}
             </div>
@@ -518,12 +658,24 @@ export default function VoiceGrid({
     ...(comConvite ? [{ tipo: "convite" as const }] : []),
   ];
 
-  const arranjo = melhorArranjo(celulas.length, tamanho.largura, tamanho.altura);
-  // As linhas deixaram de ser elementos: cada célula recebe o retângulo pronto
-  // e fica solta sobre o palco. É o que dá identidade a um tile entre dois
-  // leiautes — o mesmo nó do DOM muda de coordenada, e o CSS interpola — em vez
-  // de o navegador redesenhar fileiras com um filho a mais ou a menos.
-  const vagas = posicionarGrade(celulas.length, arranjo, tamanho.largura, tamanho.altura);
+  // Memo manual (ver `memoDaGrade` lá em cima): a assinatura carrega id/sid e
+  // tipo (câmera/tela/convite) de cada vaga, não o estado de mídia — silenciar
+  // alguém não muda quantas colunas a grade tem.
+  const assinaturaDaGrade = `${assinaturaDasCelulas(celulas)}@${tamanho.largura}x${tamanho.altura}`;
+  let arranjo: Arranjo;
+  let vagas: Retangulo[];
+  if (memoDaGrade.current?.assinatura === assinaturaDaGrade) {
+    ({ arranjo, vagas } = memoDaGrade.current);
+  } else {
+    // As linhas deixaram de ser elementos: cada célula recebe o retângulo
+    // pronto e fica solta sobre o palco. É o que dá identidade a um tile
+    // entre dois leiautes — o mesmo nó do DOM muda de coordenada, e o CSS
+    // interpola — em vez de o navegador redesenhar fileiras com um filho a
+    // mais ou a menos.
+    arranjo = melhorArranjo(celulas.length, tamanho.largura, tamanho.altura);
+    vagas = posicionarGrade(celulas.length, arranjo, tamanho.largura, tamanho.altura);
+    memoDaGrade.current = { assinatura: assinaturaDaGrade, arranjo, vagas };
+  }
 
   return (
     <div ref={setPalco} className="relative h-full min-h-0 overflow-hidden">
