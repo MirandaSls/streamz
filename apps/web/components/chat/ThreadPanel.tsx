@@ -98,6 +98,18 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
     window.addEventListener("pointerup", soltar);
   }, []);
 
+  // inline antes recriava a cada render, invalidando o React.memo do
+  // MessageItem em MessageList; `remove`/`toggleReaction` já são estáveis
+  // (ações do zustand), só o wrapper local precisava de useCallback
+  const onDelete = useCallback(
+    (id: string, semConfirmar?: boolean) => void remove(id, semConfirmar),
+    [remove],
+  );
+  const onToggleReaction = useCallback(
+    (id: string, emoji: string) => toggleReaction(id, emoji, user?.id),
+    [toggleReaction, user?.id],
+  );
+
   if (!parentId) return null;
   const replies = Math.max(0, items.length - 1);
   // a raiz é o primeiro item da thread; dela sai o nome quando a thread tem um
@@ -191,8 +203,8 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         canModerate={canModerate}
         threadId={parentId}
         onEdit={edit}
-        onDelete={(id, semConfirmar) => void remove(id, semConfirmar)}
-        onToggleReaction={(id, emoji) => toggleReaction(id, emoji, user?.id)}
+        onDelete={onDelete}
+        onToggleReaction={onToggleReaction}
         onRetry={retry}
         onDiscard={discard}
         emptyText="Thread vazia."

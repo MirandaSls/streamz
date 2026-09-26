@@ -3,7 +3,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { ArrowDown } from "@/components/ui/icones";
 import { isSystemMessage, type Message } from "@streamz/shared";
-import MessageItem from "@/components/MessageItem";
+import MessageItem, { useMembrosDaTimeline } from "@/components/MessageItem";
 import BlockedMessages from "@/components/chat/BlockedMessages";
 import IgnoredMessages from "@/components/chat/IgnoredMessages";
 import { useFronteiraNaoLida, useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
@@ -211,6 +211,9 @@ export default function MessageList({
     () => new Set((ignoradosList ?? []).map((u) => u.id)),
     [ignoradosList],
   );
+  // mapas de membros calculados uma vez para a lista toda, não por mensagem
+  // (ver `MembrosDaTimeline`)
+  const membros = useMembrosDaTimeline();
   const fronteira = useFronteiraNaoLida(channelId);
   const sair = useMarcadorNaoLido((s) => s.sair);
 
@@ -406,6 +409,7 @@ export default function MessageList({
               {bloco.kind === "bloqueadas" ? (
                 <BlockedMessages
                   items={bloco.items}
+                  membros={membros}
                   currentUserId={currentUserId}
                   canModerate={canModerate}
                   onEdit={onEdit}
@@ -418,6 +422,7 @@ export default function MessageList({
               ) : bloco.kind === "ignoradas" ? (
                 <IgnoredMessages
                   items={bloco.items}
+                  membros={membros}
                   currentUserId={currentUserId}
                   canModerate={canModerate}
                   onEdit={onEdit}
@@ -430,6 +435,7 @@ export default function MessageList({
               ) : (
                 <MessageItem
                   message={bloco.message}
+                  membros={membros}
                   grouped={agrupada}
                   primeiro={index === 0}
                   threadId={threadId}

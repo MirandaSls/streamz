@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { memo, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Apps,
   Copy,
@@ -24,6 +25,7 @@ import {
 import type { ComandoDeApp, Message, PublicUser } from "@streamz/shared";
 import {
   Permission,
+  TIPO_DE_COMANDO_DE_APP,
   WS_EVENTS,
   displayNameOf,
   extractFirstUrl,
@@ -77,7 +79,7 @@ import { Markdown } from "@/lib/markdown";
 import { useNomeParaMim } from "@/lib/nome-para-mim";
 import { aplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
-import { useComandosDeContexto, useComandosDeMensagem } from "@/stores/comandos-de-contexto";
+import { useComandosDeContexto } from "@/stores/comandos-de-contexto";
 import { useGuilds } from "@/stores/guilds";
 import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useAuthorColor, usePermissions, usePodeTalvez } from "@/stores/permissions";
@@ -92,6 +94,40 @@ import { anchorOf, ui, useUI, type Anchor, type MenuItem } from "@/stores/ui";
 
 /** Sem cargos: referência estável, para o seletor do zustand não oscilar. */
 const SEM_CARGOS: string[] = [];
+/** Sem comandos (conversa direta): idem. */
+const SEM_COMANDOS: ComandoDeApp[] = [];
+
+/**
+ * O que a timeline inteira sabe dos membros do servidor: `@usuario` → nome de
+ * exibição (menções) e id → usuário (tooltip de quem reagiu).
+ *
+ * Mora fora do `MessageItem` de propósito: é igual para todas as mensagens do
+ * canal, e com cada item assinando `members` inteiro qualquer mudança na lista
+ * de membros (entrada, saída, troca de cargo) re-renderizava e reconstruía os
+ * dois mapas até 500 vezes. A lista calcula uma vez e passa a mesma referência
+ * — o que também mantém o `memo` do item de pé.
+ */
+export interface MembrosDaTimeline {
+  displayNames: Record<string, string>;
+  /** membros do servidor mais eu; o autor de cada mensagem o item acrescenta. */
+  conhecidos: Map<string, PublicUser>;
+}
+
+/** Calcula `MembrosDaTimeline` uma vez para a lista toda. */
+export function useMembrosDaTimeline(): MembrosDaTimeline {
+  const members = useGuilds((s) => s.members);
+  const me = useAuth((s) => s.user);
+  return useMemo(() => {
+    const displayNames: Record<string, string> = {};
+    const conhecidos = new Map<string, PublicUser>();
+    for (const m of members) {
+      displayNames[m.user.username.toLowerCase()] = displayNameOf(m.user);
+      conhecidos.set(m.user.id, m.user);
+    }
+    if (me) conhecidos.set(me.id, me);
+    return { displayNames, conhecidos };
+  }, [members, me]);
+}
 
 /** Reações rápidas da barra de hover (três no print `2026-08-31 111402.png`). */
 const RAPIDAS_NA_BARRA = 3;
@@ -133,8 +169,9 @@ const donoDoMenu = (id: string) => `mensagem:${id}`;
  * - enviando: `opacity: .5` (`.isSending_c19a55`); falhou: texto em
  *   `--text-feedback-critical` (`.isFailed_c19a55`).
  */
-export default function MessageItem({
+function MessageItem({
   message,
+  membros,
   grouped = false,
   primeiro = false,
   threadId = null,
@@ -148,6 +185,8 @@ export default function MessageItem({
   onDiscard,
 }: {
   message: ChatMessage;
+  /** vem pronto da lista (`useMembrosDaTimeline`) — mesma referência para todos. */
+  membros: MembrosDaTimeline;
   grouped?: boolean;
   /** primeiro item desenhado na lista: a barra de ações não pode sair por cima. */
   primeiro?: boolean;
@@ -190,7 +229,6 @@ export default function MessageItem({
   const tamanhoEmoji = useSettings((s) => s.emojiSize);
   // "Copiar ID" só existe com o Modo Desenvolvedor ligado, como no Discord
   const modoDesenvolvedor = useSettings((s) => s.developerMode);
-  const members = useGuilds((s) => s.members);
   // o menu de contexto desta mensagem está aberto: a linha fica "selecionada"
   // (fundo de hover e barra à vista), como o `.selected__5126c` do Discord
   const selecionada = useUI((s) => s.contextMenu?.dono === donoDoMenu(message.id));
@@ -220,25 +258,31 @@ export default function MessageItem({
   // submenu nasce com o que já estiver no cache (`useComandosDeMensagem`) e
   // `garantir` dispara a carga por baixo — o próximo hover/clique já vê a
   // lista pronta (`stores/comandos-de-contexto.ts`).
-  const comandosDeMensagem = useComandosDeMensagem(message.guildId);
+  // `useShallow`: o `doTipo` filtra e devolve array novo a cada chamada (e a
+  // conversa direta, um `[]` novo). Com a igualdade padrão, qualquer mudança
+  // na store — o próprio `garantir` do hover marca `carregando` — re-renderizava
+  // todas as mensagens da lista; comparando o conteúdo, só quem mudou de fato.
+  const comandosDeMensagem = useComandosDeContexto(
+    useShallow((s) =>
+      message.guildId ? s.doTipo(message.guildId, TIPO_DE_COMANDO_DE_APP.MESSAGE) : SEM_COMANDOS,
+    ),
+  );
   function garantirComandosDeContexto() {
     if (message.guildId) useComandosDeContexto.getState().garantir(message.guildId);
   }
 
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
-  const displayNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const m of members) map[m.user.username.toLowerCase()] = displayNameOf(m.user);
-    return map;
-  }, [members]);
-  // quem reagiu: os membros do servidor mais o autor (basta para o tooltip)
-  const conhecidos = useMemo(() => {
-    const map = new Map<string, PublicUser>();
-    for (const m of members) map.set(m.user.id, m.user);
-    map.set(message.author.id, message.author);
-    if (me) map.set(me.id, me);
-    return map;
-  }, [members, message.author, me]);
+  const displayNames = membros.displayNames;
+  // quem reagiu: os membros do servidor, eu e o autor (basta para o tooltip).
+  // Só copia o mapa quando o autor não está nele (conversa direta, ex-membro):
+  // no caso comum o item reaproveita a referência da lista.
+  const conhecidos = useMemo(
+    () =>
+      membros.conhecidos.has(message.author.id)
+        ? membros.conhecidos
+        : new Map(membros.conhecidos).set(message.author.id, message.author),
+    [membros.conhecidos, message.author],
+  );
 
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
@@ -1069,3 +1113,13 @@ export default function MessageItem({
     </div>
   );
 }
+
+/**
+ * `memo` com a comparação rasa padrão: uma mensagem nova, reação ou edição
+ * re-renderizava as até 500 linhas da lista (sem virtualização, por decisão —
+ * `stores/messages-core.ts`). Basta a rasa porque `reconcile`/`applyUpdate`
+ * preservam a referência das mensagens que não mudaram, a lista passa só
+ * primitivos, `membros` memoizado e callbacks estáveis dos pais — quem criar
+ * arrow ou objeto inline ao montar um `MessageItem` desliga o memo sem aviso.
+ */
+export default memo(MessageItem);

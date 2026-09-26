@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
-import { channelNotificationScope, isMuted } from "@streamz/shared";
+import { channelNotificationScope, isMuted, type Message } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, SemPermissaoNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
@@ -120,6 +120,75 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   const retry = useMessages((s) => s.retry);
   const discard = useMessages((s) => s.discard);
 
+  // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs.
+  // Movido para antes do `return` de "sem canal" (regra dos hooks: os
+  // `useCallback`/`useMemo` abaixo dependem destes valores e precisam rodar
+  // sempre, na mesma ordem — `channel` pode ser nulo aqui, daí o `?.`.
+  const name = channel?.name ?? "canal";
+  const Icon =
+    channel?.type === "VOICE"
+      ? Volume2
+      : channel?.type === "ANNOUNCEMENT" || channel?.readOnly
+        ? Megaphone
+        : channel?.private
+          ? Lock
+          : Hash;
+  // canal de voz não é "#": o prefixo é do canal de texto, e escrever "#geral"
+  // ao lado do alto-falante confundiria os dois na mesma coluna
+  const prefixo = channel?.type === "VOICE" ? "" : "#";
+
+  // Estáveis entre renders para o `MessageItem` (`React.memo`) não perder o
+  // memo por causa de uma prop nova a cada render do `ChatView`. As ações do
+  // store (`loadOlder`, `remove`, `toggleReaction`, `openThread`) já são
+  // estáveis (definidas uma vez no `create` do zustand); o que precisa de
+  // `useCallback` é o fechamento inline que o `ChatView` cria em cima delas.
+  const onLoadOlder = useCallback(() => {
+    if (channelId) void loadOlder(channelId);
+  }, [channelId, loadOlder]);
+
+  const onDelete = useCallback(
+    (id: string, semConfirmar?: boolean) => void remove(id, semConfirmar),
+    [remove],
+  );
+
+  const onToggleReaction = useCallback(
+    (id: string, emoji: string) => toggleReaction(id, emoji, user?.id),
+    [toggleReaction, user?.id],
+  );
+
+  const onOpenThread = useCallback(
+    (message: Message) => {
+      if (channelId) void openThread(channelId, message);
+    },
+    [channelId, openThread],
+  );
+
+  const abrirEditarCanal = useCallback(() => {
+    if (channelId) ui.openModal({ kind: "channelSettings", channelId, tab: "geral" });
+  }, [channelId]);
+
+  // objeto `welcome` também recriado a cada render (era inline no JSX);
+  // memoizado pelos mesmos campos que o compõem
+  const welcome = useMemo(
+    () => ({
+      icon: <Icon size={42} />,
+      // o texto do Discord em pt-BR: "Bem-vindo(a) a #geral!" e "começo"
+      title: `Bem-vindo(a) a ${prefixo}${name}!`,
+      description: channel?.topic || `Este é o começo do canal ${prefixo}${name}.`,
+      // No print do Discord, quem administra vê só "Editar canal" aqui;
+      // "Convidar amigos" mora no cabeçalho da coluna de canais. Quem não
+      // administra não vê fileira nenhuma (a regra de permissão de antes).
+      // Descrição → topo do botão: 30px medidos; 14px de margem + a folga
+      // do parágrafo.
+      actions: podeEditarCanal ? (
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          <BotaoBoasVindas icon={<Pencil size={16} />} label="Editar canal" onClick={abrirEditarCanal} />
+        </div>
+      ) : undefined,
+    }),
+    [Icon, prefixo, name, channel?.topic, podeEditarCanal, abrirEditarCanal],
+  );
+
   if (!channel) {
     return (
       <Raiz className="grid min-w-0 flex-1 place-items-center bg-background-base-lower text-text-muted">
@@ -129,19 +198,6 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   }
 
   const readOnly = !podePostar;
-  // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs
-  const name = channel.name ?? "canal";
-  const Icon =
-    channel.type === "VOICE"
-      ? Volume2
-      : channel.type === "ANNOUNCEMENT" || channel.readOnly
-        ? Megaphone
-        : channel.private
-          ? Lock
-          : Hash;
-  // canal de voz não é "#": o prefixo é do canal de texto, e escrever "#geral"
-  // ao lado do alto-falante confundiria os dois na mesma coluna
-  const prefixo = channel.type === "VOICE" ? "" : "#";
 
   // conteúdo sensível: o canal só abre depois do aviso
   if (channel.nsfw && !liberado.includes(channel.id) && !jaConfirmou(channel.id)) {
@@ -263,39 +319,18 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
         loadingOlderError={slice.loadingOlderError}
-        onLoadOlder={() => void loadOlder(channel.id)}
+        onLoadOlder={onLoadOlder}
         currentUserId={user?.id}
         canModerate={canModerate}
         onEdit={edit}
-        onDelete={(id, semConfirmar) => void remove(id, semConfirmar)}
-        onToggleReaction={(id, emoji) => toggleReaction(id, emoji, user?.id)}
-        onOpenThread={(message) => void openThread(channel.id, message)}
+        onDelete={onDelete}
+        onToggleReaction={onToggleReaction}
+        onOpenThread={onOpenThread}
         onRetry={retry}
         onDiscard={discard}
         scrollToId={highlightId}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
-        welcome={{
-          icon: <Icon size={42} />,
-          // o texto do Discord em pt-BR: "Bem-vindo(a) a #geral!" e "começo"
-          title: `Bem-vindo(a) a ${prefixo}${name}!`,
-          description: channel.topic || `Este é o começo do canal ${prefixo}${name}.`,
-          // No print do Discord, quem administra vê só "Editar canal" aqui;
-          // "Convidar amigos" mora no cabeçalho da coluna de canais. Quem não
-          // administra não vê fileira nenhuma (a regra de permissão de antes).
-          // Descrição → topo do botão: 30px medidos; 14px de margem + a folga
-          // do parágrafo.
-          actions: podeEditarCanal ? (
-            <div className="mt-3.5 flex flex-wrap gap-2">
-              <BotaoBoasVindas
-                icon={<Pencil size={16} />}
-                label="Editar canal"
-                onClick={() =>
-                  ui.openModal({ kind: "channelSettings", channelId: channel.id, tab: "geral" })
-                }
-              />
-            </div>
-          ) : undefined,
-        }}
+        welcome={welcome}
       />
 
       {readOnly ? (
