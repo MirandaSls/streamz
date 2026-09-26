@@ -20,6 +20,7 @@
 //! e reabre no novo padrão, senão o som morre em silêncio na troca de fone.
 
 use std::ffi::c_void;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -83,6 +84,10 @@ pub struct Loopback {
     canais: u16,
     amostra: Amostra,
     reamostrador: Reamostrador,
+    /// Tamanho do buffer do cliente, em quadros (`GetBufferSize`). Teto do
+    /// que um `GetBuffer` pode devolver: acima disso o número é lixo, e ler
+    /// aquilo tudo a partir do ponteiro do motor seria sair da memória dele.
+    quadros_no_buffer: u32,
     /// Evento do modo `EVENTCALLBACK`, só no process loopback. Ninguém espera
     /// nele — a leitura continua por polling —, mas o cliente precisa dele
     /// registrado antes do `Start`; fechado no `Drop`.
@@ -113,40 +118,54 @@ impl Loopback {
     /// erro aqui só faz `abrir` cair no caminho clássico.
     fn abrir_sem_o_streamz() -> Result<Self, ErroDeAudio> {
         unsafe {
-            // `params` e `prop` vivem até o fim desta função — depois da
-            // espera abaixo —, então o blob que o `PROPVARIANT` aponta não
-            // morre com a ativação ainda em andamento.
-            let params = AUDIOCLIENT_ACTIVATION_PARAMS {
-                ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-                Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
-                    ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-                        TargetProcessId: GetCurrentProcessId(),
-                        ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+            // `params` e `prop` vão para o heap e a posse vai para o
+            // `AvisoDeAtivacao`: o Windows segura o aviso (AddRef) até chamar
+            // `ActivateCompleted`, então a memória que o `PROPVARIANT` aponta
+            // só é liberada depois que a ativação acabou — mesmo que a espera
+            // abaixo estoure e esta função já tenha voltado. Na pilha, um
+            // timeout deixaria o Windows lendo memória liberada.
+            let ativacao = Box::into_raw(Box::new(ParametrosDeAtivacao {
+                params: AUDIOCLIENT_ACTIVATION_PARAMS {
+                    ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+                    Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+                        ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                            TargetProcessId: GetCurrentProcessId(),
+                            ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+                        },
                     },
                 },
-            };
+                prop: PROPVARIANT::default(),
+            }));
+            // Dono antes de qualquer `?`: daqui em diante quem libera é o
+            // `Drop` dele, quando a última referência ao aviso cair.
+            let dono = DonoDosParametros(ativacao);
             // Montado à mão e sem `PropVariantClear`: o blob é memória nossa,
-            // na pilha, não do alocador do COM.
-            let mut prop = PROPVARIANT::default();
-            {
-                let interno = &mut *prop.Anonymous.Anonymous;
+            // não do alocador do COM.
+            let prop: *const PROPVARIANT = {
+                let interno = &mut *(*ativacao).prop.Anonymous.Anonymous;
                 interno.vt = VT_BLOB;
                 interno.Anonymous.blob = BLOB {
                     cbSize: std::mem::size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
-                    pBlobData: &params as *const AUDIOCLIENT_ACTIVATION_PARAMS as *mut u8,
+                    pBlobData: std::ptr::addr_of_mut!((*ativacao).params) as *mut u8,
                 };
-            }
+                std::ptr::addr_of!((*ativacao).prop)
+            };
 
             let (tx, rx) = mpsc::channel();
-            let aviso: IActivateAudioInterfaceCompletionHandler = AvisoDeAtivacao { tx }.into();
+            let aviso: IActivateAudioInterfaceCompletionHandler = AvisoDeAtivacao {
+                tx,
+                _parametros: dono,
+            }
+            .into();
             let operacao: IActivateAudioInterfaceAsyncOperation = ActivateAudioInterfaceAsync(
                 VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
                 &IAudioClient::IID,
-                Some(&prop as *const PROPVARIANT),
+                Some(prop),
                 &aviso,
             )?;
             // Timeout: o aviso pode chegar depois; o `send` dele só falha
-            // em silêncio, porque o `rx` já foi embora.
+            // em silêncio, porque o `rx` já foi embora. Os parâmetros seguem
+            // vivos dentro do aviso, que o Windows ainda segura.
             rx.recv_timeout(ESPERA_ATIVACAO)
                 .map_err(|_| ErroDeAudio::Falha)?;
 
@@ -187,16 +206,22 @@ impl Loopback {
             // Auto-reset e sem nome: é só o que o `EVENTCALLBACK` exige
             // registrado antes do `Start`.
             let evento = CreateEventW(None, false, false, PCWSTR::null())?;
-            let iniciar = || -> Result<IAudioCaptureClient, ErroDeAudio> {
+            let iniciar = || -> Result<(IAudioCaptureClient, u32), ErroDeAudio> {
                 cliente.SetEventHandle(evento)?;
                 let captura: IAudioCaptureClient = cliente.GetService()?;
+                let quadros_no_buffer = cliente.GetBufferSize()?;
                 cliente.Start()?;
-                Ok(captura)
+                Ok((captura, quadros_no_buffer))
             };
-            let captura = match iniciar() {
-                Ok(captura) => captura,
+            let (captura, quadros_no_buffer) = match iniciar() {
+                Ok(par) => par,
                 Err(e) => {
-                    // Sem `Self` montado, o `Drop` não roda: fechar aqui.
+                    // Sem `Self` montado, o `Drop` não roda: parar e fechar
+                    // aqui. Hoje o `Start` é o último passo e não há o que
+                    // parar, mas `Stop` num cliente parado só devolve
+                    // S_FALSE — fica de cinto se alguém puser algo depois
+                    // dele. O evento fecha depois do `Stop`, como no `Drop`.
+                    let _ = cliente.Stop();
                     let _ = CloseHandle(evento);
                     return Err(e);
                 }
@@ -209,6 +234,7 @@ impl Loopback {
                 amostra: Amostra::F32,
                 // Já sai a 48 kHz; o reamostrador fica de passagem.
                 reamostrador: Reamostrador::new(TAXA, TAXA),
+                quadros_no_buffer,
                 evento: Some(evento),
             })
         }
@@ -240,6 +266,7 @@ impl Loopback {
             let amostra = amostra.ok_or(ErroDeAudio::Falha)?;
 
             let captura: IAudioCaptureClient = cliente.GetService()?;
+            let quadros_no_buffer = cliente.GetBufferSize()?;
             cliente.Start()?;
 
             Ok(Self {
@@ -248,6 +275,7 @@ impl Loopback {
                 canais,
                 amostra,
                 reamostrador: Reamostrador::new(taxa, TAXA),
+                quadros_no_buffer,
                 evento: None,
             })
         }
@@ -274,14 +302,29 @@ impl Loopback {
                     .GetBuffer(&mut dados, &mut lidos, &mut flags, None, None)?;
             }
             let n = lidos as usize;
+            // O ponteiro e o número vêm do motor de áudio; um `lidos` maior
+            // que o buffer (ou uma conta que estoura) faria o `from_raw_parts`
+            // abaixo ler fora da memória dele e derrubar o app. Devolve o
+            // pacote sem ler e deixa quem chama tratar como falha.
+            let tamanho = n
+                .checked_mul(canais)
+                .and_then(|x| x.checked_mul(bytes_por_amostra));
+            let tamanho = match tamanho {
+                Some(t) if lidos <= self.quadros_no_buffer => t,
+                _ => {
+                    unsafe {
+                        let _ = self.captura.ReleaseBuffer(lidos);
+                    }
+                    return Err(ErroDeAudio::Falha);
+                }
+            };
             let silencio = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0;
             // Estéreo na taxa do mixer, antes de reamostrar.
             let mut estereo: Vec<i16> = Vec::with_capacity(n * 2);
             if silencio || dados.is_null() {
                 estereo.resize(n * 2, 0);
             } else {
-                let bruto =
-                    unsafe { std::slice::from_raw_parts(dados, n * canais * bytes_por_amostra) };
+                let bruto = unsafe { std::slice::from_raw_parts(dados, tamanho) };
                 converter_para_estereo(bruto, self.amostra, canais, &mut estereo);
             }
             unsafe { self.captura.ReleaseBuffer(lidos)? };
@@ -309,6 +352,30 @@ impl Drop for Loopback {
 #[implement(IActivateAudioInterfaceCompletionHandler)]
 struct AvisoDeAtivacao {
     tx: mpsc::Sender<()>,
+    /// Os parâmetros que `ActivateAudioInterfaceAsync` recebeu por ponteiro.
+    /// Moram aqui porque o aviso é a única coisa que o Windows garante manter
+    /// viva até a ativação terminar; nunca são lidos pelo Rust.
+    _parametros: DonoDosParametros,
+}
+
+/// `params` e o `PROPVARIANT` que aponta para ele, juntos num endereço fixo
+/// do heap: o blob do `prop` é um ponteiro para o `params` ao lado.
+struct ParametrosDeAtivacao {
+    params: AUDIOCLIENT_ACTIVATION_PARAMS,
+    prop: PROPVARIANT,
+}
+
+/// Posse de um `ParametrosDeAtivacao` vindo de `Box::into_raw`. Ponteiro cru
+/// em vez de `Box` para o endereço entregue ao Windows não depender de a
+/// `Box` nunca ser movida. `PROPVARIANT` não tem `Drop` no crate (é união com
+/// `ManuallyDrop`), então liberar não chama `PropVariantClear` no blob nosso.
+struct DonoDosParametros(*mut ParametrosDeAtivacao);
+
+impl Drop for DonoDosParametros {
+    fn drop(&mut self) {
+        // SAFETY: veio de `Box::into_raw` e só este dono o libera, uma vez.
+        unsafe { drop(Box::from_raw(self.0)) };
+    }
 }
 
 impl IActivateAudioInterfaceCompletionHandler_Impl for AvisoDeAtivacao_Impl {
@@ -316,7 +383,12 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for AvisoDeAtivacao_Impl {
         &self,
         _operacao: Ref<IActivateAudioInterfaceAsyncOperation>,
     ) -> windows::core::Result<()> {
-        let _ = self.tx.send(());
+        // Um pânico aqui desenrolaria para dentro do `extern "system"` do
+        // Windows (UB, na prática o processo cai). `send` não entra em pânico;
+        // isto é o cinto de segurança, como em `macos.rs`.
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            let _ = self.tx.send(());
+        }));
         Ok(())
     }
 }
