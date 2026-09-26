@@ -47,6 +47,12 @@ use super::fontes;
 /// janela fechou, a sala caiu. O payload é o motivo, para a mensagem certa.
 pub const EVENTO_ENCERRADA: &str = "tela:encerrada";
 
+/// Só o host da url, para log — nunca a url inteira, nem o token.
+fn host_da_url(url: &str) -> &str {
+    let sem_esquema = url.split("://").nth(1).unwrap_or(url);
+    sem_esquema.split(['/', '?']).next().unwrap_or(sem_esquema)
+}
+
 /// O que a web manda para começar. Resolução, taxa e bitrate vêm do preset
 /// `SCREEN_QUALITY` de `@streamz/shared` — o contrato continua único, e o
 /// Rust não tem cópia dele.
@@ -268,6 +274,7 @@ impl Transmissao {
     /// propósito: é o que o encerramento do app chama, e ali não há runtime
     /// para esperar.
     pub fn encerrar(&self) {
+        log::info!("tela: encerrar (fechamento do app)");
         if let Some(preparada) = self.tomar_preparada() {
             fechar_em_outra_thread(preparada.sala);
         }
@@ -298,15 +305,22 @@ fn fechar_em_outra_thread(sala: Room) {
 /// Reabrir o seletor para trocar de fonte cai no caminho de sempre.
 pub async fn preparar(estado: &Transmissao, preparo: Preparo) -> Result<(), String> {
     let _vez = estado.trava.lock().await;
-    if estado.transmitindo() || estado.tem_preparada(&preparo.url, &preparo.token) {
+    if estado.transmitindo() {
+        log::info!("tela: preparar pulado, já transmitindo");
         return Ok(());
     }
+    if estado.tem_preparada(&preparo.url, &preparo.token) {
+        log::info!("tela: preparar pulado, sala já preparada");
+        return Ok(());
+    }
+    log::info!("tela: preparar início host={}", host_da_url(&preparo.url));
     descartar_sem_trava(estado).await;
     estado.segurar_fabrica();
     let mut opcoes = RoomOptions::default();
     opcoes.auto_subscribe = false;
     let (sala, eventos) = Room::connect(&preparo.url, &preparo.token, opcoes)
         .await
+        .inspect_err(|e| log::error!("tela: preparar erro ao conectar: {e}"))
         .map_err(|e| format!("não foi possível entrar na sala: {e}"))?;
     let antiga = estado.guardar_preparada(Preparada {
         url: preparo.url,
@@ -317,6 +331,7 @@ pub async fn preparar(estado: &Transmissao, preparo: Preparo) -> Result<(), Stri
     if let Some(antiga) = antiga {
         let _ = antiga.sala.close().await;
     }
+    log::info!("tela: preparar sucesso");
     Ok(())
 }
 
@@ -329,6 +344,7 @@ pub async fn descartar(estado: &Transmissao) {
 /// O `descartar` para quem já está com a `trava` (o `preparar`).
 async fn descartar_sem_trava(estado: &Transmissao) {
     if let Some(preparada) = estado.tomar_preparada() {
+        log::info!("tela: descartar sala preparada");
         let _ = preparada.sala.close().await;
     }
 }
@@ -339,6 +355,12 @@ pub async fn iniciar(
     pedido: Pedido,
 ) -> Result<Tempos, String> {
     let _vez = estado.trava.lock().await;
+    log::info!(
+        "tela: iniciar início fonte_id={} audio={} fps={}",
+        pedido.fonte_id,
+        pedido.audio,
+        pedido.fps
+    );
     let comeco = Instant::now();
     let mut tempos = Tempos::default();
 
@@ -347,7 +369,11 @@ pub async fn iniciar(
     estado.segurar_fabrica();
 
     let alvo = fontes::alvo(&pedido.fonte_id)
-        .ok_or_else(|| "A janela ou tela escolhida não existe mais".to_string())?;
+        .inspect(|alvo| log::info!("tela: iniciar alvo resolvido {alvo:?}"))
+        .ok_or_else(|| {
+            log::error!("tela: iniciar erro, fonte não existe mais");
+            "A janela ou tela escolhida não existe mais".to_string()
+        })?;
     // Abrir a captura antes de entrar na sala: se a fonte recusar (conteúdo
     // protegido, janela que sumiu), ninguém vê um `#tela` entrar e sair.
     //
@@ -361,17 +387,24 @@ pub async fn iniciar(
     let (capturador, primeiro, captura_ms) =
         tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
             let aberta = Instant::now();
-            let mut capturador = captura::abrir(alvo, fps).map_err(|e| e.to_string())?;
+            let mut capturador = captura::abrir(alvo, fps).map_err(|e| {
+                log::error!("tela: iniciar erro ao abrir captura: {e}");
+                e.to_string()
+            })?;
             let captura_ms = aberta.elapsed().as_millis() as u64;
             let primeiro = match capturador.proximo_quadro(ESPERA_DO_PRIMEIRO_QUADRO) {
                 Ok(quadro) => quadro,
                 // A fonte sumiu entre escolher e capturar: dizer isso agora é
                 // melhor que publicar uma faixa que nunca teria imagem.
-                Err(e) => return Err(e.to_string()),
+                Err(e) => {
+                    log::error!("tela: iniciar erro no primeiro quadro: {e}");
+                    return Err(e.to_string());
+                }
             };
             Ok((capturador, primeiro, captura_ms))
         })
         .await
+        .inspect_err(|e| log::error!("tela: iniciar falha ao abrir a captura: {e}"))
         .map_err(|e| format!("falha ao abrir a captura: {e}"))??;
     tempos.captura_ms = captura_ms;
     tempos.primeiro_quadro_ms = (marca.elapsed().as_millis() as u64).saturating_sub(captura_ms);
@@ -383,6 +416,7 @@ pub async fn iniciar(
     let (sala, eventos) = match estado.tomar_preparada() {
         Some(preparada) if preparada.url == pedido.url && preparada.token == pedido.token => {
             tempos.reaproveitou_sala = true;
+            log::info!("tela: iniciar reaproveitou sala preparada");
             (preparada.sala, preparada.eventos)
         }
         // Credencial diferente (o usuário trocou de canal com o seletor
@@ -397,8 +431,13 @@ pub async fn iniciar(
             // baixar o áudio de ninguém — a pessoa já ouve pela conexão do
             // webview.
             opcoes.auto_subscribe = false;
+            log::info!(
+                "tela: iniciar conectando nova sala host={}",
+                host_da_url(&pedido.url)
+            );
             Room::connect(&pedido.url, &pedido.token, opcoes)
                 .await
+                .inspect_err(|e| log::error!("tela: iniciar erro ao conectar: {e}"))
                 .map_err(|e| format!("não foi possível entrar na sala: {e}"))?
         }
     };
@@ -451,7 +490,9 @@ pub async fn iniciar(
     sala.local_participant()
         .publish_track(LocalTrack::Video(faixa), publicacao)
         .await
+        .inspect_err(|e| log::error!("tela: iniciar erro ao publicar vídeo: {e}"))
         .map_err(|e| format!("não foi possível publicar a tela: {e}"))?;
+    log::info!("tela: iniciar publicação de vídeo ok");
 
     // O áudio do sistema é uma segunda faixa do mesmo participante. Falhar
     // aqui (sem dispositivo de saída, formato estranho) não derruba o vídeo:
@@ -492,8 +533,14 @@ pub async fn iniciar(
             .publish_track(LocalTrack::Audio(faixa.clone()), publicacao)
             .await
         {
-            Ok(_) => Some((fonte, faixa)),
-            Err(_) => None,
+            Ok(_) => {
+                log::info!("tela: iniciar publicação de áudio ok");
+                Some((fonte, faixa))
+            }
+            Err(e) => {
+                log::error!("tela: iniciar erro ao publicar áudio: {e}");
+                None
+            }
         }
     } else {
         None
@@ -516,11 +563,18 @@ pub async fn iniciar(
             // Sair da sala antes de avisar: quando a web reagir ao evento, o
             // `#tela` já não está lá.
             let _ = tauri::async_runtime::block_on(sala.close());
-            if let Some(motivo) = motivo {
-                let _ = app.emit(EVENTO_ENCERRADA, motivo);
+            match motivo {
+                Some(motivo) => {
+                    log::warn!("tela: thread de transmissão encerrada motivo={motivo:?}");
+                    let _ = app.emit(EVENTO_ENCERRADA, motivo);
+                }
+                None => log::info!("tela: thread de transmissão encerrada a pedido"),
             }
         })
-        .map_err(|e| format!("não foi possível iniciar a thread de transmissão: {e}"))?;
+        .map_err(|e| {
+            log::error!("tela: iniciar erro ao criar thread de transmissão: {e}");
+            format!("não foi possível iniciar a thread de transmissão: {e}")
+        })?;
 
     let bandeira_audio = parar_bandeira.clone();
     let (fonte_audio, faixa_audio) = fonte_audio.unzip();
@@ -541,6 +595,16 @@ pub async fn iniciar(
         esperar_fora_do_runtime(antiga).await;
     }
     tempos.total_ms = comeco.elapsed().as_millis() as u64;
+    log::info!(
+        "tela: iniciar tempos captura={}ms primeiro_quadro={}ms conexao={}ms publicacao={}ms total={}ms reaproveitou_sala={} sem_primeiro_quadro={}",
+        tempos.captura_ms,
+        tempos.primeiro_quadro_ms,
+        tempos.conexao_ms,
+        tempos.publicacao_ms,
+        tempos.total_ms,
+        tempos.reaproveitou_sala,
+        tempos.sem_primeiro_quadro
+    );
     Ok(tempos)
 }
 
@@ -553,6 +617,7 @@ pub async fn parar(estado: &Transmissao) {
 /// O `parar` para quem já está com a `trava` (o `iniciar`).
 async fn parar_sem_trava(estado: &Transmissao) {
     if let Some(em_curso) = estado.tomar() {
+        log::info!("tela: parar transmissão em curso");
         esperar_fora_do_runtime(em_curso).await;
     }
 }
@@ -579,9 +644,13 @@ const REABERTURAS: u32 = 10;
 /// com a bandeira, ou quando o loopback não reabre mais.
 #[cfg(any(windows, target_os = "macos"))]
 fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
+    log::info!("tela: transmitir_audio início");
     let mut loopback = match Loopback::abrir() {
         Ok(l) => l,
-        Err(_) => return,
+        Err(e) => {
+            log::error!("tela: transmitir_audio erro ao abrir loopback: {e:?}");
+            return;
+        }
     };
     let mut amostras: Vec<i16> = Vec::new();
     let mut reaberturas = 0;
@@ -594,7 +663,11 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
                 // tentativas porque o Windows leva um instante para eleger
                 // o dispositivo novo.
                 reaberturas += 1;
+                log::warn!(
+                    "tela: transmitir_audio dispositivo invalidado, reabertura {reaberturas}"
+                );
                 if reaberturas > REABERTURAS {
+                    log::error!("tela: transmitir_audio desistiu de reabrir loopback");
                     return;
                 }
                 std::thread::sleep(Duration::from_millis(200));
@@ -604,7 +677,10 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
                 }
                 continue;
             }
-            Err(ErroDeAudio::Falha) => return,
+            Err(ErroDeAudio::Falha) => {
+                log::error!("tela: transmitir_audio falha no loopback");
+                return;
+            }
         }
         if amostras.is_empty() {
             std::thread::sleep(PAUSA_SEM_AUDIO);
@@ -618,9 +694,11 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
         };
         // `capture_frame` segura quando a fila está cheia — é a cadência.
         if tauri::async_runtime::block_on(fonte.capture_frame(&quadro)).is_err() {
+            log::error!("tela: transmitir_audio erro ao entregar quadro à fonte");
             return;
         }
     }
+    log::info!("tela: transmitir_audio fim");
 }
 
 /// Sem backend de som do sistema neste alvo não há laço nenhum a rodar — e
