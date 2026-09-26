@@ -150,6 +150,15 @@ pub fn run() {
     // quase sempre já houve um clique na aba antes de o telefone tocar, e por
     // isso o mesmo código soa no site e não soava aqui. A rede de segurança do
     // lado da web (retomar no primeiro gesto) está em `lib/toque-com-gesto.ts`.
+    //
+    // As três flags de `--disable-*-throttling`/`*-backgrounding` valem para a
+    // vida inteira do processo, não só durante uma chamada: o WebView2 só lê
+    // `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` na criação do WebView, então não
+    // dá para ligar isso sob demanda (ex.: ao entrar numa call) e desligar
+    // depois. Custo: com a janela minimizada na bandeja, sem chamada nenhuma
+    // em andamento, os timers da página não sofrem o estrangulamento de aba
+    // em segundo plano do Chromium — é o preço fixo de o toque (linhas acima)
+    // e o áudio da call funcionarem com a janela fora de foco.
     if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
