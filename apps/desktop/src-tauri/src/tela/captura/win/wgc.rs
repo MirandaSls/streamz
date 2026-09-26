@@ -15,12 +15,13 @@
 //! adiantado no callback **sem** tocar na textura. A textura de staging e o
 //! `Vec` do quadro são reaproveitados entre quadros.
 
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Duration;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ,
+    ID3D11Device, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC,
 };
 use windows::Win32::Graphics::Gdi::{RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE};
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
@@ -95,11 +96,40 @@ impl GraphicsCaptureApiHandler for Entregador {
         })
     }
 
+    /// **Nenhum panic pode sair daqui.** O callback roda dentro de um
+    /// `TypedEventHandler` WinRT chamado pelo sistema; um unwind atravessando
+    /// essa fronteira aborta o processo (0xC0000409) e leva o app inteiro
+    /// junto. Com panic, a captura para e a caixa é encerrada como se a fonte
+    /// tivesse fechado: quem transmite vê `FonteSumiu` em vez de seguir
+    /// recebendo quadros de um `Entregador` em estado desconhecido.
     fn on_frame_arrived(
         &mut self,
         frame: &mut Frame,
-        _controle: InternalCaptureControl,
+        controle: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
+        match panic::catch_unwind(AssertUnwindSafe(|| self.receber(frame))) {
+            Ok(resultado) => resultado,
+            Err(_) => {
+                // A staging pode ter ficado mapeada no meio do `ler`; soltar
+                // a textura é mais seguro que reaproveitá-la.
+                self.staging = None;
+                self.caixa.encerrar();
+                controle.stop();
+                Ok(())
+            }
+        }
+    }
+
+    fn on_closed(&mut self) -> Result<(), Self::Error> {
+        // Mesmo motivo do `on_frame_arrived`: nada de unwind para o WinRT.
+        let _ = panic::catch_unwind(AssertUnwindSafe(|| self.caixa.encerrar()));
+        Ok(())
+    }
+}
+
+impl Entregador {
+    /// O corpo do `on_frame_arrived`, que roda dentro do `catch_unwind`.
+    fn receber(&mut self, frame: &mut Frame) -> Result<(), ErroDoHandler> {
         // O marcapasso antes de qualquer toque na textura: quadro adiantado
         // sai daqui de graça. O carimbo é o do sistema (100 ns desde uma
         // origem fixa), o mesmo relógio do `MinUpdateInterval`, e não sofre
@@ -144,13 +174,6 @@ impl GraphicsCaptureApiHandler for Entregador {
         Ok(())
     }
 
-    fn on_closed(&mut self) -> Result<(), Self::Error> {
-        self.caixa.encerrar();
-        Ok(())
-    }
-}
-
-impl Entregador {
     /// Copia a textura do quadro para `bgra`: o mesmo que o `Frame::buffer`
     /// do crate faz, mas com a textura de staging reaproveitada — o crate
     /// cria uma nova (~15 MB de memória de driver em 1440p) a cada quadro.
@@ -188,28 +211,59 @@ impl Entregador {
             contexto.CopyResource(textura, frame.as_raw_texture());
             contexto.Map(textura, 0, D3D11_MAP_READ, 0, Some(&mut mapeado))?;
         }
-        let (largura, altura, passo) =
-            (desc.Width as usize, desc.Height as usize, mapeado.RowPitch);
-        let copiou = if mapeado.pData.is_null() || altura == 0 || (passo as usize) < largura * 4 {
-            false
-        } else {
-            // SAFETY: o `Map` de uma textura `largura`×`altura` entrega
-            // `altura` linhas de `passo` bytes; a última linha tem ao menos os
-            // `largura * 4` bytes de pixel. O slice não passa disso e morre
-            // antes do `Unmap`.
-            let origem = unsafe {
-                std::slice::from_raw_parts(
-                    mapeado.pData.cast::<u8>(),
-                    (altura - 1) * passo as usize + largura * 4,
-                )
-            };
-            copiar_sem_padding(origem, desc.Width, desc.Height, passo, bgra)
+        let passo = mapeado.RowPitch;
+        let copiou = match bytes_mapeados(&desc, &mapeado) {
+            None => false,
+            Some(tamanho) => {
+                // SAFETY: `bytes_mapeados` só devolve tamanho com ponteiro não
+                // nulo, `passo >= largura * 4` e contas sem overflow; o `Map`
+                // de uma textura `largura`×`altura` entrega `altura` linhas de
+                // `passo` bytes e a última tem ao menos os `largura * 4` de
+                // pixel. O slice não passa disso e morre antes do `Unmap`.
+                let origem =
+                    unsafe { std::slice::from_raw_parts(mapeado.pData.cast::<u8>(), tamanho) };
+                copiar_sem_padding(origem, desc.Width, desc.Height, passo, bgra)
+            }
         };
         unsafe {
             contexto.Unmap(textura, 0);
         }
         Ok(copiou)
     }
+}
+
+/// Quantos bytes do mapeamento o quadro ocupa: `(altura - 1)` linhas de
+/// `RowPitch` mais a última só com pixel. `None` descarta o quadro sem tocar
+/// na memória: ponteiro nulo, textura vazia, `RowPitch` menor que a linha de
+/// pixel (driver com mapeamento estranho) ou tamanho que nem cabe num slice.
+/// Quando o driver informa `DepthPitch` (o tamanho do subrecurso mapeado), ele
+/// também limita: o quadro não pode passar do que foi mapeado.
+fn bytes_mapeados(
+    desc: &D3D11_TEXTURE2D_DESC,
+    mapeado: &D3D11_MAPPED_SUBRESOURCE,
+) -> Option<usize> {
+    let largura = usize::try_from(desc.Width).ok()?;
+    let altura = usize::try_from(desc.Height).ok()?;
+    let passo = usize::try_from(mapeado.RowPitch).ok()?;
+    if mapeado.pData.is_null() || largura == 0 || altura == 0 {
+        return None;
+    }
+    let linha = largura.checked_mul(4)?;
+    if passo < linha {
+        return None;
+    }
+    // O mapeamento inteiro (`passo * altura`) precisa ser representável; o
+    // slice lido é um pouco menor, sem o padding da última linha.
+    let total = passo.checked_mul(altura)?;
+    if total > isize::MAX as usize {
+        return None;
+    }
+    let tamanho = passo.checked_mul(altura - 1)?.checked_add(linha)?;
+    let profundidade = usize::try_from(mapeado.DepthPitch).ok()?;
+    if profundidade != 0 && profundidade < tamanho {
+        return None;
+    }
+    Some(tamanho)
 }
 
 /// Uma sessão WGC aberta. Fechar (drop) para a thread de captura.
