@@ -90,8 +90,8 @@ describe("rmsDeAmostras", () => {
 });
 
 describe("passoDeFala", () => {
-  const acima = LIMIAR_DE_FALA + 0.01;
-  const abaixo = LIMIAR_DE_FALA - 0.01;
+  const acima = LIMIAR_DE_FALA * 2;
+  const abaixo = LIMIAR_DE_FALA / 2;
 
   it("acende na hora que o nível passa do limiar", () => {
     const depois = passoDeFala(FALA_INICIAL, acima, 1_000);

@@ -90,13 +90,16 @@ export function rmsDeAmostras(amostras: ArrayLike<number>): number {
 /**
  * Limiar de fala do detector local.
  *
- * ≈ −36 dBFS. 0,005 (≈ −46 dBFS) acendia com ruído residual que passa pelo
+ * ≈ −42 dBFS. 0,005 (≈ −46 dBFS) acendia com ruído residual que passa pelo
  * supressor e com o chiado da própria leitura de 8 bits, deixando o anel
- * sempre aceso. 0,02 (≈ −34 dBFS) deixava fala baixa em microfone de notebook
- * sem acender. 0,015 fica entre os dois. O detector mede a faixa já
- * processada (depois do supressor de ruído e do ganho).
+ * sempre aceso. 0,02 (≈ −34 dBFS) e depois 0,015 (≈ −36 dBFS) ainda deixavam
+ * fala real sem acender — o usuário falava, os outros ouviam a voz dele, e o
+ * anel de "estou falando" não aparecia para ele mesmo. 0,008 é o novo ponto:
+ * acima do chiado que acendia sozinho em 0,005, mas sensível o bastante para a
+ * fala que 0,02 e 0,015 perdiam. O detector mede a faixa já processada
+ * (depois do supressor de ruído e do ganho).
  */
-export const LIMIAR_DE_FALA = 0.015;
+export const LIMIAR_DE_FALA = 0.008;
 
 /**
  * Quanto o anel fica aceso depois de o nível cair.
