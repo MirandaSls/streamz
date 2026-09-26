@@ -1,6 +1,7 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Crown,
   ShieldCheck,
@@ -15,7 +16,9 @@ import {
   isTimedOut,
   nomeParaMim,
   type GuildMemberView,
+  type PublicUser,
   type Role,
+  type UserStatus,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
@@ -136,9 +139,31 @@ export default function MemberList() {
   const unblockFriend = useFriends((s) => s.unblock);
   const ignorarUsuario = useFriends((s) => s.ignorar);
   const deixarDeIgnorarUsuario = useFriends((s) => s.deixarDeIgnorar);
-  // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
-  const statuses = usePresence((s) => s.statuses);
-  const profiles = usePresence((s) => s.profiles);
+  // o status/perfil ao vivo vem da store de presença; a lista é só o do REST.
+  // `s.statuses`/`s.profiles` inteiros são o mapa de TODO usuário conhecido
+  // (stores/presence.ts espalha os dois a cada `apply`/`applyProfile`), então
+  // assinar o mapa cru re-renderiza esta lista a cada mudança de presença de
+  // QUALQUER pessoa, de qualquer servidor. Aqui só interessam os membros
+  // DESTE servidor — o seletor devolve um mapa reduzido a esses ids, e
+  // `useShallow` compara por chave: só refaz o render quando o status/perfil
+  // de alguém que aparece na lista muda de fato.
+  const statuses = usePresence(
+    useShallow((s) => {
+      const out: Record<string, UserStatus> = {};
+      for (const m of members) out[m.user.id] = s.statuses[m.user.id];
+      return out;
+    }),
+  );
+  const profiles = usePresence(
+    useShallow((s) => {
+      const out: Record<string, PublicUser> = {};
+      for (const m of members) {
+        const p = s.profiles[m.user.id];
+        if (p) out[m.user.id] = p;
+      }
+      return out;
+    }),
+  );
   // quem está numa sala de voz DESTE servidor ganha a sub-linha "Em voz", como
   // no Discord. A store guarda estados por canal; o evento traz o `guildId`,
   // então basta juntar os canais do servidor ativo — sem depender da sidebar.
@@ -152,27 +177,34 @@ export default function MemberList() {
     for (const e of lista) if (e.connected && e.guildId === activeGuildId) emVoz.add(e.user.id);
   }
 
-  const live: Linha[] = members.map((m) => {
-    const u = resolveUser(profiles, m.user);
-    return { m: { ...m, user: u }, status: resolveStatus(statuses, u) };
-  });
-  const online = live.filter((x) => x.status !== "OFFLINE");
-  const offline = live.filter((x) => x.status === "OFFLINE");
+  // map/filter/sort de toda a lista a cada render era refeito mesmo sem
+  // mudança de presença ou de membro (ex.: abrir um menu de contexto); o
+  // useMemo prende o resultado às entradas que de fato o alteram.
+  const { secoes, restoOnline, offline } = useMemo(() => {
+    const live: Linha[] = members.map((m) => {
+      const u = resolveUser(profiles, m.user);
+      return { m: { ...m, user: u }, status: resolveStatus(statuses, u) };
+    });
+    const online = live.filter((x) => x.status !== "OFFLINE");
+    const offline = live.filter((x) => x.status === "OFFLINE");
 
-  // seções por cargo hoisted, do mais alto para o mais baixo; quem sobra cai
-  // em "Disponível". Offline nunca hoista — é assim no Discord.
-  const hoisted = roles
-    .filter((r) => r.hoist && !r.isDefault)
-    .sort((a, b) => b.position - a.position);
-  const usados = new Set<string>();
-  const secoes = hoisted
-    .map((r) => {
-      const gente = online.filter((x) => !usados.has(x.m.user.id) && x.m.roleIds.includes(r.id));
-      for (const x of gente) usados.add(x.m.user.id);
-      return { role: r, gente };
-    })
-    .filter((s) => s.gente.length > 0);
-  const restoOnline = online.filter((x) => !usados.has(x.m.user.id));
+    // seções por cargo hoisted, do mais alto para o mais baixo; quem sobra cai
+    // em "Disponível". Offline nunca hoista — é assim no Discord.
+    const hoisted = roles
+      .filter((r) => r.hoist && !r.isDefault)
+      .sort((a, b) => b.position - a.position);
+    const usados = new Set<string>();
+    const secoes = hoisted
+      .map((r) => {
+        const gente = online.filter((x) => !usados.has(x.m.user.id) && x.m.roleIds.includes(r.id));
+        for (const x of gente) usados.add(x.m.user.id);
+        return { role: r, gente };
+      })
+      .filter((s) => s.gente.length > 0);
+    const restoOnline = online.filter((x) => !usados.has(x.m.user.id));
+
+    return { secoes, restoOnline, offline };
+  }, [members, profiles, statuses, roles]);
 
   function podeAgirSobre(m: GuildMemberView): boolean {
     return m.user.id !== user?.id && m.role !== "OWNER";

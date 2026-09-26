@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   Amigos,
   Apps,
@@ -50,6 +50,9 @@ import { emit, errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
+/** Set vazio estável — evita criar um novo a cada render fora da busca de contato. */
+const EMPTY_SET = new Set<string>();
+
 /** Coluna 2 no modo DM: busca de pessoas, conversas 1-a-1 e grupos. */
 export default function DMList() {
   const channels = useDMs((s) => s.channels);
@@ -90,7 +93,12 @@ export default function DMList() {
   const [found, setFound] = useState<PublicUser[]>([]);
 
   const q = query.trim().toLowerCase();
-  const visible = q ? channels.filter((dm) => dmTitle(dm).toLowerCase().includes(q)) : channels;
+  // filtro só refaz quando a lista ou a busca mudam — sem isto todo render
+  // (digitação em outro campo, presença mudando, etc.) refiltrava a lista toda
+  const visible = useMemo(
+    () => (q ? channels.filter((dm) => dmTitle(dm).toLowerCase().includes(q)) : channels),
+    [channels, q],
+  );
 
   // busca de usuários (para começar uma conversa com quem ainda não é contato)
   useEffect(() => {
@@ -111,8 +119,18 @@ export default function DMList() {
     };
   }, [q]);
 
-  // quem já tem conversa não repete nos resultados da busca
-  const knownIds = new Set(channels.flatMap((d) => d.others.map((u) => u.id)));
+  // quem já tem conversa não repete nos resultados da busca — só importa
+  // enquanto há resultado de busca (`found` não vazio); fora da busca (o caso
+  // comum) o Set nem é montado, e com busca ativa só recalcula se a lista de
+  // conversas mudar, não a cada render deste componente
+  const buscaDeContatoAtiva = found.length > 0;
+  const knownIds = useMemo(
+    () =>
+      buscaDeContatoAtiva
+        ? new Set(channels.flatMap((d) => d.others.map((u) => u.id)))
+        : EMPTY_SET,
+    [channels, buscaDeContatoAtiva],
+  );
   const novos = found.filter((u) => !knownIds.has(u.id));
 
   /**
