@@ -4,7 +4,7 @@
  * (ADR-0009). É a única origem de cor do `apps/web`: nenhum hex é escrito à mão
  * — faltando um valor, ele sai daqui.
  *
- *   node scripts/paridade/gerar-tokens.mjs [--refs <dir de tokens>]
+ *   node scripts/paridade/gerar-tokens.mjs [--refs <dir de tokens>] [--todos]
  *
  * `--refs` aponta para `docs/referencias-discord/tokens` (padrão: o do próprio
  * repositório). As worktrees de trabalho não têm as referências (sparse-checkout),
@@ -21,8 +21,13 @@
  *      equivalente da escala do limão — por origem do valor, não por nome.
  *   2. Texto e ícone desenhados SOBRE a cor de marca viram `accent-ink`.
  *   3. Onde o blurple é conteúdo (ANSI), ele fica como no Discord.
+ *
+ * Só sai o token que o `apps/web` usa (ver `varrerUso`): o `tokens.css` é
+ * carregado em toda rota, e dois terços do que o Discord define nunca eram
+ * lidos. Token novo no código = rodar este script de novo. `--todos` desliga o
+ * filtro e emite tudo, como antes.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +36,7 @@ const args = process.argv.slice(2);
 const REFS = resolve(
   args.includes("--refs") ? args[args.indexOf("--refs") + 1] : join(RAIZ, "docs/referencias-discord/tokens"),
 );
+const TODOS = args.includes("--todos");
 
 // ── marca (os únicos valores nossos) ─────────────────────────────────────────
 const LIMAO = "#9be31f";
@@ -111,6 +117,45 @@ const SOBRE_A_MARCA = [
   /^--radio-thumb-background-active$/,
   /^--switch-thumb-icon-active$/,
 ];
+
+// ── uso no app ───────────────────────────────────────────────────────────────
+/**
+ * Junta o texto de todo o código do `apps/web` (menos as duas saídas deste
+ * script, senão todo token se acharia usado por estar declarado). A pergunta
+ * depois é textual e de propósito generosa: o nome do token sem o `--`, seguido
+ * de algo que não continue o nome, vale como uso se vier
+ *   - como `var(--x)`, `--x-rgb`, `--x-a` ou o nome solto (CSS, `style`, TS), ou
+ *   - colado a um prefixo com hífen, que é a classe do Tailwind:
+ *     `bg-x`, `text-x/40`, `hover:border-x`, `shadow-x`.
+ * Comentário que cita o token também conta — sobra algum, nunca falta. Não há
+ * nome de token montado em tempo de execução (`var(--${…})`) fora do
+ * `tailwind.config.ts`, que monta a partir do próprio `tokens.gerados.ts`; se
+ * isso mudar, o prefixo montado tem de entrar em `SEMPRE`.
+ */
+const WEB = join(RAIZ, "apps/web");
+const SAIDAS = new Set([join(WEB, "app/tokens.css"), join(WEB, "tokens.gerados.ts")]);
+function varrerUso() {
+  let texto = "";
+  const andar = (dir) => {
+    for (const f of readdirSync(dir)) {
+      if (["node_modules", ".next", "out", ".turbo"].includes(f)) continue;
+      const p = join(dir, f);
+      if (statSync(p).isDirectory()) andar(p);
+      else if (/\.(tsx?|jsx?|mjs|cjs|css|html|svg)$/.test(f) && !SAIDAS.has(p)) texto += readFileSync(p, "utf8") + "\n";
+    }
+  };
+  andar(WEB);
+  return texto;
+}
+/** Prefixos que ficam mesmo sem aparecer no código (nome montado em execução). */
+const SEMPRE = [];
+const textoDoApp = TODOS ? "" : varrerUso();
+const escapar = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function ehUsado(nome) {
+  if (TODOS || SEMPRE.some((p) => nome.startsWith(p))) return true;
+  const k = escapar(nome.slice(2));
+  return new RegExp(`(?:^|[^a-z0-9])(?:--)?${k}(?![a-z0-9])|[a-z0-9]-${k}(?![a-z0-9])`).test(textoDoApp);
+}
 
 // ── cor: hex ⇄ sRGB ⇄ OKLab/OKLCH (Björn Ottosson) ──────────────────────────
 function hexParaRgba(hex) {
@@ -232,6 +277,8 @@ const semValor = [];
 const blocos = [];
 let cores = [];
 let sombras = [];
+/** Tokens (cor ou sombra) do Dark que o filtro de uso deixou de fora. */
+let cortados = 0;
 /** Declarações do Dark, `variável → valor`: os outros temas só escrevem o que difere. */
 const doDark = new Map();
 
@@ -281,14 +328,21 @@ for (const { nome: tema, coluna, seletor } of TEMAS) {
     if (base) coresTema.push([nosso, base[1]]);
   }
 
+  // o filtro de uso vem só aqui: a troca de marca e o relatório de contraste
+  // continuam vendo todos os tokens. A cor sai com o trio inteiro (hex, `-rgb`,
+  // `-a`) se qualquer um for usado — a classe do Tailwind lê os dois últimos.
+  const coresUsadas = coresTema.filter(([n]) => ehUsado(n));
+  const sombrasUsadas = sombrasTema.filter(([n]) => ehUsado(n));
+  if (ehDark) cortados = coresTema.length - coresUsadas.length + (sombrasTema.length - sombrasUsadas.length);
+
   const decls = [];
-  for (const [nome, hex] of coresTema) {
+  for (const [nome, hex] of coresUsadas) {
     const { r, g, b, a } = hexParaRgba(hex);
     decls.push([nome, hex]);
     decls.push([`${nome}-rgb`, `${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)}`]);
     decls.push([`${nome}-a`, `${+a.toFixed(4)}`]);
   }
-  for (const [nome, valor] of sombrasTema) decls.push([nome, valor]);
+  for (const [nome, valor] of sombrasUsadas) decls.push([nome, valor]);
   if (ehDark) for (const [nome, valor] of decls) doDark.set(nome, valor);
   // Ash/Onyx: só o que difere do Dark, e só variável que o Dark tem — nome novo
   // aqui ficaria fora do `tokens.gerados.ts`, que sai do Dark
@@ -298,15 +352,22 @@ for (const { nome: tema, coluna, seletor } of TEMAS) {
   blocos.push(`${seletor} {\n${linhas.join("\n")}\n}`);
   coresPorTema[tema] = Object.fromEntries(coresTema);
   if (ehDark) {
-    cores = coresTema.map(([n]) => n);
-    sombras = sombrasTema.map(([n]) => n);
+    cores = coresUsadas.map(([n]) => n);
+    sombras = sombrasUsadas.map(([n]) => n);
   }
 }
 
 // ── saídas ───────────────────────────────────────────────────────────────────
 const AVISO = `Gerado por scripts/paridade/gerar-tokens.mjs a partir de
  * docs/referencias-discord/tokens/variaveis-resolvidas.json (Discord, 2026-09-11).
- * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.`;
+ * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.
+ *
+ * ${
+   TODOS
+     ? "Todos os tokens (--todos): sem o filtro de uso."
+     : `Só os tokens que o apps/web usa (${cores.length + sombras.length} de ${cores.length + sombras.length + cortados}).
+ * Token novo no código (classe ou var()) não existe até rodar o gerador de novo.`
+ }`;
 
 writeFileSync(
   join(RAIZ, "apps/web/app/tokens.css"),
@@ -358,7 +419,10 @@ writeFileSync(
 );
 
 // ── relatório ────────────────────────────────────────────────────────────────
-console.log(`tokens de tema: ${nomesDeTema.size}; cores emitidas: ${cores.length}; sombras: ${sombras.length}`);
+console.log(
+  `tokens de tema: ${nomesDeTema.size}; cores emitidas: ${cores.length}; sombras: ${sombras.length}; ` +
+    `fora por falta de uso: ${cortados}${TODOS ? " (--todos)" : ""}`,
+);
 console.log(
   `trocas pela marca (Dark): ${trocasPorTema.dark.length}; sem valor no Dark (pulados): ${semValor.length}; ` +
     `variáveis sobrescritas: ${blocos.slice(1).map((b, i) => `${TEMAS[i + 1].nome} ${b.split("\n").length - 2}`).join(", ")}`,
