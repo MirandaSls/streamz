@@ -89,7 +89,7 @@ export class UsersService {
       data: { displayName, aboutMe, pronouns, bannerColor },
     });
     const dto = toPublicUser(u);
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 
@@ -118,8 +118,11 @@ export class UsersService {
       data: { manualStatus, status },
     });
     const dto = toPublicUser(u);
-    this.realtime.emitAll(WS_EVENTS.PRESENCE_UPDATE, { userId: meId, status });
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    // presença e perfil vão para o mesmo público: uma consulta só
+    await this.realtime.emitToRelatedMany(meId, [
+      [WS_EVENTS.PRESENCE_UPDATE, { userId: meId, status }],
+      [WS_EVENTS.USER_UPDATED, dto],
+    ]);
     return dto;
   }
 
@@ -158,7 +161,7 @@ export class UsersService {
     if (antes?.avatarKey) await this.storage.delete(antes.avatarKey);
 
     const dto = toPublicUser(u);
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 
@@ -183,7 +186,7 @@ export class UsersService {
     if (antes?.avatarKey) await this.storage.delete(antes.avatarKey);
 
     const dto = toPublicUser(u);
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 
@@ -236,7 +239,7 @@ export class UsersService {
       },
     });
     const dto = toPublicUser(u);
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 
@@ -268,7 +271,7 @@ export class UsersService {
     const dto = toPublicUser(u);
     // o banner não vive no PublicUser (só no perfil), mas o evento mantém as
     // outras abas do próprio usuário em dia com o resto do cartão
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 
@@ -284,7 +287,7 @@ export class UsersService {
     const dto = toPublicUser(u);
     // o par de `updateBanner`: sem este aviso, tirar o banner num aparelho
     // deixava o cartão do outro com o banner antigo até recarregar
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    await this.realtime.emitToRelated(meId, WS_EVENTS.USER_UPDATED, dto);
     return dto;
   }
 

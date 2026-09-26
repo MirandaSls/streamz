@@ -1,6 +1,7 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import type { Server } from "socket.io";
 import { registrarGauge } from "../../common/metrics";
+import { PrismaService } from "../../prisma/prisma.service";
 
 // ── j-bots ──
 /** Onde um evento foi parar: a sala do Socket.IO que o recebeu. */
@@ -9,7 +10,10 @@ export type AlvoDoEvento =
   | { tipo: "usuario"; id: string }
   | { tipo: "usuarios"; ids: string[] }
   | { tipo: "canal"; id: string }
-  | { tipo: "servidor"; id: string };
+  | { tipo: "servidor"; id: string }
+  // quem tem relação com o usuário (ver `emitToRelated`): as salas saem de
+  // consulta, então o ouvinte recebe só o dono do evento
+  | { tipo: "relacionados"; userId: string };
 
 /** Um ouvinte local (ver `onEvent`). */
 type OuvinteLocal = (alvo: AlvoDoEvento, evento: string, dado: unknown) => void;
@@ -24,7 +28,7 @@ type OuvinteLocal = (alvo: AlvoDoEvento, evento: string, dado: unknown) => void;
  * pode ver o canal) e `guild:<id>` (membros do servidor — eventos de estrutura:
  * canal criado/renomeado/apagado, papel alterado).
  *
- * Os cinco `emit*` também avisam os **ouvintes locais** (`onEvent`); os
+ * Os `emit*` também avisam os **ouvintes locais** (`onEvent`); os
  * `join`/`leave` de sala **não**, porque não são eventos — não há nada para
  * traduzir e ninguém do outro lado esperando.
  */
@@ -32,6 +36,13 @@ type OuvinteLocal = (alvo: AlvoDoEvento, evento: string, dado: unknown) => void;
 export class RealtimeService {
   private server?: Server;
   private readonly logger = new Logger(RealtimeService.name);
+
+  /**
+   * `@Optional` porque os testes montam `new RealtimeService()` com um
+   * `Server` de mentira e sem banco. Sem Prisma, `emitToRelated` cai no
+   * mínimo seguro: só as outras abas do próprio usuário.
+   */
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
 
   // ── j-bots ──
   private readonly ouvintes: OuvinteLocal[] = [];
@@ -99,7 +110,14 @@ export class RealtimeService {
     );
   }
 
-  /** Emite para todo mundo conectado (presença, perfil). */
+  /**
+   * Emite para todo mundo conectado.
+   *
+   * Presença e perfil **não** usam mais isto (ver `emitToRelated`): um
+   * broadcast global por login/logout é O(online) por evento e O(N²) na
+   * reconexão em massa depois de um deploy. Fica para evento que de fato
+   * interessa a todos — hoje nenhum caminho de produção chama.
+   */
   emitAll(event: string, payload: unknown) {
     this.server?.emit(event, payload);
     this.notificar({ tipo: "todos" }, event, payload);
@@ -116,6 +134,88 @@ export class RealtimeService {
     if (userIds.length === 0) return;
     this.server?.to(userIds.map((id) => `user:${id}`)).emit(event, payload);
     this.notificar({ tipo: "usuarios", ids: userIds }, event, payload);
+  }
+
+  /**
+   * Emite um evento sobre o usuário para quem tem relação com ele — o público
+   * de `presence.update` e `user.updated`. Ver `emitToRelatedMany`.
+   */
+  async emitToRelated(userId: string, event: string, payload: unknown): Promise<void> {
+    await this.emitToRelatedMany(userId, [[event, payload]]);
+  }
+
+  /**
+   * Vários eventos para o mesmo público, com uma consulta só (o
+   * `updateStatus` manda presença e perfil juntos).
+   *
+   * O público é quem pode estar **vendo** o usuário na tela: membros dos
+   * servidores dele (`guild:<id>`), participantes das conversas diretas e
+   * grupos, amigos e pedidos pendentes nos dois sentidos (a lista de pedidos
+   * também mostra a bolinha de status) e as outras abas dele (`user:<id>`).
+   * Uma chamada `to([...salas])` só: o Socket.IO entrega uma vez ao socket que
+   * está em várias dessas salas.
+   *
+   * Nunca lança: se a consulta falhar, avisa ao menos as abas do próprio
+   * usuário — perder a presença de terceiros é melhor que derrubar o
+   * connect/disconnect ou a rota de perfil que chamou.
+   */
+  async emitToRelatedMany(
+    userId: string,
+    eventos: ReadonlyArray<readonly [event: string, payload: unknown]>,
+  ): Promise<void> {
+    if (eventos.length === 0) return;
+    let salas: string[];
+    try {
+      salas = await this.salasRelacionadas(userId);
+    } catch (erro) {
+      this.logger.warn(
+        `público de ${userId} indisponível, avisando só as abas dele: ${(erro as Error).message}`,
+      );
+      salas = [`user:${userId}`];
+    }
+    for (const [event, payload] of eventos) {
+      this.server?.to(salas).emit(event, payload);
+      this.notificar({ tipo: "relacionados", userId }, event, payload);
+    }
+  }
+
+  /**
+   * As salas do público de `emitToRelatedMany`, em três consultas paralelas.
+   *
+   * Conversa é endereçada pela `user:<id>` de cada participante, não pela
+   * `channel:<id>`: a sala de usuário existe desde o connect em todo socket,
+   * enquanto a de canal depende de alguém ter feito o join na hora certa (DM
+   * recém-aberta, grupo em que acabou de ser incluído).
+   */
+  private async salasRelacionadas(userId: string): Promise<string[]> {
+    if (!this.prisma) return [`user:${userId}`];
+    const [servidores, participantes, amizades] = await Promise.all([
+      this.prisma.guildMember.findMany({ where: { userId }, select: { guildId: true } }),
+      // `guildId: null` é o que define conversa (DM e GROUP) — ADR-0001
+      this.prisma.channelMember.findMany({
+        where: {
+          userId: { not: userId },
+          channel: { guildId: null, members: { some: { userId } } },
+        },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      // PENDING e ACCEPTED: pedido pendente também aparece com status na web
+      this.prisma.friendship.findMany({
+        where: { OR: [{ requesterId: userId }, { addresseeId: userId }] },
+        select: { requesterId: true, addresseeId: true },
+      }),
+    ]);
+    const usuarios = new Set<string>([userId]);
+    for (const p of participantes) usuarios.add(p.userId);
+    for (const a of amizades) {
+      usuarios.add(a.requesterId);
+      usuarios.add(a.addresseeId);
+    }
+    return [
+      ...servidores.map((g) => `guild:${g.guildId}`),
+      ...[...usuarios].map((id) => `user:${id}`),
+    ];
   }
 
   /** Emite para a sala de um canal (`channel:<id>`). */
