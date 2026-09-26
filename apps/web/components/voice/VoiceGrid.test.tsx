@@ -91,11 +91,6 @@ vi.mock("@/stores/presence", () => ({
     statuses[user.id] ?? user.status,
 }));
 
-vi.mock("@/stores/preferencias-por-participante", () => ({
-  usePreferenciasPorParticipante: <T,>(sel: (s: { videosDesativados: Record<string, boolean> }) => T) =>
-    sel({ videosDesativados: {} }),
-}));
-
 vi.mock("@/lib/cor-dominante", () => ({ useCorDominante: (_u: unknown, f: string) => f }));
 
 vi.mock("@/components/voice/fullscreen", () => ({
