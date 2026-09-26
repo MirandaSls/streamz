@@ -7,6 +7,7 @@ import { BotaoDeIcone } from "@/components/ui/primitivos";
 import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { preaquecerCadeiaDeVoz } from "@/stores/voice";
+import { carregarLivekit } from "@/lib/livekit";
 import { useCan } from "@/stores/permissions";
 import type { PropsDeArrasto } from "@/components/layout/sidebar/CategoriaEItemDeCanal";
 
@@ -97,8 +98,16 @@ export function CanalDeVoz({
           // passar o mouse por um canal de voz é o aviso mais barato de que o
           // clique pode vir: aproveita para pagar o chunk e o `.wasm` da
           // supressão avançada antes da hora (ver `preaquecerCadeiaDeVoz`,
-          // que não faz nada para quem não a escolheu)
-          onPointerEnter={preaquecerCadeiaDeVoz}
+          // que não faz nada para quem não a escolheu) e também o chunk do
+          // `livekit-client` em si (~510 KB, sob demanda — ver
+          // `carregarLivekit`), pra não atrasar o clique de entrar
+          onPointerEnter={() => {
+            preaquecerCadeiaDeVoz();
+            void carregarLivekit();
+          }}
+          // mesmo pré-aquecimento para quem chega pelo teclado (Tab), que
+          // nunca passa pelo `onPointerEnter`
+          onFocus={() => void carregarLivekit()}
           aria-current={ativo ? "true" : undefined}
           className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${naoLido ? "font-semibold" : "font-medium"}`}
         >

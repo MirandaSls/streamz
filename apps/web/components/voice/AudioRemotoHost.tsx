@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Track, type Track as TrackTipo } from "livekit-client";
+import type { Track } from "livekit-client";
 import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
 import { ouvintesRemotos } from "@/components/voice/audio-remoto";
+import { FONTE, TIPO_DE_FAIXA } from "@/lib/livekit";
 import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
@@ -61,13 +62,13 @@ export function AudioDoParticipante({ userId }: { userId: string }) {
   useVoice((s) => s.tick);
   const faixas = participantesDe(userId).flatMap((p) =>
     Array.from(p.trackPublications.values())
-      .filter((pub) => pub.kind === Track.Kind.Audio && !!pub.track)
+      .filter((pub) => pub.kind === TIPO_DE_FAIXA.Audio && !!pub.track)
       .map((pub) => ({
         sid: pub.trackSid,
-        faixa: pub.track as TrackTipo,
+        faixa: pub.track as Track,
         // a faixa é "de tela" pelo `source` (navegador) ou pela identidade
         // `<userId>#tela` (captura nativa do desktop) — ver `ehIdentidadeDeTela`
-        deTela: pub.source === Track.Source.ScreenShareAudio || ehIdentidadeDeTela(p.identity),
+        deTela: pub.source === FONTE.ScreenShareAudio || ehIdentidadeDeTela(p.identity),
       })),
   );
   return (
@@ -99,7 +100,7 @@ function AudioDaFaixa({
   deTela,
 }: {
   userId: string;
-  faixa: TrackTipo;
+  faixa: Track;
   deTela: boolean;
 }) {
   const ref = useRef<HTMLAudioElement>(null);

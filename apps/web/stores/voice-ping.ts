@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { ConnectionQuality, RoomEvent, Track, type Participant, type Room } from "livekit-client";
+// só tipos do SDK: esta store é importada pela de voz no boot, e o valor
+// estático puxaria o `livekit-client` inteiro para o bundle inicial. Os enums
+// vêm dos literais de `lib/livekit`, e o `RoomEvent` do módulo já carregado —
+// só se mede com uma `Room` de pé, e ela só existe depois do carregamento
+import type { ConnectionQuality, Participant, Room } from "livekit-client";
+import { FONTE, QUALIDADE_DA_CONEXAO, exigirLivekit } from "@/lib/livekit";
 
 /**
  * Ping da call: o "Ping: 34 ms" que o Discord mostra ao passar o mouse no
@@ -91,12 +96,12 @@ export function qualidadePeloPing(pingMs: number): QualidadeDeVoz {
 /** Qualidade pelo sinal do LiveKit; null quando ele ainda não sabe. */
 export function qualidadeDoLiveKit(q: ConnectionQuality): QualidadeDeVoz | null {
   switch (q) {
-    case ConnectionQuality.Excellent:
+    case QUALIDADE_DA_CONEXAO.Excellent:
       return "excelente";
-    case ConnectionQuality.Good:
+    case QUALIDADE_DA_CONEXAO.Good:
       return "boa";
-    case ConnectionQuality.Poor:
-    case ConnectionQuality.Lost:
+    case QUALIDADE_DA_CONEXAO.Poor:
+    case QUALIDADE_DA_CONEXAO.Lost:
       return "ruim";
     default:
       return null;
@@ -127,7 +132,7 @@ interface FaixaComRelatorio {
 
 /** Faixa por onde medir: o microfone local; sem ele, qualquer faixa remota. */
 function faixaParaMedir(room: Room): FaixaComRelatorio | null {
-  const mic = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+  const mic = room.localParticipant.getTrackPublication(FONTE.Microphone)?.track;
   if (mic) return mic;
   for (const p of room.remoteParticipants.values()) {
     for (const pub of p.trackPublications.values()) {
@@ -156,7 +161,7 @@ async function medir(room: Room) {
 export function iniciarMedicaoDePing(room: Room): void {
   pararMedicaoDePing();
   salaMedida = room;
-  room.on(RoomEvent.ConnectionQualityChanged, aoMudarQualidade);
+  room.on(exigirLivekit().RoomEvent.ConnectionQualityChanged, aoMudarQualidade);
   temporizador = setInterval(() => void medir(room), INTERVALO_DE_MEDICAO_MS);
   void medir(room);
 }
@@ -165,7 +170,7 @@ export function iniciarMedicaoDePing(room: Room): void {
 export function pararMedicaoDePing(): void {
   if (temporizador) clearInterval(temporizador);
   temporizador = null;
-  salaMedida?.off(RoomEvent.ConnectionQualityChanged, aoMudarQualidade);
+  if (salaMedida) salaMedida.off(exigirLivekit().RoomEvent.ConnectionQualityChanged, aoMudarQualidade);
   salaMedida = null;
   qualidadeDoServidor = null;
   useVoicePing.setState(SEM_MEDIDA);

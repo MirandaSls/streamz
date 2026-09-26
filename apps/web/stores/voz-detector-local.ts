@@ -1,4 +1,6 @@
-import { Track, type Room } from "livekit-client";
+// só o tipo do SDK: a store de voz importa este módulo no boot (ver `lib/livekit`)
+import type { Room } from "livekit-client";
+import { FONTE } from "@/lib/livekit";
 import { liberarContextoDeCaptura, usarContextoDeCaptura } from "@/lib/supressor-ruido";
 import {
   FALA_INICIAL,
@@ -63,7 +65,7 @@ let estado: EstadoDeFala = FALA_INICIAL;
 
 /** A faixa de microfone que está publicada agora (ou null). */
 function faixaDoMicrofone(room: Room): MediaStreamTrack | null {
-  const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+  const pub = room.localParticipant.getTrackPublication(FONTE.Microphone);
   if (!pub || pub.isMuted) return null;
   return pub.track?.mediaStreamTrack ?? null;
 }

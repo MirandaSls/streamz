@@ -25,21 +25,30 @@ import {
   displayNameOf,
   donoDaIdentidade,
 } from "@streamz/shared";
-import {
-  ConnectionState,
+// Do SDK, **só tipos**: esta store é importada no boot de `/app`, e um import de
+// valor levaria o `livekit-client` (~510 KB) para o bundle inicial de quem nunca
+// entra em voz. Classes e funções vêm de `carregarLivekit()` nos caminhos que
+// já são assíncronos (entrar na sala, abrir o microfone) e de `exigirLivekit()`
+// onde já existe uma `Room` — ela só nasce depois do carregamento. As
+// comparações com enum (`Track.Source`, `Track.Kind`) usam os literais de
+// `lib/livekit`, que valem mesmo antes do chunk chegar.
+import type {
   LocalAudioTrack,
+  LocalParticipant,
   LocalVideoTrack,
-  ParticipantEvent,
+  Participant,
   RemoteTrackPublication,
   Room,
-  RoomEvent,
-  Track,
-  VideoPreset,
-  createLocalTracks,
-  type LocalParticipant,
-  type Participant,
-  type TrackPublication,
+  TrackPublication,
 } from "livekit-client";
+import {
+  ESTADO_DA_CONEXAO,
+  FONTE,
+  TIPO_DE_FAIXA,
+  carregarLivekit,
+  exigirLivekit,
+  livekitCarregado,
+} from "@/lib/livekit";
 import { api } from "@/lib/api";
 import {
   abrirNoSistema,
@@ -231,7 +240,7 @@ let geracaoDaTransmissao = 0;
  * as faixas (`stopOnUnpublish`). Nunca lança.
  */
 async function despublicarTela(lp: LocalParticipant): Promise<void> {
-  const fontes = { tela: Track.Source.ScreenShare, somDaTela: Track.Source.ScreenShareAudio };
+  const fontes = { tela: FONTE.ScreenShare, somDaTela: FONTE.ScreenShareAudio };
   const faixas = Array.from(lp.trackPublications.values())
     .filter((pub) => ehFonteDeTela(pub.source, fontes))
     .flatMap((pub) => (pub.track ? [pub.track] : []));
@@ -1175,7 +1184,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // rede oscilou, e refazer a sala por cima publicaria a mesma câmera duas
       // vezes. Só refaz quando ela caiu de vez junto com o socket.
       const room = salaAtual();
-      if (room && room.state !== ConnectionState.Disconnected) return;
+      if (room && room.state !== ESTADO_DA_CONEXAO.Disconnected) return;
       await get().reconnect();
     },
 
@@ -1232,7 +1241,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         return;
       }
       const alvo = get().facingMode === "user" ? "environment" : "user";
-      const faixa = lp.getTrackPublication(Track.Source.Camera)?.videoTrack;
+      const faixa = lp.getTrackPublication(FONTE.Camera)?.videoTrack;
       try {
         if (faixa) {
           await faixa.restartTrack({ facingMode: alvo, resolution: capturaDaCamera(get().cameraFps) });
@@ -1301,9 +1310,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // o som pode não subir (faixa encerrada no meio): `telaComSom` diz o que
       // foi ao ar, não o que se pediu
       let somNoAr = false;
+      // `lp` existe, então a sala existe e o SDK já foi carregado por ela
+      const { LocalAudioTrack, LocalVideoTrack } = exigirLivekit();
       try {
         await lp.publishTrack(new LocalVideoTrack(video), {
-          source: Track.Source.ScreenShare,
+          source: FONTE.ScreenShare,
           // sem isto a faixa sobe com o bitrate padrão do SDK, calibrado para
           // 1080p — em 1440p o resultado seria mais pixels, todos borrados.
           // É `screenShareEncoding`, e não `videoEncoding`: para a fonte
@@ -1319,7 +1330,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         });
         if (comSom && audio.readyState !== "ended") {
           await lp.publishTrack(new LocalAudioTrack(audio), {
-            source: Track.Source.ScreenShareAudio,
+            source: FONTE.ScreenShareAudio,
             // áudio de tela é música/jogo/vídeo, não voz: estéreo, bitrate alto
             // e sem DTX, que existe para cortar silêncio de conversa
             audioPreset: { maxBitrate: MEDIA_QUALITY.screenAudioBitrate },
@@ -1522,7 +1533,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         }
       } else {
         const faixa = Array.from(sala?.localParticipant.trackPublications.values() ?? []).find(
-          (pub) => pub.source === Track.Source.ScreenShareAudio,
+          (pub) => pub.source === FONTE.ScreenShareAudio,
         )?.track;
         if (!faixa) return;
         try {
@@ -2029,6 +2040,9 @@ async function conectarMidia(
   get: () => VoiceStoreState,
 ): Promise<ResultadoMidia> {
   const crono = cronometroDeVoz("conectarMidia");
+  // o chunk do SDK baixa enquanto o token vem, em vez de depois dele; a falha
+  // aqui é ignorada porque `entrarNaSala` pede de novo e é lá que ela conta
+  carregarLivekit().catch(() => {});
   let creds: { token: string; url: string; room: string } | null;
   if (channel.guildId) {
     try {
@@ -2066,6 +2080,10 @@ async function entrarNaSala(
   rerender: () => void,
   get: () => VoiceStoreState,
 ) {
+  // o SDK chega aqui, e não no boot (ver o import no topo). Antes de
+  // `desmontarSala`: se o chunk não baixar, a sala que existia fica de pé e o
+  // erro sobe como qualquer outra falha de conexão
+  const { ParticipantEvent, Room, RoomEvent } = await carregarLivekit();
   // **Nunca duas `Room` ao mesmo tempo.** O LiveKit não aceita a mesma
   // identidade duas vezes: a conexão nova derruba a anterior, e a anterior —
   // com os ouvintes ainda pendurados — anunciava "a conexão de voz caiu" e
@@ -2110,7 +2128,7 @@ async function entrarNaSala(
   // avisa quando a CPU virou o gargalo. A câmera recebe o mesmo alívio da tela
   // compartilhada; o SDK em si não faz nada com o aviso além de emiti-lo.
   room.localParticipant.on(ParticipantEvent.LocalTrackCpuConstrained, (_faixa, publicacao) => {
-    if (sala !== room || publicacao.source !== Track.Source.Camera || cameraSobCpu) return;
+    if (sala !== room || publicacao.source !== FONTE.Camera || cameraSobCpu) return;
     cameraSobCpu = true;
     console.warn("[camera] CPU no limite: câmera limitada a 15 fps e 720p", {
       fps: useVoice.getState().cameraFps,
@@ -2534,6 +2552,7 @@ function preferenciasDoMicrofone(audio: AudioPrefs): PreferenciasDoMicrofone {
 function salaDoMicrofone(room: Room): SalaDoMicrofone {
   return {
     criarFaixa: async (restricoes) => {
+      const { LocalAudioTrack, createLocalTracks } = await carregarLivekit();
       const faixas = await createLocalTracks({ audio: { ...restricoes }, video: false });
       const faixa = faixas.find((f): f is LocalAudioTrack => f instanceof LocalAudioTrack);
       if (!faixa) {
@@ -2546,7 +2565,7 @@ function salaDoMicrofone(room: Room): SalaDoMicrofone {
       // `publishDefaults` da sala (bitrate, dtx, red) continuam valendo: o SDK
       // os mescla com estas opções
       await room.localParticipant.publishTrack(faixa as LocalAudioTrack, {
-        source: Track.Source.Microphone,
+        source: FONTE.Microphone,
       });
     },
     despublicar: async (faixa) => {
@@ -2602,12 +2621,14 @@ function naFilaDaCamera(tarefa: () => Promise<void>): Promise<void> {
 
 /** A faixa de câmera publicada (ligada ou mutada), se houver. */
 function cameraDe(lp: LocalParticipant): LocalVideoTrack | undefined {
-  return lp.getTrackPublication(Track.Source.Camera)?.videoTrack;
+  return lp.getTrackPublication(FONTE.Camera)?.videoTrack;
 }
 
 /** Opções de publicação da câmera no formato do SDK. */
 function opcoesDePublicacaoDaCamera(fps: CameraFps) {
   const { videoEncoding, camadas } = publicacaoDaCamera(fps);
+  // só é chamada com sala (na criação dela ou com a câmera de pé): SDK carregado
+  const { VideoPreset } = exigirLivekit();
   return {
     videoEncoding,
     videoSimulcastLayers: camadas.map(
@@ -2749,13 +2770,13 @@ export function participantesDaSala(): Participant[] {
 /** Faixas de vídeo publicadas por um participante (câmera e tela). */
 export function videosDe(p: Participant) {
   return Array.from(p.trackPublications.values()).filter(
-    (pub) => pub.kind === Track.Kind.Video && !!pub.track && !pub.isMuted,
+    (pub) => pub.kind === TIPO_DE_FAIXA.Video && !!pub.track && !pub.isMuted,
   );
 }
 
 /** Só a câmera: a tela tem tile próprio e regra própria (ver `telasDe`). */
 export function camerasDe(p: Participant) {
-  return videosDe(p).filter((pub) => pub.source !== Track.Source.ScreenShare);
+  return videosDe(p).filter((pub) => pub.source !== FONTE.ScreenShare);
 }
 
 /**
@@ -2768,7 +2789,7 @@ export function camerasDe(p: Participant) {
  */
 export function telasDe(p: Participant) {
   return Array.from(p.trackPublications.values()).filter(
-    (pub) => pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare,
+    (pub) => pub.kind === TIPO_DE_FAIXA.Video && pub.source === FONTE.ScreenShare,
   );
 }
 
@@ -2776,6 +2797,15 @@ export function telasDe(p: Participant) {
 function meuIdNaSala(): string | null {
   const identity = sala?.localParticipant.identity;
   return identity ? donoDaIdentidade(identity) : null;
+}
+
+/**
+ * `pub instanceof RemoteTrackPublication`, sem exigir o SDK: sem ele carregado
+ * não há sala, e sem sala não há publicação remota nenhuma.
+ */
+function ehPublicacaoRemota(pub: TrackPublication): pub is RemoteTrackPublication {
+  const lk = livekitCarregado();
+  return !!lk && pub instanceof lk.RemoteTrackPublication;
 }
 
 /**
@@ -2794,15 +2824,15 @@ function participantesComTelas(): ParticipanteDeTela[] {
       dono: donoDaIdentidade(p.identity),
       telas: publicacoes.filter(
         (pub): pub is RemoteTrackPublication =>
-          pub instanceof RemoteTrackPublication &&
-          pub.kind === Track.Kind.Video &&
-          pub.source === Track.Source.ScreenShare,
+          ehPublicacaoRemota(pub) &&
+          pub.kind === TIPO_DE_FAIXA.Video &&
+          pub.source === FONTE.ScreenShare,
       ),
       audios: publicacoes.filter(
         (pub): pub is RemoteTrackPublication =>
-          pub instanceof RemoteTrackPublication &&
-          pub.kind === Track.Kind.Audio &&
-          pub.source === Track.Source.ScreenShareAudio,
+          ehPublicacaoRemota(pub) &&
+          pub.kind === TIPO_DE_FAIXA.Audio &&
+          pub.source === FONTE.ScreenShareAudio,
       ),
     };
   });
@@ -2855,9 +2885,9 @@ function camerasPublicadasDe(userId: string): RemoteTrackPublication[] {
   return participantesDe(userId).flatMap((p) =>
     Array.from(p.trackPublications.values()).filter(
       (pub): pub is RemoteTrackPublication =>
-        pub instanceof RemoteTrackPublication &&
-        pub.kind === Track.Kind.Video &&
-        pub.source !== Track.Source.ScreenShare,
+        ehPublicacaoRemota(pub) &&
+        pub.kind === TIPO_DE_FAIXA.Video &&
+        pub.source !== FONTE.ScreenShare,
     ),
   );
 }
@@ -2903,7 +2933,7 @@ export function telaPublicadaDe(userId: string): TrackPublication | null {
 /** Faixas de áudio publicadas por um participante. */
 export function audiosDe(p: Participant) {
   return Array.from(p.trackPublications.values()).filter(
-    (pub) => pub.kind === Track.Kind.Audio && !!pub.track && !pub.isMuted,
+    (pub) => pub.kind === TIPO_DE_FAIXA.Audio && !!pub.track && !pub.isMuted,
   );
 }
 

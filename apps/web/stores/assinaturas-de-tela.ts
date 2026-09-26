@@ -1,4 +1,7 @@
-import { VideoQuality } from "livekit-client";
+// só o tipo: o valor vem dos literais de `lib/livekit` para que esta regra
+// (importada pela store de voz no boot) não puxe o SDK para o bundle inicial
+import type { VideoQuality } from "livekit-client";
+import { QUALIDADE_DE_VIDEO } from "@/lib/livekit";
 import { create } from "zustand";
 import {
   previaDaMinhaTelaLigada,
@@ -165,16 +168,16 @@ export function assinaturaDaTela(dono: string, chave: string, estado: EstadoDeAs
     // baixa — conferir o que está no ar não pede 1440p decodificados na mesma
     // máquina que captura
     const pedi = minhaTelaAparece(chave, estado) || previa === dono;
-    return pedi ? { assinar: true, qualidade: VideoQuality.LOW } : { assinar: false, qualidade: null };
+    return pedi ? { assinar: true, qualidade: QUALIDADE_DE_VIDEO.LOW } : { assinar: false, qualidade: null };
   }
   const assistida = assistindo.has(dono);
   const assinar = assistida || previa === dono;
   if (!assinar) return { assinar: false, qualidade: null };
   // só a miniatura do hover: 240×135 não pede mais que a camada baixa
-  if (!assistida) return { assinar: true, qualidade: VideoQuality.LOW };
+  if (!assistida) return { assinar: true, qualidade: QUALIDADE_DE_VIDEO.LOW };
   // com alguém no destaque, todo o resto é miniatura de 188×106 na faixa
   const naFaixa = focado !== null && focado !== chave;
-  return { assinar: true, qualidade: naFaixa ? VideoQuality.LOW : VideoQuality.HIGH };
+  return { assinar: true, qualidade: naFaixa ? QUALIDADE_DE_VIDEO.LOW : QUALIDADE_DE_VIDEO.HIGH };
 }
 
 /**

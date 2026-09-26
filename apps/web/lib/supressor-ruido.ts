@@ -1,5 +1,6 @@
-import { Track } from "livekit-client";
-import type { AudioProcessorOptions, TrackProcessor } from "livekit-client";
+// só tipos: este módulo é importado pela store de voz no boot, e um import de
+// valor do SDK o levaria inteiro para o bundle inicial (ver `lib/livekit`)
+import type { AudioProcessorOptions, Track, TrackProcessor } from "livekit-client";
 
 /**
  * A cadeia de captura do microfone: supressão de ruído (RNNoise) e volume de
