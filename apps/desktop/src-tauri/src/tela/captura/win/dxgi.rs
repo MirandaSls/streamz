@@ -69,6 +69,9 @@ struct Leitor {
     /// Esta duplicação já entregou um quadro. Até lá, todo quadro vale — o
     /// primeiro é a tela inteira, e é dele que as miniaturas vivem.
     entregou: bool,
+    /// Verdadeiro depois do primeiro aviso de `recorte_na_textura` recusado,
+    /// para não inundar o log a cada quadro.
+    avisou_recorte_recusado: bool,
 }
 
 // SAFETY: `HMONITOR` é um identificador opaco do sistema (ver `hmonitor_de`,
@@ -103,11 +106,22 @@ fn criar(monitor: HMONITOR) -> Result<Leitor, Erro> {
         Monitor::from_raw_hmonitor(monitor.0),
         &[DxgiDuplicationFormat::Bgra8],
     )
-    .map_err(|e| Erro::Falha(e.to_string()))?;
+    .map_err(|e| {
+        log::error!("tela-dxgi: falha ao criar duplicacao: {e}");
+        Erro::Falha(e.to_string())
+    })?;
+    let desc = api.duplication_desc();
+    log::info!(
+        "tela-dxgi: duplicacao iniciada (rotacao={:?}, textura={}x{})",
+        desc.Rotation.0,
+        desc.ModeDesc.Width,
+        desc.ModeDesc.Height,
+    );
     Ok(Leitor {
         api,
         staging: None,
         entregou: false,
+        avisou_recorte_recusado: false,
     })
 }
 
@@ -144,7 +158,10 @@ fn ler(
     let mut quadro = match leitor.api.acquire_next_frame(limite_ms) {
         Ok(quadro) => quadro,
         Err(ErroDxgi::Timeout) => return Err(Leitura::NadaNovo),
-        Err(ErroDxgi::AccessLost) => return Err(Leitura::AcessoPerdido),
+        Err(ErroDxgi::AccessLost) => {
+            log::warn!("tela-dxgi: AccessLost na duplicacao, recriando");
+            return Err(Leitura::AcessoPerdido);
+        }
         Err(e) => return Err(Leitura::Falha(e.to_string())),
     };
     let chegou = Instant::now();
@@ -167,7 +184,17 @@ fn ler(
         None => None,
         Some(r) => match recorte_na_textura(r, rotacao, desc.Width, desc.Height) {
             Some(r) => Some(r),
-            None => return Err(Leitura::NadaNovo),
+            None => {
+                if !leitor.avisou_recorte_recusado {
+                    leitor.avisou_recorte_recusado = true;
+                    log::warn!(
+                        "tela-dxgi: recorte_na_textura recusado (recorte={r:?}, rotacao={rotacao}, textura={}x{})",
+                        desc.Width,
+                        desc.Height,
+                    );
+                }
+                return Err(Leitura::NadaNovo);
+            }
         },
     };
     let serve = leitor.staging.as_ref().is_some_and(|s| {
@@ -177,7 +204,10 @@ fn ler(
     if !serve {
         leitor.staging = None;
         let nova = StagingTexture::new(quadro.device(), desc.Width, desc.Height, desc.Format)
-            .map_err(|e| Leitura::Falha(e.to_string()))?;
+            .map_err(|e| {
+                log::error!("tela-dxgi: falha ao criar textura de staging: {e}");
+                Leitura::Falha(e.to_string())
+            })?;
         leitor.staging = Some(nova);
     }
     let Some(staging) = leitor.staging.as_mut() else {

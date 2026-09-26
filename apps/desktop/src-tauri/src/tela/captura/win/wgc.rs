@@ -81,6 +81,9 @@ struct Entregador {
     /// Buffer pronto para o próximo quadro: o de um quadro que ninguém chegou
     /// a tirar da caixa, ou um devolvido pelo encoder.
     reserva: Vec<u8>,
+    /// Verdadeiro depois do primeiro aviso de mapeamento recusado, para não
+    /// inundar o log a cada quadro.
+    avisou_mapeamento_recusado: bool,
 }
 
 impl GraphicsCaptureApiHandler for Entregador {
@@ -93,6 +96,7 @@ impl GraphicsCaptureApiHandler for Entregador {
             ritmo: ctx.flags.ritmo,
             staging: None,
             reserva: Vec::new(),
+            avisou_mapeamento_recusado: false,
         })
     }
 
@@ -109,7 +113,17 @@ impl GraphicsCaptureApiHandler for Entregador {
     ) -> Result<(), Self::Error> {
         match panic::catch_unwind(AssertUnwindSafe(|| self.receber(frame))) {
             Ok(resultado) => resultado,
-            Err(_) => {
+            Err(payload) => {
+                let mensagem = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned());
+                match mensagem {
+                    Some(mensagem) => {
+                        log::error!("tela-wgc: panico em on_frame_arrived: {mensagem}")
+                    }
+                    None => log::error!("tela-wgc: panico em on_frame_arrived (sem mensagem)"),
+                }
                 // A staging pode ter ficado mapeada no meio do `ler`; soltar
                 // a textura é mais seguro que reaproveitá-la.
                 self.staging = None;
@@ -121,6 +135,7 @@ impl GraphicsCaptureApiHandler for Entregador {
     }
 
     fn on_closed(&mut self) -> Result<(), Self::Error> {
+        log::info!("tela-wgc: sessao encerrada (on_closed)");
         // Mesmo motivo do `on_frame_arrived`: nada de unwind para o WinRT.
         let _ = panic::catch_unwind(AssertUnwindSafe(|| self.caixa.encerrar()));
         Ok(())
@@ -193,8 +208,16 @@ impl Entregador {
             // vem com a textura nova) ou é o primeiro quadro. Soltar a velha
             // antes de criar a nova evita ter as duas ao mesmo tempo.
             self.staging = None;
+            let textura =
+                match StagingTexture::new(frame.device(), desc.Width, desc.Height, desc.Format) {
+                    Ok(textura) => textura,
+                    Err(e) => {
+                        log::error!("tela-wgc: falha ao criar textura de staging: {e}");
+                        return Err(e.into());
+                    }
+                };
             self.staging = Some(Staging {
-                textura: StagingTexture::new(frame.device(), desc.Width, desc.Height, desc.Format)?,
+                textura,
                 dispositivo: frame.device().clone(),
             });
         }
@@ -213,7 +236,19 @@ impl Entregador {
         }
         let passo = mapeado.RowPitch;
         let copiou = match bytes_mapeados(&desc, &mapeado) {
-            None => false,
+            None => {
+                if !self.avisou_mapeamento_recusado {
+                    self.avisou_mapeamento_recusado = true;
+                    log::warn!(
+                        "tela-wgc: mapeamento recusado (largura={}, altura={}, RowPitch={}, DepthPitch={})",
+                        desc.Width,
+                        desc.Height,
+                        mapeado.RowPitch,
+                        mapeado.DepthPitch,
+                    );
+                }
+                false
+            }
             Some(tamanho) => {
                 // SAFETY: `bytes_mapeados` só devolve tamanho com ponteiro não
                 // nulo, `passo >= largura * 4` e contas sem overflow; o `Map`
@@ -285,15 +320,26 @@ impl Sessao {
                 if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
                     return Err(Erro::FonteSumiu);
                 }
-                let controle = iniciar(Window::from_raw_hwnd(hwnd.0), caixa.clone(), fps)?;
+                let janela = Window::from_raw_hwnd(hwnd.0);
+                log::info!(
+                    "tela-wgc: iniciando captura de janela (hwnd={:?}, dimensoes={:?}x{:?})",
+                    hwnd.0,
+                    janela.width().ok(),
+                    janela.height().ok(),
+                );
+                let controle = iniciar(janela, caixa.clone(), fps)?;
                 cutucar(hwnd);
                 controle
             }
-            Alvo::Monitor(bruto) => iniciar(
-                Monitor::from_raw_hmonitor(hmonitor_de(bruto).0),
-                caixa.clone(),
-                fps,
-            )?,
+            Alvo::Monitor(bruto) => {
+                let monitor = Monitor::from_raw_hmonitor(hmonitor_de(bruto).0);
+                log::info!(
+                    "tela-wgc: iniciando captura de monitor (dimensoes={:?}x{:?})",
+                    monitor.width().ok(),
+                    monitor.height().ok(),
+                );
+                iniciar(monitor, caixa.clone(), fps)?
+            }
         };
         Ok(Self {
             caixa,
@@ -325,7 +371,10 @@ where
         ColorFormat::Bgra8,
         Flags { caixa, ritmo },
     );
-    Entregador::start_free_threaded(settings).map_err(|e| Erro::Falha(e.to_string()))
+    Entregador::start_free_threaded(settings).map_err(|e| {
+        log::error!("tela-wgc: falha ao iniciar sessao de captura: {e}");
+        Erro::Falha(e.to_string())
+    })
 }
 
 /// O intervalo mínimo que a sessão pede ao sistema.
