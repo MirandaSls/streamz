@@ -74,3 +74,15 @@ describe("setMuteDeafen", () => {
     });
   });
 });
+
+describe("toggleDeafen", () => {
+  it("como no Discord: ligar o surdo muta, desligar devolve os dois", () => {
+    useVoicePrefs.getState().toggleDeafen();
+    expect(useVoicePrefs.getState()).toMatchObject({ muted: true, deafened: true });
+
+    useVoicePrefs.getState().toggleDeafen();
+    expect(useVoicePrefs.getState()).toMatchObject({ muted: false, deafened: false });
+
+    expect(tocarSom.mock.calls).toEqual([["surdo"], ["nao-surdo"]]);
+  });
+});
