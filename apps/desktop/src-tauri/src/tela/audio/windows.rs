@@ -106,11 +106,13 @@ impl Loopback {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
         if let Ok(loopback) = Self::abrir_sem_o_streamz() {
+            log::info!("tela-audio: loopback via process loopback (sem o Streamz)");
             return Ok(loopback);
         }
         // Fallback: Windows sem process loopback (antes do build 20348) ou
         // ativação que falhou. Aqui o eco volta — as vozes da chamada estão
         // na mistura do dispositivo —, mas é melhor que a tela sem som.
+        log::info!("tela-audio: loopback via dispositivo padrão (fallback)");
         Self::abrir_dispositivo_padrao()
     }
 
@@ -166,13 +168,22 @@ impl Loopback {
             // Timeout: o aviso pode chegar depois; o `send` dele só falha
             // em silêncio, porque o `rx` já foi embora. Os parâmetros seguem
             // vivos dentro do aviso, que o Windows ainda segura.
-            rx.recv_timeout(ESPERA_ATIVACAO)
-                .map_err(|_| ErroDeAudio::Falha)?;
+            rx.recv_timeout(ESPERA_ATIVACAO).map_err(|_| {
+                log::warn!(
+                    "tela-audio: process loopback sem resposta de ativação em {:?}",
+                    ESPERA_ATIVACAO
+                );
+                ErroDeAudio::Falha
+            })?;
 
             let mut resultado = HRESULT(0);
             let mut ativado: Option<IUnknown> = None;
-            operacao.GetActivateResult(&mut resultado, &mut ativado)?;
-            resultado.ok()?;
+            operacao
+                .GetActivateResult(&mut resultado, &mut ativado)
+                .inspect_err(|e| log::warn!("tela-audio: GetActivateResult falhou: {e}"))?;
+            resultado.ok().inspect_err(|e| {
+                log::warn!("tela-audio: ativação do process loopback voltou com erro: {e}")
+            })?;
             let cliente: IAudioClient = ativado.ok_or(ErroDeAudio::Falha)?.cast()?;
 
             // O dispositivo virtual não responde `GetMixFormat`: o formato é
@@ -192,25 +203,35 @@ impl Loopback {
             // caminho testado desse dispositivo virtual: `EVENTCALLBACK`
             // mesmo lendo por polling, e `AUTOCONVERTPCM` para o motor
             // converter a mistura para o formato fixo acima.
-            cliente.Initialize(
-                AUDCLNT_SHAREMODE_SHARED,
-                AUDCLNT_STREAMFLAGS_LOOPBACK
-                    | AUDCLNT_STREAMFLAGS_EVENTCALLBACK
-                    | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
-                BUFFER_100NS,
-                0,
-                &formato,
-                None,
-            )?;
+            cliente
+                .Initialize(
+                    AUDCLNT_SHAREMODE_SHARED,
+                    AUDCLNT_STREAMFLAGS_LOOPBACK
+                        | AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+                        | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+                    BUFFER_100NS,
+                    0,
+                    &formato,
+                    None,
+                )
+                .inspect_err(|e| {
+                    log::warn!("tela-audio: Initialize do process loopback falhou: {e}")
+                })?;
 
             // Auto-reset e sem nome: é só o que o `EVENTCALLBACK` exige
             // registrado antes do `Start`.
             let evento = CreateEventW(None, false, false, PCWSTR::null())?;
             let iniciar = || -> Result<(IAudioCaptureClient, u32), ErroDeAudio> {
-                cliente.SetEventHandle(evento)?;
-                let captura: IAudioCaptureClient = cliente.GetService()?;
+                cliente
+                    .SetEventHandle(evento)
+                    .inspect_err(|e| log::warn!("tela-audio: SetEventHandle falhou: {e}"))?;
+                let captura: IAudioCaptureClient = cliente.GetService().inspect_err(|e| {
+                    log::warn!("tela-audio: GetService (IAudioCaptureClient) falhou: {e}")
+                })?;
                 let quadros_no_buffer = cliente.GetBufferSize()?;
-                cliente.Start()?;
+                cliente.Start().inspect_err(|e| {
+                    log::warn!("tela-audio: Start do process loopback falhou: {e}")
+                })?;
                 Ok((captura, quadros_no_buffer))
             };
             let (captura, quadros_no_buffer) = match iniciar() {
@@ -248,11 +269,20 @@ impl Loopback {
             let dispositivo = enumerador.GetDefaultAudioEndpoint(eRender, eConsole)?;
             let cliente: IAudioClient = dispositivo.Activate(CLSCTX_ALL, None)?;
 
-            let formato_ptr = cliente.GetMixFormat()?;
+            let formato_ptr = cliente
+                .GetMixFormat()
+                .inspect_err(|e| log::warn!("tela-audio: GetMixFormat falhou: {e}"))?;
             if formato_ptr.is_null() {
+                log::warn!("tela-audio: GetMixFormat devolveu ponteiro nulo");
                 return Err(ErroDeAudio::Falha);
             }
             let (taxa, canais, amostra) = descrever_formato(formato_ptr);
+            log::info!(
+                "tela-audio: mixer do dispositivo padrão: {} Hz, {} canal(is), amostra={:?}",
+                taxa,
+                canais,
+                amostra
+            );
             let inicializado = cliente.Initialize(
                 AUDCLNT_SHAREMODE_SHARED,
                 AUDCLNT_STREAMFLAGS_LOOPBACK,
@@ -262,8 +292,17 @@ impl Loopback {
                 None,
             );
             CoTaskMemFree(Some(formato_ptr as *const c_void));
-            inicializado?;
-            let amostra = amostra.ok_or(ErroDeAudio::Falha)?;
+            inicializado.inspect_err(|e| {
+                log::warn!("tela-audio: Initialize do dispositivo padrão falhou: {e}")
+            })?;
+            let amostra = amostra.ok_or_else(|| {
+                log::warn!(
+                    "tela-audio: formato do mixer não suportado (taxa={} canais={})",
+                    taxa,
+                    canais
+                );
+                ErroDeAudio::Falha
+            })?;
 
             let captura: IAudioCaptureClient = cliente.GetService()?;
             let quadros_no_buffer = cliente.GetBufferSize()?;
@@ -312,6 +351,12 @@ impl Loopback {
             let tamanho = match tamanho {
                 Some(t) if lidos <= self.quadros_no_buffer => t,
                 _ => {
+                    log::error!(
+                        "tela-audio: pacote de tamanho inválido: lidos={} quadros_no_buffer={} canais={}",
+                        lidos,
+                        self.quadros_no_buffer,
+                        canais
+                    );
                     unsafe {
                         let _ = self.captura.ReleaseBuffer(lidos);
                     }
@@ -386,9 +431,15 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for AvisoDeAtivacao_Impl {
         // Um pânico aqui desenrolaria para dentro do `extern "system"` do
         // Windows (UB, na prática o processo cai). `send` não entra em pânico;
         // isto é o cinto de segurança, como em `macos.rs`.
-        let _ = catch_unwind(AssertUnwindSafe(|| {
+        if catch_unwind(AssertUnwindSafe(|| {
             let _ = self.tx.send(());
-        }));
+        }))
+        .is_err()
+        {
+            log::error!(
+                "tela-audio: pânico ao notificar conclusão da ativação do process loopback"
+            );
+        }
         Ok(())
     }
 }
