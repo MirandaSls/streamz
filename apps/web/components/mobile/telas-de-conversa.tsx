@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import {
   Hash,
   Lock,
@@ -21,7 +22,6 @@ import DMMemberList from "@/components/chat/DMMemberList";
 import DMProfilePanel from "@/components/chat/DMProfilePanel";
 import DMView from "@/components/chat/DMView";
 import FriendsPage from "@/components/friends/FriendsPage";
-import VoicePanel from "@/components/VoicePanel";
 import CamadasDoCanal, { useEntradasDoCanal } from "@/components/mobile/entradas/EntradasDoCanal";
 import { BotaoRedondo } from "@/components/mobile/entradas/pecas";
 import TelaDeThread from "@/components/mobile/entradas/TelaDeThread";
@@ -34,6 +34,15 @@ import { dmTitle } from "@/stores/dms";
 import { useMobile } from "@/stores/mobile";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { useVoice } from "@/stores/voice";
+
+/*
+  `VoicePanel` só monta com uma chamada em curso e carrega a grade de voz
+  (LiveKit) — pesado demais para entrar no chunk de toda conversa. `ssr: false`
+  porque a tela só existe depois de um toque, do lado do cliente; sem
+  `loading`, o `min-h-0 flex-1` do `<div>` em volta já reserva o espaço, então
+  não há salto ao trocar do vazio para o palco.
+*/
+const VoicePanel = dynamic(() => import("@/components/VoicePanel"), { ssr: false });
 
 /**
  * As telas cheias que entram por cima da base de uma aba: a conversa de um
