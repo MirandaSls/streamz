@@ -137,6 +137,10 @@ fn ler(
     bgra: &mut Vec<u8>,
 ) -> Result<(u32, u32, Instant), Leitura> {
     let limite_ms = u32::try_from(limite.as_millis()).unwrap_or(u32::MAX);
+    // Lida antes do `acquire_next_frame`, que empresta a api. Trocar a
+    // rotação do monitor derruba a duplicação (`AccessLost`), então a da
+    // criação é a que vale até a recriação.
+    let rotacao = leitor.api.duplication_desc().Rotation.0;
     let mut quadro = match leitor.api.acquire_next_frame(limite_ms) {
         Ok(quadro) => quadro,
         Err(ErroDxgi::Timeout) => return Err(Leitura::NadaNovo),
@@ -154,6 +158,18 @@ fn ler(
     // Uma staging do tamanho do monitor serve à tela inteira e a qualquer
     // recorte dela; só muda quando o modo do monitor muda.
     let desc = *quadro.texture_desc();
+    // O `buffer_crop_with` só confere se a staging comporta o tamanho do
+    // recorte, não se a origem cai dentro do quadro; uma caixa fora da
+    // textura no `CopySubresourceRegion` é comportamento indefinido no D3D11
+    // (há driver que derruba o processo). Por isso o recorte chega aqui em
+    // pixels do monitor e só vira caixa depois de passar pela textura real.
+    let recorte = match recorte {
+        None => None,
+        Some(r) => match recorte_na_textura(r, rotacao, desc.Width, desc.Height) {
+            Some(r) => Some(r),
+            None => return Err(Leitura::NadaNovo),
+        },
+    };
     let serve = leitor.staging.as_ref().is_some_and(|s| {
         let d = s.desc();
         d.Width == desc.Width && d.Height == desc.Height && d.Format == desc.Format
@@ -277,6 +293,63 @@ fn recorte_da_janela(hwnd: HWND, monitor: HMONITOR) -> Option<Recorte> {
         (x1 - tela.left) as u32,
         (y1 - tela.top) as u32,
     ))
+}
+
+/// Valores de `DXGI_MODE_ROTATION`, comparados pelo número para não depender
+/// da feature `Win32_Graphics_Dxgi_Common` do `windows` só por três constantes.
+const ROTACAO_90: i32 = 2;
+const ROTACAO_180: i32 = 3;
+const ROTACAO_270: i32 = 4;
+
+/// Leva um recorte em pixels do monitor (o espaço do `rcMonitor`, já girado
+/// como o usuário vê) para o espaço da textura da duplicação, que o DXGI
+/// entrega **sem** rotação: um monitor retrato 1080x1920 em `ROTATE90` chega
+/// como 1920x1080. `None` quando não sobra área para copiar.
+///
+/// Primeiro o recorte é preso ao tamanho girado da textura — o `rcMonitor` e
+/// a textura podem divergir por um instante numa troca de modo, antes do
+/// `AccessLost` chegar —, depois girado, e no fim conferido de novo contra a
+/// textura: nenhuma inconsistência pode virar caixa fora dela.
+///
+/// O mapeamento segue o `SetDirtyVert` do exemplo DesktopDuplication da
+/// Microsoft (textura → área de trabalho em `ROTATE90`: `x = L - ty`,
+/// `y = tx`), invertido. O quadro devolvido continua na orientação da
+/// textura, igual à captura do monitor inteiro: acertar a região é o que
+/// cabe aqui; girar os pixels é outra mudança.
+fn recorte_na_textura(
+    (x0, y0, x1, y1): Recorte,
+    rotacao: i32,
+    largura_tex: u32,
+    altura_tex: u32,
+) -> Option<Recorte> {
+    let deitado = rotacao == ROTACAO_90 || rotacao == ROTACAO_270;
+    let (largura, altura) = if deitado {
+        (altura_tex, largura_tex)
+    } else {
+        (largura_tex, altura_tex)
+    };
+    let (x0, x1) = (x0.min(largura), x1.min(largura));
+    let (y0, y1) = (y0.min(altura), y1.min(altura));
+    // Todos os valores estão em `0..=largura`/`0..=altura` depois do corte,
+    // então as subtrações abaixo não estouram.
+    let (tx0, ty0, tx1, ty1) = match rotacao {
+        // UNSPECIFIED (0) e IDENTITY (1): mesmo espaço.
+        0 | 1 => (x0, y0, x1, y1),
+        ROTACAO_90 => (y0, largura - x1, y1, largura - x0),
+        ROTACAO_180 => (largura - x1, altura - y1, largura - x0, altura - y0),
+        ROTACAO_270 => (altura - y1, x0, altura - y0, x1),
+        // Valor que o DXGI não documenta: melhor perder o quadro que chutar.
+        _ => return None,
+    };
+    // Abaixo de 2x2 não há imagem que valha a cópia (e 0 seria `InvalidSize`).
+    if tx1 > largura_tex
+        || ty1 > altura_tex
+        || tx1 < tx0.saturating_add(2)
+        || ty1 < ty0.saturating_add(2)
+    {
+        return None;
+    }
+    Some((tx0, ty0, tx1, ty1))
 }
 
 /// A moldura que o usuário vê, sem a borda invisível de redimensionamento.
