@@ -264,8 +264,29 @@ fn sem_captura_nativa() -> Capacidades {
 /// janelas). Roda fora da thread principal e uma varredura por vez: duas
 /// sessões de captura da mesma janela ao mesmo tempo é o que o WGC menos
 /// gosta.
+#[cfg(tela_nativa)]
 #[tauri::command]
-pub async fn miniaturas_de_tela(ids: Vec<String>) -> Result<Vec<Option<String>>, String> {
+pub async fn miniaturas_de_tela(
+    ids: Vec<String>,
+    estado: tauri::State<'_, Transmissao>,
+) -> Result<Vec<Option<String>>, String> {
+    // Transmissão no ar: nem varrer. Depois que o seletor deixa de ser a
+    // única fonte de miniatura, é a chamada em laço da web que disputaria
+    // DXGI/WGC com a captura definitiva — a grade fica com o ícone do app.
+    if estado.transmitindo() {
+        return Ok(vec![None; ids.len()]);
+    }
+    tauri::async_runtime::spawn_blocking(move || miniaturas(&ids))
+        .await
+        .map_err(|e| format!("falha ao gerar miniaturas: {e}"))
+}
+
+#[cfg(not(tela_nativa))]
+#[tauri::command]
+pub async fn miniaturas_de_tela(
+    ids: Vec<String>,
+    _estado: tauri::State<'_, Transmissao>,
+) -> Result<Vec<Option<String>>, String> {
     tauri::async_runtime::spawn_blocking(move || miniaturas(&ids))
         .await
         .map_err(|e| format!("falha ao gerar miniaturas: {e}"))
@@ -333,6 +354,9 @@ static SEM_MINIATURAS: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// devolve o controle quando o caminho está livre. Ao ser derrubada, as
 /// miniaturas voltam — o seletor pode ter continuado aberto porque a
 /// transmissão falhou.
+///
+/// Isto cobre só a janela de `iniciar_tela`; depois que a transmissão está no
+/// ar, quem barra a varredura em `miniaturas_de_tela` é `Transmissao::transmitindo()`.
 #[cfg(tela_nativa)]
 pub struct SemMiniaturas;
 
