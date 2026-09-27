@@ -3,7 +3,12 @@
 import { useEffect, useRef } from "react";
 import { Track, type Track as TrackTipo } from "livekit-client";
 import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
-import { ouvintesRemotos } from "@/components/voice/audio-remoto";
+import {
+  mixDaFaixa,
+  ouvintesRemotos,
+  saidaEscolhida,
+  usarGrafoDeGanho,
+} from "@/components/voice/audio-remoto";
 import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
@@ -79,15 +84,165 @@ export function AudioDoParticipante({ userId }: { userId: string }) {
   );
 }
 
+type ContextoComSaida = AudioContext & { setSinkId?: (id: string) => Promise<void> };
+
+/**
+ * O grafo do Web Audio de uma faixa: fonte → ganho → saída do contexto.
+ *
+ * `fonte` e `trilha` andam juntas: a fonte é refeita quando a
+ * `MediaStreamTrack` da faixa muda (o SDK troca a trilha por baixo do mesmo
+ * `Track` numa reconexão). `saida` é o id que o contexto já recebeu em
+ * `setSinkId` ("" = padrão) e `saidaPronta` fica falsa enquanto essa troca
+ * está pendente — até lá quem toca é o elemento, que já está no dispositivo
+ * certo, para o começo do som não escapar pela caixa padrão.
+ */
+type GrafoDeGanho = {
+  ctx: ContextoComSaida;
+  ganho: GainNode;
+  fonte: MediaStreamAudioSourceNode | null;
+  trilha: MediaStreamTrack | null;
+  saida: string;
+  saidaPronta: boolean;
+  soltar: () => void;
+};
+
+function construtorDeContexto(): typeof AudioContext | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  );
+}
+
+function contextoTemSinkId(Ctor: typeof AudioContext | undefined): boolean {
+  return typeof (Ctor?.prototype as ContextoComSaida | undefined)?.setSinkId === "function";
+}
+
+/**
+ * Cria o contexto e o ganho (ainda sem fonte) e cuida de tirá-lo do
+ * `suspended`.
+ *
+ * O contexto nasce fora do gesto do usuário (num effect, depois de mexer no
+ * volume), e no WebView2 a política de autoplay o deixa suspenso. Tenta-se o
+ * `resume()` na hora; se não pegar, um par de ouvintes de `pointerdown` /
+ * `keydown` no `window` tenta de novo no próximo gesto e sai sozinho quando o
+ * contexto roda. `statechange` avisa `aoMudar` para o componente trocar quem
+ * toca — enquanto o contexto não roda, o elemento continua tocando (ver
+ * `mixDaFaixa`), então suspenso nunca significa mudo.
+ */
+function montarGrafo(Ctor: typeof AudioContext, aoMudar: () => void): GrafoDeGanho {
+  const ctx: ContextoComSaida = new Ctor();
+  let gestoPreso = false;
+  const retomar = () => {
+    if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+  };
+  const prenderGesto = () => {
+    if (gestoPreso) return;
+    gestoPreso = true;
+    window.addEventListener("pointerdown", retomar, true);
+    window.addEventListener("keydown", retomar, true);
+  };
+  const soltarGesto = () => {
+    if (!gestoPreso) return;
+    gestoPreso = false;
+    window.removeEventListener("pointerdown", retomar, true);
+    window.removeEventListener("keydown", retomar, true);
+  };
+  const aoMudarEstado = () => {
+    if (ctx.state === "running") soltarGesto();
+    else if (ctx.state === "suspended") prenderGesto();
+    aoMudar();
+  };
+  ctx.addEventListener("statechange", aoMudarEstado);
+
+  try {
+    const ganho = ctx.createGain();
+    // nasce calado: quem decide o ganho é `mixDaFaixa`, depois de a fonte e a
+    // saída estarem prontas
+    ganho.gain.value = 0;
+    ganho.connect(ctx.destination);
+    const grafo: GrafoDeGanho = {
+      ctx,
+      ganho,
+      fonte: null,
+      trilha: null,
+      saida: "",
+      saidaPronta: true,
+      soltar: () => {
+        ctx.removeEventListener("statechange", aoMudarEstado);
+        soltarGesto();
+      },
+    };
+    if (ctx.state !== "running") {
+      void ctx
+        .resume()
+        .catch(() => {})
+        .then(() => {
+          if (ctx.state === "suspended") prenderGesto();
+        });
+    }
+    return grafo;
+  } catch (e) {
+    ctx.removeEventListener("statechange", aoMudarEstado);
+    void ctx.close().catch(() => {});
+    throw e;
+  }
+}
+
+function desmontarGrafo(grafo: GrafoDeGanho) {
+  grafo.soltar();
+  try {
+    grafo.fonte?.disconnect();
+  } catch {
+    // já desconectada
+  }
+  void grafo.ctx.close().catch(() => {});
+}
+
+/**
+ * Liga a `MediaStreamTrack` atual da faixa ao ganho. `createMediaStreamSource`
+ * e não `createMediaElementSource`: no Chromium, a fonte de elemento sobre um
+ * `<audio>` cujo `srcObject` é stream remota do WebRTC entrega silêncio ou
+ * falha de forma intermitente. A fonte de stream lê a trilha direto; o
+ * elemento continua anexado (e mudo) só porque o Chromium não faz o áudio
+ * remoto fluir sem algum elemento consumindo a stream.
+ */
+function conectarFonte(grafo: GrafoDeGanho, trilha: MediaStreamTrack | undefined) {
+  if (grafo.fonte && grafo.trilha === trilha) return;
+  try {
+    grafo.fonte?.disconnect();
+  } catch {
+    // já desconectada
+  }
+  grafo.fonte = null;
+  grafo.trilha = null;
+  if (!trilha) return;
+  const fonte = grafo.ctx.createMediaStreamSource(new MediaStream([trilha]));
+  fonte.connect(grafo.ganho);
+  grafo.fonte = fonte;
+  grafo.trilha = trilha;
+}
+
 /**
  * Um `<audio>` de uma faixa, com o volume individual, o "silenciar
  * localmente" e o "desativar áudio" do rodapé aplicados — e a saída apontada
  * para o dispositivo escolhido nas configurações.
  *
  * Acima de 100% o `volume` do elemento não serve: ele satura em 1. O reforço
- * passa por um `GainNode`, montado **sob demanda** — `createMediaElementSource`
- * é irreversível e tira o elemento do caminho do `setSinkId`, então quem nunca
- * subiu o volume continua com a saída de áudio escolhida valendo.
+ * passa por um `GainNode` (ver `usarGrafoDeGanho` e `mixDaFaixa`), montado
+ * **sob demanda** e alimentado pela `MediaStreamTrack` da faixa. Com o grafo
+ * tocando, o `<audio>` fica anexado e mudo, só consumindo a stream, e volume e
+ * silêncio passam pelo ganho. Como a fonte é a trilha e não o elemento, o
+ * grafo é reversível: desmontá-lo devolve o som ao elemento.
+ *
+ * O grafo toca por `ctx.destination`, a saída **padrão** do sistema, e não
+ * pelo `setSinkId` do elemento. Com dispositivo escolhido, a saída é aplicada
+ * no próprio contexto (`AudioContext.setSinkId`, Chromium 110+). Onde isso não
+ * existe, ou se criar o grafo ou apontar a saída falhar, **não** há grafo: o
+ * volume fica limitado a 100% no elemento, que continua no dispositivo
+ * escolhido — melhor que um volume maior na caixa de som errada. E enquanto o
+ * contexto estiver suspenso (autoplay do WebView2), quem toca é o elemento,
+ * também limitado a 100%: suspenso nunca vira silêncio.
  *
  * `deTela` distingue a faixa da tela das da voz: quem assiste pode silenciar
  * só a transmissão de alguém sem silenciar a voz dela, então `telaSilenciada`
@@ -103,7 +258,10 @@ function AudioDaFaixa({
   deTela: boolean;
 }) {
   const ref = useRef<HTMLAudioElement>(null);
-  const grafo = useRef<{ ctx: AudioContext; ganho: GainNode } | null>(null);
+  const grafo = useRef<GrafoDeGanho | null>(null);
+  // o grafo falhou uma vez nesta faixa (criar ou apontar a saída): não se
+  // tenta de novo a cada mexida no volume, fica no elemento até 100%
+  const recusado = useRef(false);
   const porPessoa = useVoice((s) => (userId in s.volumes ? s.volumes[userId] : 1));
   // o volume geral da aba "Voz e vídeo" multiplica o de cada pessoa
   const geral = useVoice((s) => s.audio.saida);
@@ -125,35 +283,35 @@ function AudioDaFaixa({
     testandoMicrofone,
     silenciado || (deTela && telaSilenciada),
   );
+  const trilha = faixa?.mediaStreamTrack;
 
-  // reforça o silêncio no elemento (e no grafo do Web Audio, se existir): o
-  // livekit sobrescreve `muted` tanto no `track.attach` quanto no
-  // `Room.startAudio()`, então a prop declarativa sozinha não basta — quando
-  // não está calado, restaura o volume/ganho que o resto do componente já
-  // calculou
+  // reforça o silêncio e o volume no elemento e no ganho: o livekit
+  // sobrescreve `muted` tanto no `track.attach` quanto no `Room.startAudio()`,
+  // então a prop declarativa sozinha não basta
   const aplicarMudo = (el: HTMLAudioElement) => {
-    if (calado) {
-      el.muted = true;
-      el.volume = 0;
-      if (grafo.current) grafo.current.ganho.gain.value = 0;
-    } else {
-      el.muted = false;
-      if (grafo.current) {
-        el.volume = 1;
-        grafo.current.ganho.gain.value = Math.max(0, volume);
-      } else {
-        el.volume = Math.max(0, Math.min(1, volume));
-      }
-    }
+    const g = grafo.current;
+    const m = mixDaFaixa({
+      calado,
+      volume,
+      grafoTocando: !!g && !!g.fonte && g.saidaPronta && g.ctx.state === "running",
+    });
+    el.muted = m.muted;
+    el.volume = m.volumeDoElemento;
+    if (g) g.ganho.gain.value = m.ganho;
   };
-
+  // os ouvintes do contexto e do elemento disparam fora da renderização:
+  // precisam da versão de `aplicarMudo` com o estado mais recente
+  const aplicarRef = useRef(aplicarMudo);
+  useEffect(() => {
+    aplicarRef.current = aplicarMudo;
+  });
   useEffect(() => {
     const el = ref.current;
     if (el && faixa) {
       faixa.attach(el);
       // o attach do livekit faz `element.muted = semFaixaDeAudio` (quase
       // sempre false), desfazendo o mudo declarativo — reforça na sequência
-      aplicarMudo(el);
+      aplicarRef.current(el);
     }
     return () => {
       if (el && faixa) faixa.detach(el);
@@ -164,31 +322,67 @@ function AudioDaFaixa({
     const el = ref.current;
     if (!el) return;
 
-    if (volume > 1 && !grafo.current) {
+    const reaplicar = () => {
+      const atual = ref.current;
+      if (atual) aplicarRef.current(atual);
+    };
+    const Ctor = construtorDeContexto();
+    const usar = usarGrafoDeGanho({
+      volume,
+      outputId,
+      temWebAudio: !!Ctor,
+      contextoTemSinkId: contextoTemSinkId(Ctor),
+      grafoExiste: !!grafo.current,
+      recusado: recusado.current,
+    });
+
+    const largar = () => {
+      if (grafo.current) desmontarGrafo(grafo.current);
+      grafo.current = null;
+    };
+
+    if (!usar) {
+      largar();
+    } else if (Ctor) {
       try {
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (Ctor) {
-          const ctx = new Ctor();
-          const fonte = ctx.createMediaElementSource(el);
-          const ganho = ctx.createGain();
-          fonte.connect(ganho).connect(ctx.destination);
-          grafo.current = { ctx, ganho };
+        const g = grafo.current ?? montarGrafo(Ctor, reaplicar);
+        grafo.current = g;
+        conectarFonte(g, trilha);
+        const alvo = saidaEscolhida(outputId) ? outputId : "";
+        if (g.saida !== alvo && typeof g.ctx.setSinkId === "function") {
+          g.saida = alvo;
+          g.saidaPronta = false;
+          void g.ctx.setSinkId(alvo).then(
+            () => {
+              if (grafo.current !== g || g.saida !== alvo) return;
+              g.saidaPronta = true;
+              reaplicar();
+            },
+            () => {
+              // o contexto não conseguiu ir para o dispositivo escolhido: sem
+              // grafo, o elemento (que está nele) volta a tocar até 100%
+              if (grafo.current !== g) return;
+              recusado.current = true;
+              largar();
+              reaplicar();
+            },
+          );
         }
       } catch {
-        // sem Web Audio o volume simplesmente não passa de 100%
+        // sem Web Audio utilizável o volume simplesmente não passa de 100%
+        recusado.current = true;
+        largar();
       }
     }
 
-    aplicarMudo(el);
-    if (grafo.current) void grafo.current.ctx.resume().catch(() => {});
+    // `aplicarRef` já é o desta renderização: o effect que o atualiza vem antes
+    aplicarRef.current(el);
     void aplicarSaida(el, outputId);
-  }, [volume, outputId, calado]);
+  }, [volume, outputId, calado, trilha]);
 
   useEffect(() => {
     return () => {
-      void grafo.current?.ctx.close().catch(() => {});
+      if (grafo.current) desmontarGrafo(grafo.current);
       grafo.current = null;
     };
   }, []);
@@ -198,17 +392,16 @@ function AudioDaFaixa({
     if (!el) return;
     // o `Room.startAudio()` do livekit faz `el.muted = false` em todo
     // elemento anexado (dispara no primeiro gesto do usuário na página) —
-    // sem depender de evento do Room, o listener reforça o mudo aqui mesmo
-    const reforcarSeCalado = () => {
-      if (calado && !el.muted) aplicarMudo(el);
-    };
-    el.addEventListener("volumechange", reforcarSeCalado);
-    el.addEventListener("play", reforcarSeCalado);
+    // sem depender de evento do Room, o listener reforça o estado aqui mesmo.
+    // Reatribuir o mesmo valor não dispara `volumechange`, então não há laço.
+    const reforcar = () => aplicarRef.current(el);
+    el.addEventListener("volumechange", reforcar);
+    el.addEventListener("play", reforcar);
     return () => {
-      el.removeEventListener("volumechange", reforcarSeCalado);
-      el.removeEventListener("play", reforcarSeCalado);
+      el.removeEventListener("volumechange", reforcar);
+      el.removeEventListener("play", reforcar);
     };
-  }, [calado]);
+  }, []);
 
   return <audio ref={ref} autoPlay muted={calado} />;
 }
