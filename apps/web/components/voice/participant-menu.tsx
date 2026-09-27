@@ -73,11 +73,10 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * transmissão dela (`telaSilenciada` em `stores/voice.ts`) — quem assiste a
  * uma transmissão com música alta quer calar a música, não a pessoa.
  *
- * "Silenciar efeitos sonoros" e "Desativar vídeo" são preferências **deste
- * navegador sobre esta pessoa** (`stores/preferencias-por-participante.ts`) —
- * cada uma com efeito num lugar diferente: a primeira faz `soundboard.ts`
- * recusar o som que ela dispara (`stores/soundboard.ts`); a segunda faz o
- * palco tratar a câmera dela como inexistente (`VoiceGrid.tsx`).
+ * "Silenciar efeitos sonoros" é preferência **deste navegador sobre esta
+ * pessoa** (`stores/preferencias-por-participante.ts`): faz `soundboard.ts`
+ * recusar o som que ela dispara (`stores/soundboard.ts`). A câmera de alguém
+ * ligada sempre aparece — não há opção para escondê-la só para mim.
  *
  * "Silenciar no servidor" / "Desativar áudio no servidor" são a moderação de
  * voz (`lib/moderacao-de-voz.ts`), vermelhos como no Discord porque agem
@@ -245,12 +244,6 @@ export function abrirMenuDeParticipante(
       checked: prefs.efeitosSilenciados(user.id),
       control: "checkbox",
       onSelect: () => usePreferenciasPorParticipante.getState().alternarEfeitosSilenciados(user.id),
-    });
-    itens.push({
-      label: "Desativar vídeo",
-      checked: prefs.videoDesativado(user.id),
-      control: "checkbox",
-      onSelect: () => usePreferenciasPorParticipante.getState().alternarVideoDesativado(user.id),
     });
     itens.push(submenuAppsDeUsuario(guildId, opcoes.channelId, user.id));
     itens.push(submenuConvidarParaOServidor(user.id, useGuilds.getState().guilds));

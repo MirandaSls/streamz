@@ -206,7 +206,12 @@ vi.mock("@/stores/ui", () => ({
 
 import { CHAMADA_INICIAL } from "@/stores/call-machine";
 import { useAuth } from "@/stores/auth";
-import { esquecerAvisoSemChamadas, useVoice } from "@/stores/voice";
+import {
+  carregarSilenciados,
+  carregarVolumes,
+  esquecerAvisoSemChamadas,
+  useVoice,
+} from "@/stores/voice";
 
 const EU = { id: "ana", username: "ana", displayName: null, avatarUrl: null } as never;
 const OUTRO = { id: "bia", username: "bia", displayName: null, avatarUrl: null } as never;
@@ -657,6 +662,70 @@ describe("câmera: fps e alívio com a tela no ar", () => {
     await vi.waitFor(() => expect(encodings()[1]?.maxFramerate).toBe(15));
     expect(aviso).toHaveBeenCalled();
     aviso.mockRestore();
+  });
+});
+
+describe("volume e silenciar por pessoa: lembrados entre sessões", () => {
+  it("`setVolume` grava no storage, com o mesmo clamp de 0..2", () => {
+    useVoice.getState().setVolume("bia", 1.5);
+    expect(useVoice.getState().volumes.bia).toBe(1.5);
+    expect(JSON.parse(localStorage.getItem("voiceVolumesPorPessoa")!)).toEqual({ bia: 1.5 });
+
+    useVoice.getState().setVolume("bia", 5);
+    expect(useVoice.getState().volumes.bia).toBe(2);
+    expect(JSON.parse(localStorage.getItem("voiceVolumesPorPessoa")!)).toEqual({ bia: 2 });
+
+    useVoice.getState().setVolume("bia", -3);
+    expect(useVoice.getState().volumes.bia).toBe(0);
+  });
+
+  it("`toggleSilenciado` grava `true`, e desmarcar apaga a chave (não guarda `false`)", () => {
+    useVoice.getState().toggleSilenciado("bia");
+    expect(useVoice.getState().silenciados.bia).toBe(true);
+    expect(JSON.parse(localStorage.getItem("voiceSilenciadosPorPessoa")!)).toEqual({ bia: true });
+
+    useVoice.getState().toggleSilenciado("bia");
+    expect(useVoice.getState().silenciados.bia).toBeUndefined();
+    // a chave some do storage — não vira `{ bia: false }`, que só cresceria à toa
+    expect(JSON.parse(localStorage.getItem("voiceSilenciadosPorPessoa")!)).toEqual({});
+  });
+
+  it("`carregarVolumes`: sem nada salvo, ou JSON inválido, é `{}`", () => {
+    expect(carregarVolumes()).toEqual({});
+    localStorage.setItem("voiceVolumesPorPessoa", "{ não é json");
+    expect(carregarVolumes()).toEqual({});
+  });
+
+  it("`carregarVolumes`: clampa o que está fora de 0..2 e descarta o que não é número", () => {
+    localStorage.setItem(
+      "voiceVolumesPorPessoa",
+      JSON.stringify({ bia: 5, ana: -1, carla: "1", duda: null }),
+    );
+    expect(carregarVolumes()).toEqual({ bia: 2, ana: 0 });
+  });
+
+  it("`carregarSilenciados`: sem nada salvo, ou JSON inválido, é `{}`", () => {
+    expect(carregarSilenciados()).toEqual({});
+    localStorage.setItem("voiceSilenciadosPorPessoa", "[not json}");
+    expect(carregarSilenciados()).toEqual({});
+  });
+
+  it("`carregarSilenciados`: só `true` sobrevive, o resto é descartado", () => {
+    localStorage.setItem(
+      "voiceSilenciadosPorPessoa",
+      JSON.stringify({ bia: true, ana: false, carla: "true" }),
+    );
+    expect(carregarSilenciados()).toEqual({ bia: true });
+  });
+
+  it("storage bloqueado (getItem lança) também cai em `{}`, sem quebrar", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("bloqueado");
+      },
+    });
+    expect(carregarVolumes()).toEqual({});
+    expect(carregarSilenciados()).toEqual({});
   });
 });
 
