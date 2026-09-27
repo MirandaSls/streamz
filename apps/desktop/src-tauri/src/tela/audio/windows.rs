@@ -20,6 +20,7 @@
 //! e reabre no novo padrão, senão o som morre em silêncio na troca de fone.
 
 use std::ffi::c_void;
+use std::mem::ManuallyDrop;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -136,21 +137,25 @@ impl Loopback {
                         },
                     },
                 },
-                prop: PROPVARIANT::default(),
+                prop: ManuallyDrop::new(PROPVARIANT::default()),
             }));
             // Dono antes de qualquer `?`: daqui em diante quem libera é o
             // `Drop` dele, quando a última referência ao aviso cair.
             let dono = DonoDosParametros(ativacao);
-            // Montado à mão e sem `PropVariantClear`: o blob é memória nossa,
-            // não do alocador do COM.
+            // Montado à mão e nunca limpo: o `pBlobData` aponta para o
+            // `params` dentro da nossa `Box`, não para memória do alocador do
+            // COM. Por isso `prop` é `ManuallyDrop` (ver `DonoDosParametros`).
             let prop: *const PROPVARIANT = {
-                let interno = &mut *(*ativacao).prop.Anonymous.Anonymous;
+                let variante: &mut PROPVARIANT = &mut (*ativacao).prop;
+                let interno = &mut *variante.Anonymous.Anonymous;
                 interno.vt = VT_BLOB;
                 interno.Anonymous.blob = BLOB {
                     cbSize: std::mem::size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
                     pBlobData: std::ptr::addr_of_mut!((*ativacao).params) as *mut u8,
                 };
-                std::ptr::addr_of!((*ativacao).prop)
+                // `ManuallyDrop` é `repr(transparent)`: o endereço é o do
+                // `PROPVARIANT`.
+                std::ptr::addr_of!((*ativacao).prop).cast::<PROPVARIANT>()
             };
 
             let (tx, rx) = mpsc::channel();
@@ -407,13 +412,16 @@ struct AvisoDeAtivacao {
 /// do heap: o blob do `prop` é um ponteiro para o `params` ao lado.
 struct ParametrosDeAtivacao {
     params: AUDIOCLIENT_ACTIVATION_PARAMS,
-    prop: PROPVARIANT,
+    prop: ManuallyDrop<PROPVARIANT>,
 }
 
 /// Posse de um `ParametrosDeAtivacao` vindo de `Box::into_raw`. Ponteiro cru
 /// em vez de `Box` para o endereço entregue ao Windows não depender de a
-/// `Box` nunca ser movida. `PROPVARIANT` não tem `Drop` no crate (é união com
-/// `ManuallyDrop`), então liberar não chama `PropVariantClear` no blob nosso.
+/// `Box` nunca ser movida. O `PROPVARIANT` do crate implementa `Drop` com
+/// `PropVariantClear`, que num `VT_BLOB` chama `CoTaskMemFree` no
+/// `pBlobData` — aqui um endereço no meio da nossa `Box`, não memória do
+/// alocador do COM — e corrompe o heap (0xC0000374, processo derrubado).
+/// Por isso `prop` é `ManuallyDrop`: liberar a `Box` não toca no blob.
 struct DonoDosParametros(*mut ParametrosDeAtivacao);
 
 impl Drop for DonoDosParametros {
