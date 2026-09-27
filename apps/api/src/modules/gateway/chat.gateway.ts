@@ -215,6 +215,15 @@ export class ChatGateway
     const user = client.data.user as SocketUser | undefined;
     if (!user) return;
     void this.markOffline(user.id);
+    // f-voz: só logar quando estava em voz, senão inunda o log com toda
+    // desconexão comum (aba fechada fora de chamada, refresh, etc.)
+    const channelId = client.data.voiceChannelId as string | undefined;
+    if (channelId) {
+      const motivo = client.data.motivoDaDesconexao as string | undefined;
+      this.logger.log(
+        `voz: disconnect user=${user.id} canal=${channelId} socket=${client.id} motivo=${motivo ?? "desconhecido"}`,
+      );
+    }
     // f-voz: queda de socket não é sair da chamada — a saída fica agendada e
     // pode ser cancelada por uma reconexão (ver `agendarSaidaDaVoz`)
     void this.agendarSaidaDaVoz(client, user);
@@ -591,7 +600,10 @@ export class ChatGateway
       client.data.voiceChannelId = payload.channelId;
       // reentrou dentro da carência (reconexão do cliente): a saída agendada
       // perde o efeito e o estado de voz segue intacto
-      this.cancelarSaidaDaVoz(user.id, payload.channelId);
+      const cancelou = this.cancelarSaidaDaVoz(user.id, payload.channelId);
+      this.logger.log(
+        `voz: join user=${user.id} canal=${payload.channelId} socket=${client.id}${cancelou ? " (cancelou saída pendente, reentrou na carência)" : ""}`,
+      );
     } catch (e) {
       this.emitError(client, e);
     }
@@ -608,12 +620,18 @@ export class ChatGateway
     // entrar — o estado de voz é por usuário, não por conexão.
     if (client.data.expulsoDaVoz) {
       client.data.expulsoDaVoz = false;
+      this.logger.log(
+        `voz: leave ignorado (expulsoDaVoz) user=${user.id} socket=${client.id}`,
+      );
       return;
     }
     try {
       // a chamada em DM entra pela rota REST, que não passa por este socket:
       // sem o fallback, sair de uma chamada assim não teria efeito nenhum
       const canais = lembrado ? [lembrado] : await this.voice.channelsOf(user.id);
+      this.logger.log(
+        `voz: leave user=${user.id} socket=${client.id} canais=${canais.join(",") || "nenhum"}`,
+      );
       for (const channelId of canais) {
         // saiu por vontade própria: não faz sentido a carência ainda mirar nele
         this.cancelarSaidaDaVoz(user.id, channelId);
@@ -648,6 +666,7 @@ export class ChatGateway
       await this.calls.accept(user.id, payload.channelId);
       client.data.voiceChannelId = payload.channelId;
       this.cancelarSaidaDaVoz(user.id, payload.channelId);
+      this.logger.log(`voz: call.accept user=${user.id} canal=${payload.channelId} socket=${client.id}`);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -673,6 +692,7 @@ export class ChatGateway
     client.data.voiceChannelId = undefined;
     try {
       await this.calls.end(user.id, payload.channelId);
+      this.logger.log(`voz: call.end user=${user.id} canal=${payload.channelId} socket=${client.id}`);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -698,37 +718,57 @@ export class ChatGateway
   private async agendarSaidaDaVoz(client: Socket, user: SocketUser) {
     const channelId = client.data.voiceChannelId as string | undefined;
     if (!channelId) return;
-    if (await this.temSocketNaVoz(user.id, channelId, client.id)) return;
+    if (await this.temSocketNaVoz(user.id, channelId, client.id)) {
+      this.logger.log(
+        `voz: agendarSaida ignorado (outra conexão segue na sala) user=${user.id} canal=${channelId} socket=${client.id}`,
+      );
+      return;
+    }
 
     const chave = this.chaveDeVoz(user.id, channelId);
     clearTimeout(this.saidasDeVozPendentes.get(chave));
     this.saidasDeVozPendentes.delete(chave);
 
+    const motivo = client.data.motivoDaDesconexao as string | undefined;
     // Quem clicou em "Sair" (na bandeja, na aba, no Cmd+Q) não vai voltar: a
     // carência só o deixaria 45 s na sala, para todo mundo, marcado como
     // "reconectando". Sai agora — e sem a marca, que descreveria algo falso.
-    if (saidaFoiIntencional(client.data.motivoDaDesconexao as string | undefined)) {
+    if (saidaFoiIntencional(motivo)) {
+      this.logger.log(
+        `voz: saída imediata (motivo intencional) user=${user.id} canal=${channelId} socket=${client.id} motivo=${motivo}`,
+      );
       await this.removerDaVoz(user.id, channelId);
       return;
     }
 
+    this.logger.log(
+      `voz: carência agendada user=${user.id} canal=${channelId} socket=${client.id} motivo=${motivo ?? "desconhecido"} graceMs=${VOICE_RECONNECT_GRACE_MS}`,
+    );
     await this.voice.marcarReconectando(user.id, channelId, true).catch(() => {});
     this.saidasDeVozPendentes.set(
       chave,
       setTimeout(() => {
         this.saidasDeVozPendentes.delete(chave);
+        this.logger.log(`voz: carência expirada user=${user.id} canal=${channelId}`);
         void this.removerDaVoz(user.id, channelId);
       }, VOICE_RECONNECT_GRACE_MS),
     );
   }
 
-  /** Voltou a tempo (ou saiu de propósito): a saída agendada perde o efeito. */
-  private cancelarSaidaDaVoz(userId: string, channelId: string) {
+  /**
+   * Voltou a tempo (ou saiu de propósito): a saída agendada perde o efeito.
+   * Devolve se de fato havia uma saída pendente e ela foi cancelada — usado
+   * pelo log de `onVoiceJoin` para dizer se a reentrada aconteceu dentro da
+   * carência.
+   */
+  private cancelarSaidaDaVoz(userId: string, channelId: string): boolean {
     const chave = this.chaveDeVoz(userId, channelId);
     const agendada = this.saidasDeVozPendentes.get(chave);
-    if (!agendada) return;
+    if (!agendada) return false;
     clearTimeout(agendada);
     this.saidasDeVozPendentes.delete(chave);
+    this.logger.log(`voz: saída pendente cancelada user=${userId} canal=${channelId}`);
+    return true;
   }
 
   /**
@@ -738,11 +778,26 @@ export class ChatGateway
    */
   private async removerDaVoz(userId: string, channelId: string) {
     if (await this.temSocketNaVoz(userId, channelId)) {
-      await this.voice.marcarReconectando(userId, channelId, false).catch(() => {});
+      this.logger.log(
+        `voz: não removido, outra conexão segue na sala — só desmarcou reconectando user=${userId} canal=${channelId}`,
+      );
+      await this.voice
+        .marcarReconectando(userId, channelId, false)
+        .catch((e) => this.logger.warn(`voz: falha ao desmarcar reconectando user=${userId} canal=${channelId}: ${this.msgDeErro(e)}`));
       return;
     }
-    await this.voice.leave(userId, channelId).catch(() => {});
-    await this.calls.onDisconnect(userId, channelId).catch(() => {});
+    this.logger.log(`voz: removido da voz user=${userId} canal=${channelId}`);
+    await this.voice
+      .leave(userId, channelId)
+      .catch((e) => this.logger.warn(`voz: falha ao sair (leave) user=${userId} canal=${channelId}: ${this.msgDeErro(e)}`));
+    await this.calls
+      .onDisconnect(userId, channelId)
+      .catch((e) => this.logger.warn(`voz: falha em calls.onDisconnect user=${userId} canal=${channelId}: ${this.msgDeErro(e)}`));
+  }
+
+  /** Texto curto de um erro qualquer, para os `warn` de limpeza de voz. */
+  private msgDeErro(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
   }
 
   private chaveDeVoz(userId: string, channelId: string) {
@@ -778,6 +833,11 @@ export class ChatGateway
       s.data.expulsoDaVoz = true;
       this.cancelarSaidaDaVoz(userId, voiceChannelId!);
       s.emit(WS_EVENTS.VOICE_EVICTED, { channelId: voiceChannelId, novoCanalId });
+    }
+    if (alvos.length > 0) {
+      this.logger.log(
+        `voz: expulsão user=${userId} canal=${novoCanalId} socket=${manter} conexõesExpulsas=${alvos.length}`,
+      );
     }
   }
 

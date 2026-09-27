@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ehMacNoTauri, isTauri } from "@/lib/desktop";
 import { ui } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 import {
   EVENTO_DE_ERRO_DA_SPLASH,
   JANELA_SPLASH,
@@ -162,6 +163,18 @@ export function useAtualizacao(): Atualizacao {
    * bandeja e nada na tela.
    */
   const abrir = useCallback(async () => {
+    console.info("[atualizacao] abrindo janela de atualização");
+    // o instalador do Windows mata o processo com exit(0), que pula
+    // `app:saindo`/`ouvirSaidaDoApp` (lib/desktop.ts) — sem `voice.leave` aqui,
+    // o gateway trata como queda de rede e segura a conta 45s como
+    // "reconectando" (VOICE_RECONNECT_GRACE_MS): os outros não ouvem "saiu", e
+    // ao voltar na versão nova, "entrou" também não soa (para eles ela nunca
+    // saiu). Por isso a saída da chamada é explícita, antes de tudo o resto.
+    const { channelId } = useVoice.getState();
+    if (channelId !== null) {
+      console.info("[voz] saindo da chamada para atualizar o app", { channelId });
+      await useVoice.getState().disconnect();
+    }
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
