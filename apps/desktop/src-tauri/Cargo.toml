@@ -49,6 +49,13 @@ tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+# Registro em arquivo (ver `src/registro.rs`). O release do Windows é
+# `windows_subsystem = "windows"`: sem console, o stderr some, e um app que
+# fecha sozinho não deixava rastro nenhum. `log` é dependência direta porque o
+# código do app (ex.: `src/tela/*`) chama `log::info!`/`warn!`/`error!` — o
+# plugin só instala o logger por trás dessas macros.
+tauri-plugin-log = "2"
+log = "0.4"
 
 # Auto-update: o `updater` baixa e instala; o `process` reinicia o app depois.
 # Sem os dois, "atualizar" pararia no meio — instalado, mas rodando a versão
@@ -126,6 +133,20 @@ windows = { version = "0.62", features = [
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+    # Filtro de exceção não tratada (ver `src/registro.rs`):
+    # `SetUnhandledExceptionFilter` e `EXCEPTION_POINTERS`/`EXCEPTION_RECORD`;
+    "Win32_System_Diagnostics_Debug",
+    # o gerador condiciona o filtro e o `EXCEPTION_POINTERS` a esta feature
+    # só pelo tipo `CONTEXT`;
+    "Win32_System_Kernel",
+    # `CreateFileW`/`WriteFile`/`FlushFileBuffers` do `crash.txt`;
+    "Win32_Storage_FileSystem",
+    # `WriteFile` só existe com esta, pelo `OVERLAPPED` opcional;
+    "Win32_System_IO",
+    # `GetModuleHandleExW`/`GetModuleFileNameW`: qual DLL contém o endereço;
+    "Win32_System_LibraryLoader",
+    # `GetLocalTime`: data/hora da linha do crash sem passar pela std.
+    "Win32_System_SystemInformation",
 ] }
 # Só pelo `#[implement]` do aviso de ativação do process loopback (ver
 # `src/tela/audio/windows.rs`): a macro expande para caminhos

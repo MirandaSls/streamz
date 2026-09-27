@@ -62,13 +62,20 @@ pub fn janelas() -> Vec<Fonte> {
     achadas
 }
 
+// Pânico atravessando um callback `extern "system"` do EnumWindows /
+// EnumDisplayMonitors não tem quadro Rust para desenrolar e vira abort do
+// processo inteiro — por isso todo callback abaixo embrulha o corpo em
+// catch_unwind e, em pânico, devolve FALSE (para a enumeração): lista
+// incompleta é bem melhor que o app fechando ao compartilhar tela.
 unsafe extern "system" fn visitar_janela(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let achadas = &mut *(lparam.0 as *mut Vec<Fonte>);
-    if let Some(f) = descrever_janela(hwnd) {
-        achadas.push(f);
-    }
+    let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let achadas = &mut *(lparam.0 as *mut Vec<Fonte>);
+        if let Some(f) = descrever_janela(hwnd) {
+            achadas.push(f);
+        }
+    }));
     // Continuar a enumeração: parar aqui perderia todas as janelas seguintes.
-    BOOL::from(true)
+    BOOL::from(resultado.is_ok())
 }
 
 fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
@@ -258,36 +265,39 @@ unsafe extern "system" fn visitar_monitor(
     _rect: *mut RECT,
     lparam: LPARAM,
 ) -> BOOL {
-    let achados = &mut *(lparam.0 as *mut Vec<Fonte>);
+    let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let achados = &mut *(lparam.0 as *mut Vec<Fonte>);
 
-    let mut info = MONITORINFOEXW {
-        monitorInfo: MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFOEXW>() as u32,
+        let mut info = MONITORINFOEXW {
+            monitorInfo: MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFOEXW>() as u32,
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    };
-    if GetMonitorInfoW(
-        hmonitor,
-        &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
-    )
-    .as_bool()
-    {
-        let r = info.monitorInfo.rcMonitor;
-        achados.push(Fonte {
-            // O nome do dispositivo ("\\.\DISPLAY1") é estável entre chamadas,
-            // ao contrário do `HMONITOR`, que muda quando um monitor é ligado.
-            id: format!("monitor:{}", nome_do_dispositivo(&info.szDevice)),
-            tipo: TipoDeFonte::Monitor,
-            titulo: String::new(), // preenchido em `monitores`, que sabe a ordem
-            app: None,
-            icone: None,
-            largura: (r.right - r.left) as u32,
-            altura: (r.bottom - r.top) as u32,
-            principal: info.monitorInfo.dwFlags & MONITOR_PRINCIPAL != 0,
-        });
-    }
-    BOOL::from(true)
+        };
+        if GetMonitorInfoW(
+            hmonitor,
+            &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+        )
+        .as_bool()
+        {
+            let r = info.monitorInfo.rcMonitor;
+            achados.push(Fonte {
+                // O nome do dispositivo ("\\.\DISPLAY1") é estável entre
+                // chamadas, ao contrário do `HMONITOR`, que muda quando um
+                // monitor é ligado.
+                id: format!("monitor:{}", nome_do_dispositivo(&info.szDevice)),
+                tipo: TipoDeFonte::Monitor,
+                titulo: String::new(), // preenchido em `monitores`, que sabe a ordem
+                app: None,
+                icone: None,
+                largura: (r.right - r.left) as u32,
+                altura: (r.bottom - r.top) as u32,
+                principal: info.monitorInfo.dwFlags & MONITOR_PRINCIPAL != 0,
+            });
+        }
+    }));
+    BOOL::from(resultado.is_ok())
 }
 
 fn nome_do_dispositivo(sz: &[u16; 32]) -> String {
@@ -357,21 +367,23 @@ unsafe extern "system" fn visitar_hmonitor(
     _rect: *mut RECT,
     lparam: LPARAM,
 ) -> BOOL {
-    let achados = &mut *(lparam.0 as *mut Vec<(HMONITOR, String)>);
-    let mut info = MONITORINFOEXW {
-        monitorInfo: MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFOEXW>() as u32,
+    let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let achados = &mut *(lparam.0 as *mut Vec<(HMONITOR, String)>);
+        let mut info = MONITORINFOEXW {
+            monitorInfo: MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFOEXW>() as u32,
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    };
-    if GetMonitorInfoW(
-        hmonitor,
-        &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
-    )
-    .as_bool()
-    {
-        achados.push((hmonitor, nome_do_dispositivo(&info.szDevice)));
-    }
-    BOOL::from(true)
+        };
+        if GetMonitorInfoW(
+            hmonitor,
+            &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+        )
+        .as_bool()
+        {
+            achados.push((hmonitor, nome_do_dispositivo(&info.szDevice)));
+        }
+    }));
+    BOOL::from(resultado.is_ok())
 }

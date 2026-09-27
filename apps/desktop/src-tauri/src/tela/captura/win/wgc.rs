@@ -15,12 +15,13 @@
 //! adiantado no callback **sem** tocar na textura. A textura de staging e o
 //! `Vec` do quadro são reaproveitados entre quadros.
 
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Duration;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Device, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ,
+    ID3D11Device, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC,
 };
 use windows::Win32::Graphics::Gdi::{RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE};
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
@@ -80,6 +81,9 @@ struct Entregador {
     /// Buffer pronto para o próximo quadro: o de um quadro que ninguém chegou
     /// a tirar da caixa, ou um devolvido pelo encoder.
     reserva: Vec<u8>,
+    /// Verdadeiro depois do primeiro aviso de mapeamento recusado, para não
+    /// inundar o log a cada quadro.
+    avisou_mapeamento_recusado: bool,
 }
 
 impl GraphicsCaptureApiHandler for Entregador {
@@ -92,14 +96,55 @@ impl GraphicsCaptureApiHandler for Entregador {
             ritmo: ctx.flags.ritmo,
             staging: None,
             reserva: Vec::new(),
+            avisou_mapeamento_recusado: false,
         })
     }
 
+    /// **Nenhum panic pode sair daqui.** O callback roda dentro de um
+    /// `TypedEventHandler` WinRT chamado pelo sistema; um unwind atravessando
+    /// essa fronteira aborta o processo (0xC0000409) e leva o app inteiro
+    /// junto. Com panic, a captura para e a caixa é encerrada como se a fonte
+    /// tivesse fechado: quem transmite vê `FonteSumiu` em vez de seguir
+    /// recebendo quadros de um `Entregador` em estado desconhecido.
     fn on_frame_arrived(
         &mut self,
         frame: &mut Frame,
-        _controle: InternalCaptureControl,
+        controle: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
+        match panic::catch_unwind(AssertUnwindSafe(|| self.receber(frame))) {
+            Ok(resultado) => resultado,
+            Err(payload) => {
+                let mensagem = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned());
+                match mensagem {
+                    Some(mensagem) => {
+                        log::error!("tela-wgc: panico em on_frame_arrived: {mensagem}")
+                    }
+                    None => log::error!("tela-wgc: panico em on_frame_arrived (sem mensagem)"),
+                }
+                // A staging pode ter ficado mapeada no meio do `ler`; soltar
+                // a textura é mais seguro que reaproveitá-la.
+                self.staging = None;
+                self.caixa.encerrar();
+                controle.stop();
+                Ok(())
+            }
+        }
+    }
+
+    fn on_closed(&mut self) -> Result<(), Self::Error> {
+        log::info!("tela-wgc: sessao encerrada (on_closed)");
+        // Mesmo motivo do `on_frame_arrived`: nada de unwind para o WinRT.
+        let _ = panic::catch_unwind(AssertUnwindSafe(|| self.caixa.encerrar()));
+        Ok(())
+    }
+}
+
+impl Entregador {
+    /// O corpo do `on_frame_arrived`, que roda dentro do `catch_unwind`.
+    fn receber(&mut self, frame: &mut Frame) -> Result<(), ErroDoHandler> {
         // O marcapasso antes de qualquer toque na textura: quadro adiantado
         // sai daqui de graça. O carimbo é o do sistema (100 ns desde uma
         // origem fixa), o mesmo relógio do `MinUpdateInterval`, e não sofre
@@ -144,13 +189,6 @@ impl GraphicsCaptureApiHandler for Entregador {
         Ok(())
     }
 
-    fn on_closed(&mut self) -> Result<(), Self::Error> {
-        self.caixa.encerrar();
-        Ok(())
-    }
-}
-
-impl Entregador {
     /// Copia a textura do quadro para `bgra`: o mesmo que o `Frame::buffer`
     /// do crate faz, mas com a textura de staging reaproveitada — o crate
     /// cria uma nova (~15 MB de memória de driver em 1440p) a cada quadro.
@@ -170,8 +208,16 @@ impl Entregador {
             // vem com a textura nova) ou é o primeiro quadro. Soltar a velha
             // antes de criar a nova evita ter as duas ao mesmo tempo.
             self.staging = None;
+            let textura =
+                match StagingTexture::new(frame.device(), desc.Width, desc.Height, desc.Format) {
+                    Ok(textura) => textura,
+                    Err(e) => {
+                        log::error!("tela-wgc: falha ao criar textura de staging: {e}");
+                        return Err(e.into());
+                    }
+                };
             self.staging = Some(Staging {
-                textura: StagingTexture::new(frame.device(), desc.Width, desc.Height, desc.Format)?,
+                textura,
                 dispositivo: frame.device().clone(),
             });
         }
@@ -188,28 +234,71 @@ impl Entregador {
             contexto.CopyResource(textura, frame.as_raw_texture());
             contexto.Map(textura, 0, D3D11_MAP_READ, 0, Some(&mut mapeado))?;
         }
-        let (largura, altura, passo) =
-            (desc.Width as usize, desc.Height as usize, mapeado.RowPitch);
-        let copiou = if mapeado.pData.is_null() || altura == 0 || (passo as usize) < largura * 4 {
-            false
-        } else {
-            // SAFETY: o `Map` de uma textura `largura`×`altura` entrega
-            // `altura` linhas de `passo` bytes; a última linha tem ao menos os
-            // `largura * 4` bytes de pixel. O slice não passa disso e morre
-            // antes do `Unmap`.
-            let origem = unsafe {
-                std::slice::from_raw_parts(
-                    mapeado.pData.cast::<u8>(),
-                    (altura - 1) * passo as usize + largura * 4,
-                )
-            };
-            copiar_sem_padding(origem, desc.Width, desc.Height, passo, bgra)
+        let passo = mapeado.RowPitch;
+        let copiou = match bytes_mapeados(&desc, &mapeado) {
+            None => {
+                if !self.avisou_mapeamento_recusado {
+                    self.avisou_mapeamento_recusado = true;
+                    log::warn!(
+                        "tela-wgc: mapeamento recusado (largura={}, altura={}, RowPitch={}, DepthPitch={})",
+                        desc.Width,
+                        desc.Height,
+                        mapeado.RowPitch,
+                        mapeado.DepthPitch,
+                    );
+                }
+                false
+            }
+            Some(tamanho) => {
+                // SAFETY: `bytes_mapeados` só devolve tamanho com ponteiro não
+                // nulo, `passo >= largura * 4` e contas sem overflow; o `Map`
+                // de uma textura `largura`×`altura` entrega `altura` linhas de
+                // `passo` bytes e a última tem ao menos os `largura * 4` de
+                // pixel. O slice não passa disso e morre antes do `Unmap`.
+                let origem =
+                    unsafe { std::slice::from_raw_parts(mapeado.pData.cast::<u8>(), tamanho) };
+                copiar_sem_padding(origem, desc.Width, desc.Height, passo, bgra)
+            }
         };
         unsafe {
             contexto.Unmap(textura, 0);
         }
         Ok(copiou)
     }
+}
+
+/// Quantos bytes do mapeamento o quadro ocupa: `(altura - 1)` linhas de
+/// `RowPitch` mais a última só com pixel. `None` descarta o quadro sem tocar
+/// na memória: ponteiro nulo, textura vazia, `RowPitch` menor que a linha de
+/// pixel (driver com mapeamento estranho) ou tamanho que nem cabe num slice.
+/// Quando o driver informa `DepthPitch` (o tamanho do subrecurso mapeado), ele
+/// também limita: o quadro não pode passar do que foi mapeado.
+fn bytes_mapeados(
+    desc: &D3D11_TEXTURE2D_DESC,
+    mapeado: &D3D11_MAPPED_SUBRESOURCE,
+) -> Option<usize> {
+    let largura = usize::try_from(desc.Width).ok()?;
+    let altura = usize::try_from(desc.Height).ok()?;
+    let passo = usize::try_from(mapeado.RowPitch).ok()?;
+    if mapeado.pData.is_null() || largura == 0 || altura == 0 {
+        return None;
+    }
+    let linha = largura.checked_mul(4)?;
+    if passo < linha {
+        return None;
+    }
+    // O mapeamento inteiro (`passo * altura`) precisa ser representável; o
+    // slice lido é um pouco menor, sem o padding da última linha.
+    let total = passo.checked_mul(altura)?;
+    if total > isize::MAX as usize {
+        return None;
+    }
+    let tamanho = passo.checked_mul(altura - 1)?.checked_add(linha)?;
+    let profundidade = usize::try_from(mapeado.DepthPitch).ok()?;
+    if profundidade != 0 && profundidade < tamanho {
+        return None;
+    }
+    Some(tamanho)
 }
 
 /// Uma sessão WGC aberta. Fechar (drop) para a thread de captura.
@@ -231,15 +320,26 @@ impl Sessao {
                 if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
                     return Err(Erro::FonteSumiu);
                 }
-                let controle = iniciar(Window::from_raw_hwnd(hwnd.0), caixa.clone(), fps)?;
+                let janela = Window::from_raw_hwnd(hwnd.0);
+                log::info!(
+                    "tela-wgc: iniciando captura de janela (hwnd={:?}, dimensoes={:?}x{:?})",
+                    hwnd.0,
+                    janela.width().ok(),
+                    janela.height().ok(),
+                );
+                let controle = iniciar(janela, caixa.clone(), fps)?;
                 cutucar(hwnd);
                 controle
             }
-            Alvo::Monitor(bruto) => iniciar(
-                Monitor::from_raw_hmonitor(hmonitor_de(bruto).0),
-                caixa.clone(),
-                fps,
-            )?,
+            Alvo::Monitor(bruto) => {
+                let monitor = Monitor::from_raw_hmonitor(hmonitor_de(bruto).0);
+                log::info!(
+                    "tela-wgc: iniciando captura de monitor (dimensoes={:?}x{:?})",
+                    monitor.width().ok(),
+                    monitor.height().ok(),
+                );
+                iniciar(monitor, caixa.clone(), fps)?
+            }
         };
         Ok(Self {
             caixa,
@@ -271,7 +371,10 @@ where
         ColorFormat::Bgra8,
         Flags { caixa, ritmo },
     );
-    Entregador::start_free_threaded(settings).map_err(|e| Erro::Falha(e.to_string()))
+    Entregador::start_free_threaded(settings).map_err(|e| {
+        log::error!("tela-wgc: falha ao iniciar sessao de captura: {e}");
+        Erro::Falha(e.to_string())
+    })
 }
 
 /// O intervalo mínimo que a sessão pede ao sistema.
