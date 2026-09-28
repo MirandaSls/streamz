@@ -17,7 +17,7 @@ import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
-import { resolveStatus, usePresence } from "@/stores/presence";
+import { definirStatusManual, resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /**
@@ -104,7 +104,7 @@ const LARGURA_DO_SELETOR = 220;
 /** Aplica o status escolhido — mesma chamada e mesmo tratamento de erro de `ProfilePopover.tsx`. */
 async function aplicarStatus(value: UserStatus | null) {
   try {
-    useAuth.getState().setUser(await api.updateStatus(value));
+    await definirStatusManual(value);
   } catch (e) {
     ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
   }

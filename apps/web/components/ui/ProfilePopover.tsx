@@ -49,7 +49,7 @@ import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { useNotas } from "@/stores/notas";
 import { useCan, usePermissions } from "@/stores/permissions";
-import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
+import { definirStatusManual, resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
@@ -191,7 +191,7 @@ const DATA_MEMBRO_DESDE = new Intl.DateTimeFormat("pt-BR", {
  */
 async function aplicarStatus(value: UserStatus | null) {
   try {
-    useAuth.getState().setUser(await api.updateStatus(value));
+    await definirStatusManual(value);
   } catch (e) {
     ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
   }
