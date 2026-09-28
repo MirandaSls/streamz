@@ -47,10 +47,11 @@ import { participantesDe, telasDe, useVoice } from "@/stores/voice";
  * de sistema do fim da chamada — na tela, ele só faria a conversa parecer
  * cronometrada.
  *
- * PENDENTE: essa mensagem de sistema **não existe no Streamz** (nem a de
- * chamada perdida). Enquanto não existir, a duração simplesmente não é
- * registrada em lugar nenhum — este comentário já afirmou o contrário, e a
- * correção é criar o tipo de mensagem em `packages/shared` antes de tudo.
+ * A duração fica registrada mesmo assim: o `Call` guarda início e fim (fechado
+ * por `RegistroDeChamadaService` na API) e vira a mensagem de sistema
+ * `SYSTEM_CALL` da conversa quando a chamada acaba — "**fulano** iniciou uma
+ * chamada que durou 5 horas.", ou "Você perdeu uma chamada de **fulano**..."
+ * para quem não entrou.
  *
  * ## Duas maneiras de "aumentar o palco", e elas não são a mesma
  *
