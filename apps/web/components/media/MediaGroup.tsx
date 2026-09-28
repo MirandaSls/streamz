@@ -15,6 +15,8 @@ import EmojiPicker from "@/components/ui/EmojiPicker";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
+import PreviaDeTexto from "@/components/media/PreviaDeTexto";
+import { ehTextoPrevisualizavel } from "@/lib/texto-longo";
 import { useAuth } from "@/stores/auth";
 import { useMessages } from "@/stores/messages";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -149,6 +151,10 @@ export default function MediaGroup({
           <Video key={a.id} anexo={a} />
         ) : isAudioAttachment(a) ? (
           <Audio key={a.id} anexo={a} />
+        ) : // spoiler fica simples: cai direto no cartão de arquivo comum, sem
+        // tentar borrar uma prévia de texto
+        ehTextoPrevisualizavel(a) && !isSpoilerAttachment(a) ? (
+          <PreviaDeTexto key={a.id} anexo={a} fallback={<Arquivo anexo={a} />} />
         ) : (
           <Arquivo key={a.id} anexo={a} />
         ),
