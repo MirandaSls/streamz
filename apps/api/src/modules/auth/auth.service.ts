@@ -483,9 +483,13 @@ export class AuthService {
     if (conta) this.realtime.emitToUser(userId, WS_EVENTS.ACCOUNT_UPDATED, { account: conta });
   }
 
-  /** Emite `user.updated` para todo mundo (nomes aparecem em toda tela). */
+  /**
+   * Emite `user.updated` para quem tem relação com o usuário (servidores,
+   * conversas, amigos, as abas dele) — não para toda a instância.
+   * Continua síncrono para o chamador: o `emitToRelated` nunca lança.
+   */
   avisarUsuarioAtualizado(user: PublicUser): void {
-    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, user);
+    void this.realtime.emitToRelated(user.id, WS_EVENTS.USER_UPDATED, user);
   }
 
   avisarSessoesEncerradas(userId: string, evento: SessionsRevokedEvent): void {

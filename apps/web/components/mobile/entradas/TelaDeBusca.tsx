@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import dynamic from "next/dynamic";
 import { ArrowLeft, Search, SlidersHorizontal, X } from "@/components/ui/icones";
 import type { Channel } from "@streamz/shared";
-import SearchPanel from "@/components/chat/SearchPanel";
 import AbasDoCanal from "@/components/mobile/entradas/AbasDoCanal";
 import {
   consultaInicialDaBusca,
@@ -17,6 +17,15 @@ import { BotaoDeToque } from "@/components/mobile/pecas";
 import { TextInput } from "@/components/ui/primitivos";
 import { useMessages } from "@/stores/messages";
 import { ui } from "@/stores/ui";
+
+/*
+  `SearchPanel` só monta depois de uma busca disparada — a maioria de quem
+  abre a lupa nunca chega a ver resultado — e carrega a lista de mensagens
+  inteira de novo. `ssr: false` (tela só existe no cliente) e sem `loading`:
+  o `<div className="flex min-h-0 flex-1 ...">` que o envolve já reserva o
+  espaço da camada, então não há salto ao trocar do vazio para o painel.
+*/
+const SearchPanel = dynamic(() => import("@/components/chat/SearchPanel"), { ssr: false });
 
 /**
  * A busca de mensagens do canal no celular — a lupa do cabeçalho da conversa e

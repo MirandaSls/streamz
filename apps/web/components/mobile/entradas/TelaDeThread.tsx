@@ -1,8 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { Link2, MoreHorizontal, Threads, X } from "@/components/ui/icones";
 import { channelNotificationScope, messageLinkPath } from "@streamz/shared";
-import ThreadPanel from "@/components/chat/ThreadPanel";
 import { CamadaDeEntrada } from "@/components/mobile/entradas/pecas";
 import { BotaoDeToque, CabecalhoMobile } from "@/components/mobile/pecas";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
@@ -12,6 +12,15 @@ import { submenuNotificacoes } from "@/lib/notification-menu";
 import { useMessages } from "@/stores/messages";
 import { useNotifications } from "@/stores/notifications";
 import { ui, type MenuItem } from "@/stores/ui";
+
+/*
+  `ThreadPanel` só monta quando alguém abre um tópico — ocasional na conversa
+  — e traz junto a timeline e o composer de novo. `ssr: false` (só existe
+  depois do toque) e sem `loading`: o `<div className="flex min-h-0 flex-1
+  ...">` logo abaixo já reserva o espaço da camada, então não há salto ao
+  trocar do vazio para o painel.
+*/
+const ThreadPanel = dynamic(() => import("@/components/chat/ThreadPanel"), { ssr: false });
 
 /**
  * A thread aberta, em tela cheia por cima da conversa.

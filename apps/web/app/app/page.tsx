@@ -2,28 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import MemberList from "@/components/MemberList";
-import VoicePanel from "@/components/VoicePanel";
-import DiretorioDeApps from "@/components/apps/DiretorioDeApps";
 import ChatView from "@/components/chat/ChatView";
-import HostDeModalDeBot from "@/components/chat/bot/HostDeModalDeBot";
 import DMView from "@/components/chat/DMView";
-import SearchPanel from "@/components/chat/SearchPanel";
-import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import UserFooter from "@/components/layout/UserFooter";
 import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
-import ShellMobile from "@/components/mobile/ShellMobile";
-import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
-import CallSplit from "@/components/voice/CallSplit";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
-import VoiceLayer from "@/components/voice/VoiceLayer";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -43,6 +35,38 @@ import { useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 // carrega o efeito colateral da Touch Bar do Mac (liga só dentro do app Tauri no Mac)
 import "@/stores/touch-bar";
+
+// O chunk de /app chegava a 917 KB porque nada usava carregamento sob demanda.
+// `ssr: false` em todos porque o app inteiro é client e é exportado estático
+// para o Tauri (não existe servidor Next por trás para pré-renderizar).
+// `loading: () => null` porque cada um só entra na tela quando o estado que o
+// mostra já é verdadeiro (call aberta, diretório aberto, busca/thread ativas,
+// modal pedido) — não existe conteúdo por baixo para saltar enquanto o chunk
+// chega; ShellMobile é exceção só de leiaute: ela cobre a tela inteira, então
+// o "vazio" antes do chunk chegar é o mesmo branco que a `TelaDeAbertura`
+// já cobre no boot.
+//
+// VoiceLayer e ModalHost seguem dinâmicos mesmo existindo desde o primeiro
+// frame (áudio de chamada, listener de store): dynamic() ainda os monta assim
+// que a página desktop renderiza, só busca o chunk deles à parte — não é
+// lazy-por-interação, é o mesmo componente num arquivo JS separado.
+const VoicePanel = dynamic(() => import("@/components/VoicePanel"), { ssr: false, loading: () => null });
+const DiretorioDeApps = dynamic(() => import("@/components/apps/DiretorioDeApps"), {
+  ssr: false,
+  loading: () => null,
+});
+const HostDeModalDeBot = dynamic(() => import("@/components/chat/bot/HostDeModalDeBot"), {
+  ssr: false,
+  loading: () => null,
+});
+const SearchPanel = dynamic(() => import("@/components/chat/SearchPanel"), { ssr: false, loading: () => null });
+const ThreadPanel = dynamic(() => import("@/components/chat/ThreadPanel"), { ssr: false, loading: () => null });
+// leiaute de celular x leiaute de colunas: um exclui o outro (ver `ehMobile`
+// abaixo), então nenhum dos dois precisa estar no chunk do outro.
+const ShellMobile = dynamic(() => import("@/components/mobile/ShellMobile"), { ssr: false, loading: () => null });
+const ModalHost = dynamic(() => import("@/components/modals/ModalHost"), { ssr: false, loading: () => null });
+const CallSplit = dynamic(() => import("@/components/voice/CallSplit"), { ssr: false, loading: () => null });
+const VoiceLayer = dynamic(() => import("@/components/voice/VoiceLayer"), { ssr: false, loading: () => null });
 
 /**
  * Layout de 3 colunas do app (ver `design.md`).

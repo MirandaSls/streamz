@@ -9,7 +9,7 @@ import {
   type MouseEvent,
   type RefObject,
 } from "react";
-import { TelaDeAplicativos } from "@/components/apps/DiretorioDeApps";
+import dynamic from "next/dynamic";
 import BarraDeAbas from "@/components/mobile/BarraDeAbas";
 import BarraDeVozMobile from "@/components/mobile/BarraDeVozMobile";
 import { TelaEmpilhada } from "@/components/mobile/pecas";
@@ -21,12 +21,10 @@ import {
   TelaDeDM,
   TelaDeVoz,
 } from "@/components/mobile/telas-de-conversa";
-import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
-import VoiceLayer from "@/components/voice/VoiceLayer";
 import {
   assentar,
   decidirSoltura,
@@ -52,6 +50,24 @@ import {
   type TelaMobile,
 } from "@/stores/mobile";
 import { ui, useUI } from "@/stores/ui";
+
+/*
+  Code-splitting: estes três só entram depois de um toque (modal, chamada de
+  voz, diretório de aplicativos), e `VoiceLayer` carrega a pilha do LiveKit —
+  é o que faz o chunk de `/app` chegar a 917 KB. `ssr: false` porque nenhum
+  deles tem por que existir na primeira pintura server-side: o modal e a voz
+  nascem fechados, e o diretório só monta com a aba correspondente no topo da
+  pilha — para os dois primeiros o próprio host não ocupa espaço no fluxo
+  (portal/overlay), então o `loading` padrão (`null`) já não salta nada; o
+  diretório é que entra numa caixa `flex-1` de verdade, e por isso ganha um
+  `loading` do mesmo tamanho.
+*/
+const ModalHost = dynamic(() => import("@/components/modals/ModalHost"), { ssr: false });
+const VoiceLayer = dynamic(() => import("@/components/voice/VoiceLayer"), { ssr: false });
+const TelaDeAplicativos = dynamic(
+  () => import("@/components/apps/DiretorioDeApps").then((m) => m.TelaDeAplicativos),
+  { ssr: false, loading: () => <div className="flex min-h-0 flex-1 flex-col" /> },
+);
 
 /**
  * O app inteiro no formato do celular: abas no rodapé e uma pilha de telas

@@ -259,10 +259,17 @@ export class GuildsService {
         select: { userId: true, roleId: true },
       }),
     ]);
+    // agrupa uma vez (O(M+R)) em vez de filtrar a lista inteira a cada membro (O(M×R))
+    const roleIdsPorUsuario = new Map<string, string[]>();
+    for (const a of atribuicoes) {
+      const lista = roleIdsPorUsuario.get(a.userId);
+      if (lista) lista.push(a.roleId);
+      else roleIdsPorUsuario.set(a.userId, [a.roleId]);
+    }
     return members.map((m) => ({
       role: m.role,
       user: toPublicUser(m.user),
-      roleIds: atribuicoes.filter((a) => a.userId === m.userId).map((a) => a.roleId),
+      roleIds: roleIdsPorUsuario.get(m.userId) ?? [],
       // a tabela de membros ordena e mostra "Membro desde" por este campo
       joinedAt: m.joinedAt.toISOString(),
       timeoutUntil: m.timeoutUntil?.toISOString() ?? null,
@@ -478,21 +485,33 @@ export class GuildsService {
    * connect — e o que alimenta o "não lido" do rail.
    */
   async visibleChannelsForUser(userId: string): Promise<ChannelRow[]> {
-    const memberships = await this.prisma.guildMember.findMany({
-      where: { userId },
-      select: {
-        guildId: true,
-        guild: { select: { channels: { select: { id: true, guildId: true, private: true } } } },
-      },
-    });
+    const [memberships, dms] = await Promise.all([
+      this.prisma.guildMember.findMany({
+        where: { userId },
+        select: {
+          guildId: true,
+          guild: { select: { channels: { select: { id: true, guildId: true, private: true } } } },
+        },
+      }),
+      this.prisma.channel.findMany({
+        where: { guildId: null, members: { some: { userId } } },
+        select: { id: true, guildId: true, private: true },
+      }),
+    ]);
+    // Promise.all puro dispararia uma query por servidor de uma vez: com o
+    // usuário em centenas de servidores isso estoura o pool do Prisma bem no
+    // connect do gateway. Lotes de 10 mantêm o paralelismo sem afogar o pool;
+    // a ordem do resultado é preservada porque cada lote resolve na ordem de
+    // `memberships` antes do próximo começar.
+    const TAMANHO_LOTE = 10;
     const out: ChannelRow[] = [];
-    for (const m of memberships) {
-      out.push(...(await this.filterVisible(userId, m.guildId, m.guild.channels)));
+    for (let i = 0; i < memberships.length; i += TAMANHO_LOTE) {
+      const lote = memberships.slice(i, i + TAMANHO_LOTE);
+      const resultados = await Promise.all(
+        lote.map((m) => this.filterVisible(userId, m.guildId, m.guild.channels)),
+      );
+      for (const r of resultados) out.push(...r);
     }
-    const dms = await this.prisma.channel.findMany({
-      where: { guildId: null, members: { some: { userId } } },
-      select: { id: true, guildId: true, private: true },
-    });
     return [...out, ...dms];
   }
 

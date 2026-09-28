@@ -209,3 +209,15 @@ libc = "0.2"
 # `tauri-runtime-wry` liga `v2_40` nesta mesma crate.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "2.0.2", features = ["v2_38"] }
+
+# Binário menor e mais rápido no release; o custo é build mais lento (LTO e
+# `codegen-units = 1` serializam boa parte da otimização). `strip` só tira
+# símbolos de debug do binário — não mexe no devtools (feature acima, linhas
+# ~31-35), que é o inspetor do WebView2/WebKit e não depende de símbolo Rust
+# nenhum. Sem `panic = "abort"`: livekit/webrtc-sys e as demais crates nativas
+# (windows-capture, objc2-*) são C/C++ por baixo, e abortar no unwind delas é
+# risco que este ganho não paga.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

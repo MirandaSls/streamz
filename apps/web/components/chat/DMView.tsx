@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Clock, PhoneCall, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
-import { isGroupChannel } from "@streamz/shared";
+import { isGroupChannel, type Message } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
 import DMProfilePanel from "@/components/chat/DMProfilePanel";
@@ -16,7 +17,6 @@ import FriendsPage from "@/components/friends/FriendsPage";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/primitivos";
 import CallBanner from "@/components/voice/CallBanner";
-import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
 import { api } from "@/lib/api";
 import { useEhPaisagem } from "@/hooks/useEhMobile";
@@ -28,6 +28,15 @@ import { useActiveSlice, useMessages } from "@/stores/messages";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+
+// Import dinâmico e sem SSR: `CallSplit` puxa a pilha de voz (LiveKit) inteira,
+// e a maioria de quem abre uma DM nunca entra em chamada. `loading` repete as
+// classes de layout da raiz do `CallSplit` (`flex min-h-0 min-w-0 flex-1`) —
+// o mesmo espaço reservado, sem salto quando o chunk chega.
+const CallSplit = dynamic(() => import("@/components/voice/CallSplit"), {
+  ssr: false,
+  loading: () => <div className="flex min-h-0 min-w-0 flex-1 bg-background-base-lower" />,
+});
 
 /**
  * Coluna 3 no modo DM: a página Amigos (a home) ou a conversa aberta.
@@ -134,6 +143,29 @@ export default function DMView({
   const retry = useMessages((s) => s.retry);
   const discard = useMessages((s) => s.discard);
 
+  // `edit`/`retry`/`discard` vão direto às ações do store (`create` do
+  // zustand): a mesma referência de função em toda a vida do processo, sem
+  // precisar de `useCallback`. Só os wrappers abaixo, que fecham sobre
+  // `active`/`user` e são recriados a cada render, precisam de um.
+  const activeId = active?.id;
+  const handleLoadOlder = useCallback(() => {
+    if (activeId) void loadOlder(activeId);
+  }, [activeId, loadOlder]);
+  const handleDelete = useCallback(
+    (id: string, semConfirmar?: boolean) => void remove(id, semConfirmar),
+    [remove],
+  );
+  const handleToggleReaction = useCallback(
+    (id: string, emoji: string) => toggleReaction(id, emoji, user?.id),
+    [toggleReaction, user?.id],
+  );
+  const handleOpenThread = useCallback(
+    (message: Message) => {
+      if (activeId) void openThread(activeId, message);
+    },
+    [activeId, openThread],
+  );
+
   // a página Amigos ocupa a coluna 3 no lugar da conversa
   if (friendsOpen) return <FriendsPage />;
 
@@ -176,13 +208,13 @@ export default function DMView({
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
         loadingOlderError={slice.loadingOlderError}
-        onLoadOlder={() => void loadOlder(active.id)}
+        onLoadOlder={handleLoadOlder}
         currentUserId={user?.id}
         canModerate={false}
         onEdit={edit}
-        onDelete={(id, semConfirmar) => void remove(id, semConfirmar)}
-        onToggleReaction={(id, emoji) => toggleReaction(id, emoji, user?.id)}
-        onOpenThread={(message) => void openThread(active.id, message)}
+        onDelete={handleDelete}
+        onToggleReaction={handleToggleReaction}
+        onOpenThread={handleOpenThread}
         onRetry={retry}
         onDiscard={discard}
         scrollToId={highlightId}

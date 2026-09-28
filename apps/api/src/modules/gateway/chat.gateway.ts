@@ -256,7 +256,10 @@ export class ChatGateway
 
   private async setStatus(userId: string, status: UserStatus) {
     await this.prisma.user.update({ where: { id: userId }, data: { status } }).catch(() => {});
-    this.server.emit(WS_EVENTS.PRESENCE_UPDATE, { userId, status });
+    // só para quem pode estar vendo este usuário (servidores, conversas,
+    // amigos): broadcast global aqui era O(online) por login/logout e O(N²)
+    // na reconexão em massa depois de um deploy
+    await this.realtime.emitToRelated(userId, WS_EVENTS.PRESENCE_UPDATE, { userId, status });
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_JOIN)

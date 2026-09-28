@@ -1,47 +1,159 @@
 "use client";
 
-import ChannelAccessModal from "@/components/modals/ChannelAccessModal";
-import ChannelSettingsModal from "@/components/modals/ChannelSettingsModal";
-import ChannelTopicModal from "@/components/modals/ChannelTopicModal";
-import ConfirmDialog from "@/components/modals/ConfirmDialog";
-import CategorySettingsModal from "@/components/modals/CategorySettingsModal";
-import CreateChannelModal from "@/components/modals/CreateChannelModal";
-import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
-import CriarServidorModal from "@/components/modals/CriarServidorModal";
-import AdicionarSomModal from "@/components/modals/AdicionarSomModal";
-import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
-import ImageModal from "@/components/modals/ImageModal";
-import InviteModal from "@/components/modals/InviteModal";
-import PromptDialog from "@/components/modals/PromptDialog";
-import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
-import RecortarImagemModal from "@/components/modals/RecortarImagemModal";
+import dynamic from "next/dynamic";
 import QuickSwitcher from "@/components/ui/QuickSwitcher";
 import AtalhosDoTeclado from "@/components/chat/AtalhosDoTeclado";
-import SettingsModal from "@/components/modals/SettingsModal";
-// ── d-social ──
-import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
-import CustomStatusModal from "@/components/modals/CustomStatusModal";
-import GroupSettingsModal from "@/components/modals/GroupSettingsModal";
-import UserProfileModal from "@/components/modals/UserProfileModal";
-// ── h-moderacao ──
-import BanModal from "@/components/modals/BanModal";
-import CreatePollModal from "@/components/modals/CreatePollModal";
-import KickModal from "@/components/modals/KickModal";
-import PollVotersModal from "@/components/modals/PollVotersModal";
-import ReportModal from "@/components/modals/ReportModal";
-import TimeoutModal from "@/components/modals/TimeoutModal";
-import VisaoDeModeradorModal from "@/components/modals/VisaoDeModeradorModal";
-import WelcomeModal from "@/components/modals/WelcomeModal";
-// ── multiconta ──
-import AdicionarContaModal from "@/components/modals/AdicionarContaModal";
-import GerenciarContasModal from "@/components/modals/GerenciarContasModal";
-// ── menus de clique direito (stubs) ──
-import EncaminharModal from "@/components/modals/EncaminharModal";
-import NotaDeUsuarioModal from "@/components/modals/NotaDeUsuarioModal";
-import ApelidoDeAmigoModal from "@/components/modals/ApelidoDeAmigoModal";
-import PrivacidadeDoServidorModal from "@/components/modals/PrivacidadeDoServidorModal";
-import PerfilPorServidorModal from "@/components/modals/PerfilPorServidorModal";
 import { useUI, type Modal } from "@/stores/ui";
+
+// Quase nenhum modal abre numa sessão — importar todos estaticamente jogava
+// ~35 componentes no chunk inicial de /app. `next/dynamic` com `ssr: false`
+// adia cada um para um chunk próprio, buscado só quando o `kind` correspondente
+// entra na pilha (ver `renderModal` abaixo). `loading: () => null` evita flash
+// de esqueleto: a abertura de modal já é uma ação do usuário, não a carga da tela.
+const ChannelAccessModal = dynamic(() => import("@/components/modals/ChannelAccessModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ChannelSettingsModal = dynamic(() => import("@/components/modals/ChannelSettingsModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ChannelTopicModal = dynamic(() => import("@/components/modals/ChannelTopicModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ConfirmDialog = dynamic(() => import("@/components/modals/ConfirmDialog"), {
+  ssr: false,
+  loading: () => null,
+});
+const CategorySettingsModal = dynamic(() => import("@/components/modals/CategorySettingsModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const CreateChannelModal = dynamic(() => import("@/components/modals/CreateChannelModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const CreateGroupDMModal = dynamic(() => import("@/components/modals/CreateGroupDMModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const CriarServidorModal = dynamic(() => import("@/components/modals/CriarServidorModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const AdicionarSomModal = dynamic(() => import("@/components/modals/AdicionarSomModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const GuildEmojisModal = dynamic(() => import("@/components/modals/GuildEmojisModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ImageModal = dynamic(() => import("@/components/modals/ImageModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const InviteModal = dynamic(() => import("@/components/modals/InviteModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const PromptDialog = dynamic(() => import("@/components/modals/PromptDialog"), {
+  ssr: false,
+  loading: () => null,
+});
+const ServerSettingsModal = dynamic(() => import("@/components/modals/ServerSettingsModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const RecortarImagemModal = dynamic(() => import("@/components/modals/RecortarImagemModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const SettingsModal = dynamic(() => import("@/components/modals/SettingsModal"), {
+  ssr: false,
+  loading: () => null,
+});
+// ── d-social ──
+const AddGroupMembersModal = dynamic(() => import("@/components/modals/AddGroupMembersModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const CustomStatusModal = dynamic(() => import("@/components/modals/CustomStatusModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const GroupSettingsModal = dynamic(() => import("@/components/modals/GroupSettingsModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const UserProfileModal = dynamic(() => import("@/components/modals/UserProfileModal"), {
+  ssr: false,
+  loading: () => null,
+});
+// ── h-moderacao ──
+const BanModal = dynamic(() => import("@/components/modals/BanModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const CreatePollModal = dynamic(() => import("@/components/modals/CreatePollModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const KickModal = dynamic(() => import("@/components/modals/KickModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const PollVotersModal = dynamic(() => import("@/components/modals/PollVotersModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ReportModal = dynamic(() => import("@/components/modals/ReportModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const TimeoutModal = dynamic(() => import("@/components/modals/TimeoutModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const VisaoDeModeradorModal = dynamic(() => import("@/components/modals/VisaoDeModeradorModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const WelcomeModal = dynamic(() => import("@/components/modals/WelcomeModal"), {
+  ssr: false,
+  loading: () => null,
+});
+// ── multiconta ──
+const AdicionarContaModal = dynamic(() => import("@/components/modals/AdicionarContaModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const GerenciarContasModal = dynamic(() => import("@/components/modals/GerenciarContasModal"), {
+  ssr: false,
+  loading: () => null,
+});
+// ── menus de clique direito (stubs) ──
+const EncaminharModal = dynamic(() => import("@/components/modals/EncaminharModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const NotaDeUsuarioModal = dynamic(() => import("@/components/modals/NotaDeUsuarioModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const ApelidoDeAmigoModal = dynamic(() => import("@/components/modals/ApelidoDeAmigoModal"), {
+  ssr: false,
+  loading: () => null,
+});
+const PrivacidadeDoServidorModal = dynamic(
+  () => import("@/components/modals/PrivacidadeDoServidorModal"),
+  { ssr: false, loading: () => null },
+);
+const PerfilPorServidorModal = dynamic(() => import("@/components/modals/PerfilPorServidorModal"), {
+  ssr: false,
+  loading: () => null,
+});
 
 /**
  * Único ponto de montagem de modal na tela.

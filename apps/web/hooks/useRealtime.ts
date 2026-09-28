@@ -603,6 +603,35 @@ function lerCanalNaTela() {
   }
 }
 
+/**
+ * Memo do `find()` que acha meu próprio membro (e meus `roleIds`) na lista do
+ * servidor. O socket está em todas as salas, então `onMessageArrived` roda a
+ * cada `message.new` de **qualquer** canal — inclusive os de servidores
+ * grandes onde a maioria das mensagens não é minha. Sem isso o `find` varria
+ * `members` (O(membros)) em toda mensagem só para redescobrir o que já sabíamos.
+ *
+ * A store troca a referência de `members` sempre que a lista muda de verdade
+ * (entrar/sair, cargo atualizado — ver `stores/guilds.ts`), então comparar por
+ * referência do array + id do usuário é seguro: array e usuário iguais ao da
+ * última vez implicam o mesmo resultado, sem precisar revarrer.
+ */
+let cacheDeMembersParaCargos: ReturnType<typeof useGuilds.getState>["members"] | undefined;
+let cacheDeUserIdParaCargos: string | undefined;
+let cacheDeCargos: string[] = [];
+
+function meusCargosEm(
+  members: ReturnType<typeof useGuilds.getState>["members"],
+  userId: string | undefined,
+): string[] {
+  if (members === cacheDeMembersParaCargos && userId === cacheDeUserIdParaCargos) {
+    return cacheDeCargos;
+  }
+  cacheDeMembersParaCargos = members;
+  cacheDeUserIdParaCargos = userId;
+  cacheDeCargos = members.find((m) => m.user.id === userId)?.roleIds ?? [];
+  return cacheDeCargos;
+}
+
 /** Não lido, menções, "subir a conversa" e notificação — para uma mensagem que chegou. */
 function onMessageArrived(message: Message, currentUserId?: string) {
   // ── j-bots ── a mensagem efêmera não conta como não lida, não notifica e não
@@ -615,8 +644,7 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   const mine = message.author.id === currentUserId;
   // menção = `@usuario`, um cargo meu (`<@&id>`) ou resposta a mim com o
   // "@ ligado" — a regra é a do contrato, a mesma que a API conta
-  const meusCargos =
-    useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
+  const meusCargos = meusCargosEm(useGuilds.getState().members, me?.id);
   // usuário ignorado: a mensagem entra na conversa (recolhida), mas não conta
   // como menção nem notifica — é o que "Ignorar" promete no Discord
   const ignorado = !mine && useFriends.getState().estaIgnorado(message.author.id);

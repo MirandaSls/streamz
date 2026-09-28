@@ -2,17 +2,18 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import {
+import type {
+  ElementInfo,
   RemoteTrackPublication,
   RemoteVideoTrack,
-  type ElementInfo,
-  type Track,
-  type TrackPublication,
+  Track,
+  TrackPublication,
 } from "livekit-client";
 import { displayNameOf } from "@streamz/shared";
 import { HeadphoneOff, MicOff, Monitor } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
+import { livekitCarregado } from "@/lib/livekit";
 import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { useJanelasDeVoz, type JanelaDeVoz } from "@/stores/janelas-de-voz";
@@ -230,6 +231,23 @@ function publicacaoDaJanela({ tipo, userId }: JanelaDeVoz): TrackPublication | n
 }
 
 /**
+ * `pub instanceof RemoteTrackPublication`, sem importar o SDK como valor (ver
+ * `lib/livekit.ts`): sem ele carregado não há sala, e sem sala não há
+ * publicação remota nenhuma — a resposta é `false`. Mesmo padrão de
+ * `ehPublicacaoRemota` em `stores/voice.ts`.
+ */
+function ehPublicacaoRemota(pub: TrackPublication | null): pub is RemoteTrackPublication {
+  const lk = livekitCarregado();
+  return !!lk && !!pub && pub instanceof lk.RemoteTrackPublication;
+}
+
+/** O mesmo, para `track instanceof RemoteVideoTrack`. */
+function ehFaixaDeVideoRemota(track: Track): track is RemoteVideoTrack {
+  const lk = livekitCarregado();
+  return !!lk && track instanceof lk.RemoteVideoTrack;
+}
+
+/**
  * Garante que a transmissão da janela é baixada enquanto ela estiver aberta.
  *
  * **Tela de outra pessoa:** o mesmo `assistir` do botão "Assistir" do tile —
@@ -259,9 +277,7 @@ function useAssinaturaDaTela(
   // só a publicação remota da minha tela precisa de prévia; o sid identifica o
   // tile (`chaveDoTileDeTela`), e muda se a transmissão recomeçar
   const sidDaMinhaTelaNativa =
-    tipo === "tela" && sou && publication instanceof RemoteTrackPublication
-      ? publication.trackSid
-      : null;
+    tipo === "tela" && sou && ehPublicacaoRemota(publication) ? publication.trackSid : null;
 
   useEffect(() => {
     if (tipo !== "tela" || !meId || userId === meId) return;
@@ -342,14 +358,14 @@ function VideoNaJanela({
     // Faixa local (a minha câmera, a minha tela no navegador) não tem
     // adaptiveStream: nada a observar.
     const info =
-      track instanceof RemoteVideoTrack && track.isAdaptiveStream ? infoDaJanela(el, win) : null;
-    if (info && track instanceof RemoteVideoTrack) track.observeElementInfo(info);
+      ehFaixaDeVideoRemota(track) && track.isAdaptiveStream ? infoDaJanela(el, win) : null;
+    if (info && ehFaixaDeVideoRemota(track)) track.observeElementInfo(info);
 
     return () => {
       // antes do `detach`: ele também remove infos com `element === el`, e
       // parar duas vezes é inofensivo, mas deixar o nosso sem `stopObserving`
       // vazaria o `ResizeObserver` e o ouvinte de visibilidade da janela
-      if (info && track instanceof RemoteVideoTrack) track.stopObservingElementInfo(info);
+      if (info && ehFaixaDeVideoRemota(track)) track.stopObservingElementInfo(info);
       track.detach(el);
       // solta a referência ao `MediaStream` da janela principal: sem isto o
       // elemento (que pode sobreviver no documento até a janela fechar) segura

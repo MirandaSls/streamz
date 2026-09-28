@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Track } from "livekit-client";
 import { faixaDeMonitoracao } from "@/lib/microfone";
+import { TIPO_DE_FAIXA } from "@/lib/livekit";
 import {
   cadeiaDoMicrofone,
   liberarContextoDeCaptura,
@@ -201,7 +201,7 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
             supressao: ruido === "avancada",
             ganho: ganhoAtual.current,
           });
-          await cadeia.init({ kind: Track.Kind.Audio, track: crua, audioContext: ctx });
+          await cadeia.init({ kind: TIPO_DE_FAIXA.Audio, track: crua, audioContext: ctx });
           faixa = cadeia.processedTrack ?? crua;
           cadeiaPropria.current = cadeia;
         } catch {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { isSystemMessage, type Message } from "@streamz/shared";
-import MessageItem from "@/components/MessageItem";
+import MessageItem, { type MembrosDaTimeline } from "@/components/MessageItem";
 import { continuaAnterior } from "@/lib/format";
 import type { ChatMessage } from "@/stores/messages-core";
 
@@ -18,6 +18,7 @@ import type { ChatMessage } from "@/stores/messages-core";
  */
 export default function IgnoredMessages({
   items,
+  membros,
   currentUserId,
   canModerate,
   onEdit,
@@ -28,6 +29,8 @@ export default function IgnoredMessages({
   onDiscard,
 }: {
   items: ChatMessage[];
+  /** vem da `MessageList`: a mesma referência que as demais mensagens usam. */
+  membros: MembrosDaTimeline;
   currentUserId?: string;
   canModerate?: boolean;
   onEdit: (id: string, content: string) => void;
@@ -49,6 +52,7 @@ export default function IgnoredMessages({
             <MessageItem
               key={m.id}
               message={m}
+              membros={membros}
               grouped={!!anterior && !isSystemMessage(anterior) && continuaAnterior(anterior, m)}
               currentUserId={currentUserId}
               canModerate={canModerate}
