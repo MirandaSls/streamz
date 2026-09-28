@@ -461,6 +461,10 @@ model Message {
   // ── h-moderacao ──
   poll       Poll?
   reports    Report[]
+  // registro histórico da chamada de conversa direta que esta mensagem narra
+  // (back-relation e nada mais: sem coluna na `Message`, mesma regra do resto
+  // desta tabela — ver `model Call`).
+  call       Call?
 
   @@index([channelId, parentId, createdAt])
   @@index([parentId])
@@ -672,10 +676,11 @@ model CategoryOverride {
 
 // Tipo da mensagem. `DEFAULT` é a mensagem escrita por alguém; as `SYSTEM_*`
 // são narração renderizada como linha discreta, sem avatar nem ações: fixar
-// (a-mensagens), entrada de membro (moderação) e os eventos de grupo de DM
-// (d-social). O autor é sempre quem fez a ação; o `content` guarda o alvo ou o
-// valor novo. Enum único — a equivalência com `MessageType` de @streamz/shared
-// é travada em common/enums.ts.
+// (a-mensagens), entrada de membro (moderação), os eventos de grupo de DM
+// (d-social) e a chamada de conversa direta encerrada (`Call`, "X iniciou uma
+// chamada que durou 5 horas"). O autor é sempre quem fez a ação; o `content`
+// guarda o alvo ou o valor novo. Enum único — a equivalência com `MessageType`
+// de @streamz/shared é travada em common/enums.ts.
 enum MessageType {
   DEFAULT
   SYSTEM_PIN
@@ -686,6 +691,7 @@ enum MessageType {
   SYSTEM_GROUP_RENAMED
   SYSTEM_GROUP_ICON
   SYSTEM_MOD_NOTICE
+  SYSTEM_CALL
 }
 
 // Mensagem fixada no canal. `messageId` é único: fixar duas vezes é idempotente,
@@ -1072,6 +1078,34 @@ model PollVote {
   // um voto por opção por pessoa; sem `multi` o service ainda garante um só
   @@unique([pollId, userId, optionIndex])
   @@index([pollId])
+}
+
+// Registro histórico de uma chamada de conversa direta — a mensagem de sistema
+// ("X iniciou uma chamada que durou 5 horas") é a `Message` (type SYSTEM_CALL);
+// isto é a 1-a-1 que ela narra, mesmo padrão do `Poll` acima e pelo mesmo
+// motivo: a `Message` é a maior tabela do banco e não ganha coluna.
+//
+// A chamada *em si* é estado efêmero de voz (`VoiceStateStore`, ver
+// CLAUDE.md) — isto não duplica aquilo, é só o que sobra depois que a chamada
+// acaba: início, fim e quem chegou a entrar (quem não entrou "perdeu" a
+// chamada, no sentido do Discord).
+model Call {
+  id        String    @id @default(cuid())
+  messageId String    @unique
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  // quem entrou, na ordem em que entrou. Array e não tabela de participantes:
+  // só cresce enquanto a chamada dura, ninguém consulta "minhas chamadas" por
+  // participante, e o `VoiceStateStore` (não este modelo) é quem responde
+  // "quem está na chamada agora".
+  participantIds String[] @default([])
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // `endedAt` null = chamada em andamento; o índice é para a API fechar no
+  // boot as que o próprio deploy interrompeu (mesmo espírito de "todo deploy
+  // zera o estado de voz" do CLAUDE.md).
+  @@index([endedAt])
 }
 
 // Denúncia de mensagem, visível à moderação do servidor.
