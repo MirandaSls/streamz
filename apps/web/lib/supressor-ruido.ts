@@ -445,9 +445,16 @@ export function cadeiaDoMicrofone(inicial: {
     // mono: o microfone é uma fonte só, e cada canal a mais é uma inferência
     // a mais por quadro
     const criado = new RnnoiseWorkletNode(c, { maxChannels: 1, wasmBinary }) as typeof no;
-    // o worklet pode morrer depois de montado (o `process` lançou): sem isto,
-    // o nó continua no grafo devolvendo silêncio e ninguém fica sabendo
     if (criado) {
+      // o processador do RNNoise só roda o canal 0 (é `maxChannels: 1` acima);
+      // com um microfone estéreo entrando sem forçar isto, o nó devolveria 2
+      // canais e o 1 sairia zerado — a mixagem para mono do Web Audio junta L e
+      // R em vez de descartar um lado
+      criado.channelCount = 1;
+      criado.channelCountMode = "explicit";
+      criado.channelInterpretation = "speakers";
+      // o worklet pode morrer depois de montado (o `process` lançou): sem isto,
+      // o nó continua no grafo devolvendo silêncio e ninguém fica sabendo
       criado.onprocessorerror = () => avisar("o worklet do RNNoise parou de rodar");
     }
     return criado;
@@ -483,6 +490,16 @@ export function cadeiaDoMicrofone(inicial: {
     fonte = c.createMediaStreamSource(new MediaStream([track]));
     ganho = c.createGain();
     destino = c.createMediaStreamDestination();
+    // o destino nasce com `channelCount` 2 por padrão. Com microfone estéreo e
+    // sem o RNNoise no meio, isso publicaria 2 canais de verdade; com o
+    // RNNoise, publicaria os 2 canais dele — um deles zerado (ver acima). Nos
+    // dois casos o livekit-client lê `channelCount === 2` de
+    // `getSettings()`, publica com `stereo=1` e quem ouve recebe a voz só no
+    // fone esquerdo. Forçar mono aqui garante uma faixa publicada de 1 canal
+    // sempre, com ou sem supressão.
+    destino.channelCount = 1;
+    destino.channelCountMode = "explicit";
+    destino.channelInterpretation = "speakers";
     no = noDoModelo;
     if (no) fonte.connect(no).connect(ganho);
     else fonte.connect(ganho);

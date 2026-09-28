@@ -18,6 +18,11 @@
 
 mod tela;
 
+// Log em arquivo, panic hook e (no Windows) o filtro de exceção não tratada:
+// o rastro que o usuário manda quando o app fecha sozinho. Ver
+// `src/registro.rs`.
+mod registro;
+
 // A chamada de voz em segundo plano: o serviço de primeiro plano do Android e
 // a notificação persistente. Só existe naquele alvo — no Windows quem segura a
 // call com a janela escondida é a bandeja, e no iOS é o `UIBackgroundModes` do
@@ -170,6 +175,9 @@ pub fn run() {
     }
 
     let builder = tauri::Builder::default()
+        // Primeiro plugin de todos: o logger tem de estar de pé antes de
+        // qualquer outro plugin ou do `setup` registrar alguma coisa.
+        .plugin(registro::plugin())
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
         // Ações da imagem em tela cheia (ver `ImageModal.tsx` na web):
@@ -204,6 +212,11 @@ pub fn run() {
             touch_bar::atualizar_touch_bar,
         ])
         .setup(|app| {
+            // --- Registro ----------------------------------------------------
+            // Antes de tudo: um panic ou crash já no resto do `setup` precisa
+            // cair no arquivo de log.
+            registro::instalar_ganchos(app.handle());
+
             // --- Janela principal --------------------------------------------
             // Primeiro de tudo: os blocos abaixo procuram a `main` pelo rótulo.
             // Ver o porquê de ela nascer aqui em `criar_janela_principal`.

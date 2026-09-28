@@ -41,7 +41,6 @@ import {
   usePreferenciasDeTransmissao,
 } from "@/stores/preferencias-de-transmissao";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
-import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui } from "@/stores/ui";
 import {
   aplicarAssinaturasDeTela,
@@ -258,11 +257,6 @@ export default function VoiceGrid({
   // a grade não re-renderizar a cada escrita que não muda a decisão
   const previaPorPreferencia = usePreferenciasDeTransmissao(previaDaMinhaTelaLigada);
   const setMostrarMinhaTela = usePreferenciasDeTransmissao((s) => s.setMostrarMinhaTela);
-  // ESPEC2 item N: quem eu desativei o vídeo não tem tile de câmera — o
-  // objeto inteiro (e não um seletor por id) porque o conjunto de quem está
-  // desativado é pequeno e a grade já teria de re-renderizar de qualquer
-  // jeito quando alguém entra/sai (mesmo padrão de `s.silenciados` no tile).
-  const videosDesativados = usePreferenciasPorParticipante((s) => s.videosDesativados);
   // menu de vídeo do palco (paridade Discord): prévia da própria câmera e
   // mostrar/ocultar quem está sem vídeo — ver `preferencias-do-palco.ts`
   const previaDaCamera = usePreferenciasDoPalco((s) => s.previaDaCamera);
@@ -290,15 +284,10 @@ export default function VoiceGrid({
   const tilesBrutos: Tile[] = states.flatMap((state): Tile[] => {
     const meus = participantesDe(state.user.id);
     const sou = state.user.id === me?.id;
-    // vídeo desativado por mim: o tile trata como se não houvesse câmera
-    // nenhuma (cai no avatar, o mesmo ramo de "sem vídeo" de sempre) — não se
-    // aplica a mim mesmo, que não aparece no próprio menu com este item.
     // "Prévia da câmera" desligada some com a câmera só no MEU tile, e só
-    // localmente — os outros continuam me vendo normalmente.
-    const camera =
-      videosDesativados[state.user.id] || (sou && !previaDaCamera)
-        ? null
-        : (meus.flatMap(camerasDe)[0] ?? null);
+    // localmente — os outros continuam me vendo normalmente. A câmera de
+    // qualquer outra pessoa sempre aparece: não há opção para escondê-la.
+    const camera = sou && !previaDaCamera ? null : (meus.flatMap(camerasDe)[0] ?? null);
     const pessoa: Tile = {
       key: state.user.id,
       state,

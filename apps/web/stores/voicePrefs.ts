@@ -102,8 +102,9 @@ export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
   },
 
   toggleDeafen: () => {
+    // espelha o Discord: ativar o surdo muta o mic; desligar o surdo devolve os dois
     const deafened = !get().deafened;
-    persistir(get, set, { deafened, muted: deafened ? true : get().muted });
+    persistir(get, set, { deafened, muted: deafened });
     tocarSom(deafened ? "surdo" : "nao-surdo");
   },
 

@@ -38,8 +38,11 @@ import { useVoice } from "@/stores/voice";
  *
  * - No **app de desktop** as fontes vêm do Rust (`fontes_de_tela` +
  *   `miniaturas_de_tela`, captura nativa sem a borda amarela) e clicar numa
- *   miniatura **já transmite**, como no Discord — não há prévia nem "Ao vivo"
- *   para confirmar.
+ *   miniatura só **seleciona** o cartão (anel limão persistente, `aria-pressed`)
+ *   — ir ao ar é o botão "Compartilhar" do rodapé, depois de escolher a
+ *   qualidade. Duas etapas, não uma: no Discord clicar já transmitia, mas aqui
+ *   a qualidade mora ao lado da grade, e escolher fonte antes de qualidade
+ *   deixava o usuário sem chance de ajustar antes de ir ao ar.
  * - No **navegador** uma página **não pode** listar telas e janelas: a única
  *   API que enumera é `getDisplayMedia`, e ela abre o diálogo do próprio
  *   browser/sistema, dentro do gesto do usuário. Isso não tem contorno, e o
@@ -48,9 +51,9 @@ import { useVoice } from "@/stores/voice";
  *   que este modal faz aqui é o que ele pode fazer: decidir **qualidade, taxa
  *   de quadros e áudio do sistema** antes, dar a dica de qual painel do
  *   diálogo abrir (a aba escolhida vira `displaySurface`) e receber de volta a
- *   captura como a única miniatura da grade, que é onde se clica para ir ao
- *   ar. **O diálogo do navegador continua existindo** — nenhuma linha daqui o
- *   faz sumir.
+ *   captura como a única miniatura da grade, **já selecionada** (a escolha foi
+ *   feita no diálogo do sistema) — falta só apertar Compartilhar. **O diálogo
+ *   do navegador continua existindo** — nenhuma linha daqui o faz sumir.
  *
  * **Qualidade sem etapa.** O alternador SD/HD e a engrenagem viravam uma
  * segunda tela para responder "em que resolução isto vai?" — pergunta que se
@@ -103,6 +106,16 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
   const [capturando, setCapturando] = useState(false);
   const [iniciando, setIniciando] = useState(false);
   const publicado = useRef(false);
+
+  // Fonte nativa marcada no clique da miniatura — só na grade nativa; a
+  // captura do navegador já chega escolhida em `stream` e não precisa disto.
+  // `null` sempre que a escolha deixou de valer: nada marcado ainda, a janela
+  // fechou (ver `GradeNativa`) ou o usuário mudou de aba, e a fonte da aba
+  // anterior nem aparece na grade nova.
+  const [selecionada, setSelecionada] = useState<string | null>(null);
+  useEffect(() => {
+    setSelecionada(null);
+  }, [aba]);
 
   // Painel de permissão do macOS (ver `PainelPermissao`): `pedindoPermissao`
   // cobre o tempo do `invoke`; `permissaoPedida` marca que o sistema já
@@ -230,7 +243,11 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     }
   }
 
-  /** Vai ao ar com uma fonte da captura nativa — o clique na miniatura. */
+  /**
+   * Vai ao ar com a fonte nativa já selecionada — chamado pelo botão
+   * "Compartilhar" do rodapé, nunca pelo clique na miniatura (que agora só
+   * marca o cartão; ver `selecionada`).
+   */
   async function irAoVivoNativo(fonteId: string) {
     if (iniciando) return;
     setIniciando(true);
@@ -239,6 +256,27 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     if (useVoice.getState().screenOn) onClose();
     else setIniciando(false);
   }
+
+  /**
+   * O clique único do rodapé: qual das duas origens vai ao ar depende de
+   * `nativo`, e o botão já nasce desabilitado sem seleção/captura — os `if`
+   * aqui são para o TypeScript, o `disabled` do botão é quem garante de fato.
+   */
+  function compartilhar() {
+    if (nativo) {
+      if (selecionada) void irAoVivoNativo(selecionada);
+    } else if (stream) {
+      void irAoVivoCom(stream);
+    }
+  }
+
+  // Cobre sozinho carregando capacidades, painel de permissão, grade vazia e
+  // "sem como capturar" (nenhum desses estados chega a preencher `selecionada`
+  // nem `stream`) — não precisa perguntar a cada um por fora.
+  const podeCompartilhar =
+    capacidades !== null &&
+    !(nativo && capacidades.permissao === "faltando") &&
+    (nativo ? selecionada !== null : stream !== null);
 
   return (
     <Dialog
@@ -281,7 +319,9 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
                 ? "Neste Windows, compartilhar uma janela mostra o que estiver por cima dela."
                 : null
             }
-            onEscolher={(id) => void irAoVivoNativo(id)}
+            selecionada={selecionada}
+            onEscolher={setSelecionada}
+            onSelecaoInvalida={() => setSelecionada(null)}
             iniciando={iniciando}
           />
         ) : suportaCapturaDeTela() ? (
@@ -291,9 +331,6 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             capturando={capturando}
             iniciando={iniciando}
             onEscolher={() => void capturarNoNavegador(aba)}
-            onIrAoVivo={() => {
-              if (stream) void irAoVivoCom(stream);
-            }}
           />
         ) : (
           // Nem captura nativa (o Rust disse que não sabe, ou não estamos no
@@ -317,6 +354,9 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         mostrarAudio={!nativo || (capacidades?.audioDoSistema ?? true)}
         onQualidade={aplicarQualidade}
         onAudio={setAudio}
+        podeCompartilhar={podeCompartilhar}
+        iniciando={iniciando}
+        onCompartilhar={compartilhar}
       />
     </Dialog>
   );
@@ -382,12 +422,19 @@ const RELISTAR_MS = 3000;
 function GradeNativa({
   aba,
   aviso,
+  selecionada,
   onEscolher,
+  onSelecaoInvalida,
   iniciando,
 }: {
   aba: Aba;
   aviso: string | null;
+  /** Fonte marcada no cartão agora (anel limão) — `null` sem escolha ainda. */
+  selecionada: string | null;
+  /** Clique na miniatura: só marca o cartão, nunca transmite. */
   onEscolher: (fonteId: string) => void;
+  /** A `selecionada` sumiu da lista visível (janela fechada) — limpa lá em cima. */
+  onSelecaoInvalida: () => void;
   iniciando: boolean;
 }) {
   const [fontes, setFontes] = useState<FonteDeTela[] | null>(null);
@@ -414,6 +461,12 @@ function GradeNativa({
 
   const visiveis = useMemo(() => fontesDaAba(fontes ?? [], aba), [fontes, aba]);
   const ids = visiveis.map((f) => f.id).join("\n");
+
+  // Janela/tela escolhida fechou entre uma varredura e outra: o cartão some da
+  // grade, e a seleção não pode continuar marcando algo que não está mais ali.
+  useEffect(() => {
+    if (selecionada && !visiveis.some((f) => f.id === selecionada)) onSelecaoInvalida();
+  }, [visiveis, selecionada, onSelecaoInvalida]);
 
   // Miniaturas ao vivo: a próxima varredura só depois de a anterior voltar —
   // é o ritmo natural, e nunca há duas capturas da mesma janela ao mesmo tempo.
@@ -483,6 +536,7 @@ function GradeNativa({
             }
             onClick={() => onEscolher(f.id)}
             disabled={iniciando}
+            selecionada={f.id === selecionada}
           >
             {miniaturas[f.id] ? (
               // eslint-disable-next-line @next/next/no-img-element -- quadro ao vivo, data URL
@@ -523,12 +577,15 @@ function Miniatura({
   icone,
   onClick,
   disabled,
+  selecionada,
   children,
 }: {
   rotulo: string;
   icone: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** Este é o cartão escolhido agora: anel limão que não depende de hover/foco. */
+  selecionada?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -536,6 +593,7 @@ function Miniatura({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={selecionada}
       className="group flex w-full flex-col text-left outline-none disabled:cursor-wait"
     >
       {/* Anel de foco azul (`border-focus`), não limão: no Discord o anel de
@@ -543,8 +601,19 @@ function Miniatura({
           de foco de teclado e cores ANSI continuam azuis"). Só o hover do
           mouse usa `border-strong`, a mesma vizinhança neutra do resto do
           seletor. */}
-      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong group-focus-visible:ring-2 group-focus-visible:ring-border-focus">
+      <div className="relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong group-focus-visible:ring-2 group-focus-visible:ring-border-focus">
         {children}
+        {selecionada && (
+          // Anel por cima, num `span` à parte: se fosse `ring-*` na mesma
+          // caixa do hover/foco, os dois disputariam a mesma variável de cor
+          // do Tailwind (`--tw-ring-color`) e o hover apagaria o limão. É o
+          // mesmo truque do tema marcado em `AparenciaTab` — `brand-500`, o
+          // token do segmento ativo em `SegmentosDeQualidade`, não um novo.
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-inset ring-brand-500"
+          />
+        )}
       </div>
       <div className="mt-2 flex h-6 w-full items-center gap-2">
         {icone}
@@ -624,8 +693,10 @@ function PainelPermissao({
 
 /**
  * O corpo do modal no navegador: um cartão que abre o diálogo do browser e,
- * quando ele volta com uma captura, a miniatura dela ao lado — clicar nela é
- * o "ir ao ar".
+ * quando ele volta com uma captura, a miniatura dela ao lado — **já
+ * selecionada**, porque a escolha foi feita ali, no diálogo do sistema. Clicar
+ * nela não faz mais nada (não há outra fonte para trocar por clique); ir ao ar
+ * é o botão "Compartilhar" do rodapé, em `ScreenSharePicker`.
  *
  * O cartão existe porque a lista de janelas **não é nossa** e não pode ser:
  * `getDisplayMedia` é a única API que enumera, ela só responde dentro do gesto
@@ -640,14 +711,12 @@ function EscolhaDoNavegador({
   capturando,
   iniciando,
   onEscolher,
-  onIrAoVivo,
 }: {
   aba: Aba;
   stream: MediaStream | null;
   capturando: boolean;
   iniciando: boolean;
   onEscolher: () => void;
-  onIrAoVivo: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -668,8 +737,13 @@ function EscolhaDoNavegador({
               <AppWindow size={16} className="shrink-0 text-text-subtle" />
             )
           }
-          onClick={onIrAoVivo}
+          // A escolha já foi feita no diálogo do sistema: o clique aqui não
+          // tem mais o que fazer (ir ao ar é o botão do rodapé), mas o cartão
+          // continua um botão de verdade — foco e leitor de tela não perdem o
+          // "selecionado".
+          onClick={() => {}}
           disabled={iniciando}
+          selecionada
         >
           <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
         </Miniatura>
@@ -679,7 +753,7 @@ function EscolhaDoNavegador({
           <MonitorUp size={32} className="text-text-muted" aria-hidden="true" />
           <p className="text-sm text-text-muted">
             {stream
-              ? "Clique na miniatura para ir ao ar, ou escolha outra fonte."
+              ? "Escolha a qualidade e clique em Compartilhar, ou troque a fonte."
               : aba === "telas"
                 ? "O navegador abre o seletor de telas; a escolhida aparece aqui."
                 : "O navegador abre o seletor de janelas; a escolhida aparece aqui."}
@@ -705,9 +779,16 @@ function EscolhaDoNavegador({
 
 /**
  * Rodapé de 40px, a mesma faixa de antes: à esquerda o áudio do sistema e o
- * custo de subida em duas linhas; à direita os dois seletores de qualidade,
- * lado a lado e sempre visíveis. O que era pílula SD/HD + engrenagem (e uma
- * segunda tela atrás dela) cabe aqui sem crescer o modal.
+ * custo de subida em duas linhas; à direita os dois seletores de qualidade e,
+ * depois deles, o botão "Compartilhar" — o `Button` de 40 bate exatamente com
+ * a faixa, então o rodapé não cresce. O que era pílula SD/HD + engrenagem (e
+ * uma segunda tela atrás dela) cabe aqui sem crescer o modal.
+ *
+ * O botão fica **desabilitado** em vez de sumir sem seleção/captura, enquanto
+ * `iniciando` (rótulo "Iniciando…") e em qualquer estado que não deixa ir ao
+ * ar — carregando capacidades, painel de permissão, grade vazia: `podeCompartilhar`,
+ * calculado em `ScreenSharePicker`, já cobre os quatro sem o rodapé precisar
+ * saber de onde vêm as fontes.
  */
 function Rodape({
   quality,
@@ -715,12 +796,18 @@ function Rodape({
   mostrarAudio,
   onQualidade,
   onAudio,
+  podeCompartilhar,
+  iniciando,
+  onCompartilhar,
 }: {
   quality: ScreenQuality;
   audio: boolean;
   mostrarAudio: boolean;
   onQualidade: (q: ScreenQuality) => void;
   onAudio: (on: boolean) => void;
+  podeCompartilhar: boolean;
+  iniciando: boolean;
+  onCompartilhar: () => void;
 }) {
   return (
     <div className="mt-5 flex h-10 shrink-0 items-center justify-between gap-6">
@@ -740,11 +827,21 @@ function Rodape({
         </p>
       </div>
 
-      <SegmentosDeQualidade
-        quality={quality}
-        onQualidade={onQualidade}
-        className="flex shrink-0 items-center gap-4"
-      />
+      <div className="flex shrink-0 items-center gap-3">
+        <SegmentosDeQualidade
+          quality={quality}
+          onQualidade={onQualidade}
+          className="flex shrink-0 items-center gap-4"
+        />
+        <Button
+          variante="primario"
+          tamanho="md"
+          onClick={onCompartilhar}
+          disabled={!podeCompartilhar || iniciando}
+        >
+          {iniciando ? "Iniciando…" : "Compartilhar"}
+        </Button>
+      </div>
     </div>
   );
 }
