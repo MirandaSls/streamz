@@ -13,6 +13,7 @@ import { GuildsService } from "../guilds/guilds.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { VoiceService } from "./voice.service";
+import { RegistroDeChamadaService } from "./registro-de-chamada.service";
 import { toPublicUser } from "../../common/dto";
 
 /** Chamada tocando numa conversa: quem ligou, para quem falta atender e o relógio. */
@@ -55,6 +56,12 @@ export class CallsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly friends: FriendsService,
+    /**
+     * Histórico da chamada na conversa (mensagem `SYSTEM_CALL`). Chamado sempre
+     * com `void`: o registro nunca rejeita e ordena sozinho as operações de cada
+     * canal, então a chamada não espera o banco nem cai se ele falhar.
+     */
+    private readonly registro: RegistroDeChamadaService,
   ) {}
 
   /**
@@ -103,6 +110,7 @@ export class CallsService {
     // falando, com "Ninguém atendeu". Um toque vivo ainda trava o relógio da
     // solidão, que é quem deveria mandar daqui em diante.
     if (jaEmChamada) {
+      void this.registro.participou(channelId, userId);
       this.pendenteAtendido(channelId, userId);
       if (this.tocando.get(channelId)?.pendentes.size === 0) this.calar(channelId);
     }
@@ -118,6 +126,9 @@ export class CallsService {
     // recomeçava do zero no meio do primeiro toque
     let ringing: PublicUser[] = [];
     if (!jaEmChamada && !this.tocando.has(channelId) && alvos.length > 0 && de) {
+      // antes de `tocar`: o `participou` de quem atende só pode ser enfileirado
+      // depois do `call.ring`, e assim cai atrás do `abrir` na fila do registro
+      void this.registro.abrir(channelId, userId);
       ringing = await this.tocar(channelId, userId, de, alvos);
     } else if (this.tocando.get(channelId)?.fromUserId === userId) {
       // já é a minha chamada tocando: a resposta continua dizendo para quem
@@ -137,6 +148,7 @@ export class CallsService {
   /** Atende: entra na voz e cala o toque. */
   async accept(userId: string, channelId: string) {
     await this.voice.join(userId, channelId);
+    void this.registro.participou(channelId, userId);
     // atendida deixa de ser uma chamada que toca. Sem calar aqui, o relógio dos
     // 30 s continuaria armado e chutaria quem ligou se o outro saísse antes
     // dele — e bloquearia o relógio da solidão, que é quem manda daqui em diante
@@ -236,6 +248,7 @@ export class CallsService {
       return;
     }
     await this.voice.leave(toque.fromUserId, channelId);
+    void this.registro.fechar(channelId);
     this.emitir(channelId, { channelId, by: null, reason: "timeout" });
   }
 
@@ -280,6 +293,7 @@ export class CallsService {
     // entrou ou saiu alguém entre o disparo e esta linha: não há solidão a encerrar
     if (restantes.length !== 1) return;
     await this.voice.leave(restantes[0], channelId);
+    void this.registro.fechar(channelId);
     this.emitir(channelId, { channelId, by: null, reason: "alone" });
   }
 
@@ -312,6 +326,9 @@ export class CallsService {
     reason: CallEndedEvent["reason"],
   ) {
     if ((await this.voice.count(channelId)) > 0) return;
+    // sala vazia é o fim do histórico também — cobre `end`, `onDisconnect` e a
+    // recusa que esvaziou a chamada. Idempotente: fechar duas vezes não reemite
+    void this.registro.fechar(channelId);
     this.calar(channelId);
     // "declined" já foi anunciado por quem recusou; não repetir o mesmo aviso
     if (reason !== "declined") this.emitir(channelId, { channelId, by, reason });

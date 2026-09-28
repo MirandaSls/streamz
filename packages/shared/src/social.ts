@@ -265,6 +265,10 @@ export function systemMessageText(m: Pick<Message, "type" | "content">, autor: s
         : `${autor} removeu o nome do grupo.`;
     case "SYSTEM_GROUP_ICON":
       return `${autor} mudou o ícone do grupo.`;
+    case "SYSTEM_CALL":
+      // a frase completa (duração, "perdeu") depende de quem lê e sai de
+      // `textoDaChamada`; aqui é a prévia sem espectador, sempre "iniciou"
+      return `${autor} iniciou uma chamada.`;
     default:
       return m.content;
   }

@@ -6,12 +6,15 @@ import {
   ArrowRight,
   ImagePlus,
   Pencil,
+  Phone,
   Pin,
   ShieldAlert,
 } from "@/components/ui/icones";
 import {
+  chamadaPerdida,
   displayNameOf,
   systemMessageText,
+  textoDaChamada,
   type Message,
   type MessageType,
   type PublicUser,
@@ -48,6 +51,12 @@ const SEM_CONHECIDOS = new Map<string, PublicUser>();
  *
  * Todos moram na mesma caixa de 16×16 (ver a posição no componente): o de 12
  * fica centrado nela.
+ *
+ * SYSTEM_CALL é a exceção e por isso não entra neste mapa: a cor do telefone
+ * depende de quem está lendo (verde para quem participou, vermelho para quem
+ * perdeu a chamada — `chamadaPerdida` é por espectador, não por mensagem), o
+ * que um mapa estático por `MessageType` não consegue expressar. É calculado
+ * no componente, na mesma caixa de 16 do alfinete.
  */
 const ICONE: Partial<Record<MessageType, ReactNode>> = {
   SYSTEM_PIN: <Pin size={16} className="text-text-muted" />,
@@ -119,7 +128,20 @@ export default function SystemMessageItem({
   const nome = displayNameOf(autor);
   const reactions = message.reactions ?? [];
   const fixar = message.type === "SYSTEM_PIN";
-  const partes = fixar ? null : repartirPeloNome(systemMessageText(message, nome), nome);
+  const chamada = message.type === "SYSTEM_CALL";
+  // Ícone da chamada: exceção ao mapa ICONE (ver o comentário lá) porque a cor
+  // depende de quem está lendo, não só do tipo da mensagem.
+  const icone = chamada ? (
+    <Phone
+      size={16}
+      className={chamadaPerdida(message, currentUserId) ? "text-status-danger" : "text-status-positive"}
+    />
+  ) : (
+    ICONE[message.type]
+  );
+  const partes = fixar
+    ? null
+    : repartirPeloNome(chamada ? textoDaChamada(message, nome, currentUserId) : systemMessageText(message, nome), nome);
 
   const { fundo, faixa } = fundoDaLinha({
     destacada,
@@ -186,7 +208,7 @@ export default function SystemMessageItem({
           começa em 32. Vertical: linha de 20px (`text-text-md`) + 2px de
           respiro — a caixa de 16 centrada nela começa em 2 + 2 = 4. */}
       <span aria-hidden="true" className="absolute left-[32px] top-[4px] grid h-4 w-4 place-items-center">
-        {ICONE[message.type]}
+        {icone}
       </span>
 
       <span className="flex flex-wrap items-center gap-x-1.5">

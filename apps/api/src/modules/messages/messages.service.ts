@@ -82,6 +82,9 @@ const MESSAGE_INCLUDE = {
   thread: true,
   // h-moderacao: a enquete é uma face da mensagem, não uma mensagem à parte
   poll: { include: { votes: { select: { optionIndex: true, userId: true } } } },
+  // registro da chamada que a SYSTEM_CALL narra; tabela 1:1 que quase
+  // nenhuma mensagem tem, como a enquete.
+  call: true,
   // ── j-bots ── a faixa "@fulano usou /play" acima da resposta de um bot.
   // Back-relation: a `Message` não tem coluna nenhuma para isto (ver
   // `interactions/dto.ts`).
@@ -917,6 +920,15 @@ export class MessagesService {
       // DTO não conhece o espectador) e é preenchido por
       // GET /channels/:id/polls/votes — ver PollsService.
       poll: m.poll ? tallyPoll(m.poll, m.poll.votes) : null,
+      // registro da chamada de conversa direta que a SYSTEM_CALL narra (início,
+      // fim e quem entrou); null em toda outra mensagem
+      call: m.call
+        ? {
+            startedAt: m.call.startedAt.toISOString(),
+            endedAt: m.call.endedAt ? m.call.endedAt.toISOString() : null,
+            participantIds: m.call.participantIds,
+          }
+        : null,
       // ── j-bots ── null em toda mensagem que não veio de um comando de barra,
       // que é quase todas
       interacao: toInteracaoDaMensagem(m.interacao),

@@ -7,6 +7,7 @@ import type { FriendsService } from "../friends/friends.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { RealtimeService } from "../realtime/realtime.service";
+import type { RegistroDeChamadaService } from "./registro-de-chamada.service";
 
 /**
  * Recusar e entrar numa chamada que já rola.
@@ -81,7 +82,13 @@ function servicos(participantes: Record<string, string[]>) {
   } as unknown as RealtimeService;
   const friends = { async assertNotBlocked() {} } as unknown as FriendsService;
   const voice = new VoiceService(guilds, prisma, realtime);
-  const calls = new CallsService(voice, guilds, prisma, realtime, friends);
+  // o histórico da chamada (mensagem de sistema) não é assunto destes testes
+  const registro = {
+    abrir: vi.fn(async () => {}),
+    participou: vi.fn(async () => {}),
+    fechar: vi.fn(async () => {}),
+  } as unknown as RegistroDeChamadaService;
+  const calls = new CallsService(voice, guilds, prisma, realtime, friends, registro);
   const fins = () => emitidos.filter((e) => e.evento === WS_EVENTS.CALL_ENDED);
   const toques = () => emitidos.filter((e) => e.evento === WS_EVENTS.CALL_RING);
   const naSala = (channelId: string) => voice.membrosDaSala(channelId);
