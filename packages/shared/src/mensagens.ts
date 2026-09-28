@@ -15,8 +15,10 @@ import type { Attachment, Message } from "./midia";
  * Tipo da mensagem. `DEFAULT` é a mensagem escrita por alguém; as `SYSTEM_*`
  * são narração renderizada como uma linha discreta, sem avatar nem ações:
  * fixar (`SYSTEM_PIN`), entrada de membro (`SYSTEM_JOIN`, emitida pela
- * moderação) e os eventos de grupo de DM. O autor é sempre *quem fez* a ação;
- * o `content` guarda o alvo (username) ou o valor novo (nome do grupo).
+ * moderação), os eventos de grupo de DM e a chamada de conversa direta
+ * (`SYSTEM_CALL`, narrada por `textoDaChamada` a partir de `Message.call`). O
+ * autor é sempre *quem fez* a ação; o `content` guarda o alvo (username) ou o
+ * valor novo (nome do grupo).
  *
  * União única de propósito: o enum do banco tem exatamente estes literais, e a
  * equivalência é travada em `apps/api/src/common/enums.ts`.
@@ -30,11 +32,85 @@ export type MessageType =
   | "SYSTEM_MEMBER_LEFT"
   | "SYSTEM_GROUP_RENAMED"
   | "SYSTEM_GROUP_ICON"
-  | "SYSTEM_MOD_NOTICE";
+  | "SYSTEM_MOD_NOTICE"
+  | "SYSTEM_CALL";
 
 /** true para mensagem narrada pelo sistema (sem avatar, sem ações de autor). */
 export function isSystemMessage(m: Pick<Message, "type">): boolean {
   return m.type !== "DEFAULT";
+}
+
+// ── Chamada de conversa direta ──────────────────────────────
+
+/**
+ * Registro da chamada que uma mensagem `SYSTEM_CALL` narra. `endedAt` null =
+ * chamada em andamento (a linha na timeline se atualiza quando ela termina).
+ * `participantIds` é quem *entrou* na chamada, quem ligou incluso — quem tinha
+ * acesso à conversa mas nunca entrou não está na lista, e é isso que
+ * `chamadaPerdida` usa para decidir quem "perdeu" a chamada.
+ */
+export interface MessageCall {
+  startedAt: string;
+  endedAt: string | null;
+  participantIds: string[];
+}
+
+/**
+ * Humaniza uma duração em pt-BR, estilo Discord/moment: degraus largos porque
+ * ninguém precisa saber que uma chamada durou "127 minutos" — "duas horas"
+ * já diz o que importa. `ms` negativo (relógio de cliente torto) vira 0 em vez
+ * de propagar um "-X segundos" sem sentido.
+ */
+export function duracaoDaChamada(ms: number): string {
+  const t = Math.max(0, ms);
+  const s = t / 1000;
+  if (s < 45) return "alguns segundos";
+  if (s < 90) return "um minuto";
+  const min = s / 60;
+  if (min < 45) return `${Math.round(min)} minutos`;
+  if (min < 90) return "uma hora";
+  const h = min / 60;
+  if (h < 22) return `${Math.round(h)} horas`;
+  if (h < 36) return "um dia";
+  const dias = h / 24;
+  return `${Math.round(dias)} dias`;
+}
+
+/**
+ * true quando a chamada já acabou e `espectadorId` não entrou nela — a mesma
+ * regra que `textoDaChamada` usa para escolher entre "iniciou uma chamada
+ * que durou" e "Você perdeu uma chamada de". O autor nunca "perde" a própria
+ * chamada, mesmo que só tenha ligado e desligado sem ninguém atender.
+ */
+export function chamadaPerdida(
+  m: Pick<Message, "author" | "call">,
+  espectadorId: string | undefined,
+): boolean {
+  if (!m.call || m.call.endedAt === null) return false;
+  if (!espectadorId || espectadorId === m.author.id) return false;
+  return !m.call.participantIds.includes(espectadorId);
+}
+
+/**
+ * Texto da narração de `SYSTEM_CALL`, na visão de quem lê — por isso recebe
+ * `espectadorId` à parte do autor: a mesma mensagem lê diferente para quem
+ * entrou na chamada e para quem a perdeu. Sem `m.call` (payload antigo) ou com
+ * `endedAt` null, a chamada ainda está em andamento e não tem duração para
+ * narrar.
+ */
+export function textoDaChamada(
+  m: Pick<Message, "author" | "call">,
+  autor: string,
+  espectadorId: string | undefined,
+): string {
+  if (!m.call || m.call.endedAt === null) return `${autor} iniciou uma chamada.`;
+  const dura = duracaoDaChamada(
+    new Date(m.call.endedAt).getTime() - new Date(m.call.startedAt).getTime(),
+  );
+  if (chamadaPerdida(m, espectadorId)) {
+    return `Você perdeu uma chamada de ${autor} que durou ${dura}.`;
+  }
+  return `${autor} iniciou uma chamada que durou ${dura}.`;
 }
 
 /** Tamanho do trecho citado na linha de referência de uma resposta. */

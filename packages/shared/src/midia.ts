@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { InteracaoDaMensagem } from "./aplicativos";
 import type { Poll } from "./comunidade";
 import type { Channel, MemberRole, PublicUser, ReactionGroup } from "./dominio";
-import type { MessageReplyRef, MessageType, ThreadSummary } from "./mensagens";
+import type { MessageCall, MessageReplyRef, MessageType, ThreadSummary } from "./mensagens";
 import type { ComponenteDeMensagem, Embed } from "./mensagens-de-bot";
 import type { PreviaDeMensagem } from "./social";
 
@@ -81,6 +81,13 @@ export interface Message {
   pinned: boolean;
   /** h-moderacao: preenchido quando a mensagem é uma enquete. */
   poll?: Poll | null;
+  /**
+   * Preenchido só em `SYSTEM_CALL`: a chamada que a mensagem narra
+   * (`textoDaChamada` em mensagens.ts). Opcional porque um payload antigo em
+   * cache não traz o campo; `undefined` e `null` querem dizer a mesma coisa —
+   * sem chamada.
+   */
+  call?: MessageCall | null;
   // ── j-bots ──
   /**
    * Preenchido quando esta mensagem é a resposta de um bot a um comando de
