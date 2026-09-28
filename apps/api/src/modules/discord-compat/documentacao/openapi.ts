@@ -1,8 +1,8 @@
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_SIZE,
+  MAX_BOT_MESSAGE_LENGTH,
   MAX_BULK_DELETE,
-  MAX_MESSAGE_LENGTH,
   MAX_ROLE_NAME,
 } from "@streamz/shared";
 
@@ -1162,7 +1162,7 @@ const ESQUEMAS: Record<string, Esquema> = {
       guild_id: ref("Snowflake"),
       author: ref("Usuario"),
       member: { ...ref("Membro"), description: "O membro do autor, sem `user` (ele já está em `author`). Só em canal de servidor." },
-      content: { type: "string", maxLength: MAX_MESSAGE_LENGTH },
+      content: { type: "string", maxLength: MAX_BOT_MESSAGE_LENGTH },
       timestamp: { type: "string", format: "date-time" },
       edited_timestamp: { type: ["string", "null"], format: "date-time" },
       tts: { type: "boolean", description: "Aceito na entrada e sempre `false` na saída: não há text-to-speech." },
@@ -1360,7 +1360,7 @@ const ESQUEMAS: Record<string, Esquema> = {
     description:
       "Pelo menos um entre `content`, `embeds`, `components` e anexo é obrigatório — corpo vazio leva `content[BASE_TYPE_REQUIRED]`. Campos que ainda não implementamos são **aceitos e ignorados**, nunca recusados: recusar faria um bot escrito para o Discord parar por causa de um campo que ele sempre manda.",
     properties: {
-      content: { type: "string", maxLength: MAX_MESSAGE_LENGTH },
+      content: { type: "string", maxLength: MAX_BOT_MESSAGE_LENGTH },
       tts: { type: "boolean", description: "Aceito e ignorado." },
       nonce: { type: ["string", "number"], description: "Ecoado de volta para o cliente trocar a mensagem otimista." },
       embeds: lista("Embed"),
@@ -1413,7 +1413,7 @@ const ESQUEMAS: Record<string, Esquema> = {
     title: "Edit Message",
     description: "Semântica de PATCH: campo ausente não mexe, campo presente substitui. Um corpo sem nenhum dos quatro é um no-op que devolve a mensagem.",
     properties: {
-      content: { type: "string", maxLength: MAX_MESSAGE_LENGTH },
+      content: { type: "string", maxLength: MAX_BOT_MESSAGE_LENGTH },
       embeds: lista("Embed"),
       components: lista("Componente"),
       flags: { type: "integer" },
@@ -1530,7 +1530,7 @@ const ESQUEMAS: Record<string, Esquema> = {
     title: "Followup Message",
     description: "O mesmo vocabulário de uma mensagem. `flags: 64` faz o followup ser efêmero.",
     properties: {
-      content: { type: "string", maxLength: MAX_MESSAGE_LENGTH },
+      content: { type: "string", maxLength: MAX_BOT_MESSAGE_LENGTH },
       embeds: lista("Embed"),
       components: lista("Componente"),
       flags: { type: "integer" },

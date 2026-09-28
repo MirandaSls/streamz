@@ -3,6 +3,7 @@ import {
   achatarPayloadDeBot,
   conferirMensagemDeBot,
   contarComponentes,
+  MAX_MESSAGE_LENGTH,
   resolverAnexosDoPayload,
   textoAchatadoDaMensagem,
   validarModalDeBot,
@@ -50,8 +51,8 @@ describe("achatarEmbeds", () => {
   });
 
   it("corta no teto da mensagem em vez de deixar o banco recusar", () => {
-    const gigante = achatarEmbeds([{ description: "a".repeat(5000) }]);
-    expect(gigante.length).toBe(2000);
+    const gigante = achatarEmbeds([{ description: "a".repeat(MAX_MESSAGE_LENGTH + 1000) }]);
+    expect(gigante.length).toBe(MAX_MESSAGE_LENGTH);
   });
 });
 

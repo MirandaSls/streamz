@@ -7,7 +7,7 @@
  * comando. Ver `substituirVariaveis`.
  */
 
-import { MAX_MESSAGE_LENGTH } from "@streamz/shared";
+import { MAX_BOT_MESSAGE_LENGTH } from "@streamz/shared";
 
 /** As variáveis que uma mensagem pode usar. A lista é o contrato com quem configura. */
 export const VARIAVEIS = ["usuario", "nome", "servidor", "contagem"] as const;
@@ -93,8 +93,8 @@ export function variaveisDesconhecidas(modelo: string): string[] {
  * validação". Cortar é feio; não mandar nada é pior.
  */
 export function limitarAoLimiteDaMensagem(texto: string): string {
-  if (texto.length <= MAX_MESSAGE_LENGTH) return texto;
-  return `${texto.slice(0, MAX_MESSAGE_LENGTH - 1)}…`;
+  if (texto.length <= MAX_BOT_MESSAGE_LENGTH) return texto;
+  return `${texto.slice(0, MAX_BOT_MESSAGE_LENGTH - 1)}…`;
 }
 
 /** Modelo + dados, já pronto para `channel.send`. */
