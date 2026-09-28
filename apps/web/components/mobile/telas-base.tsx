@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useAuth } from "@/stores/auth";
-import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
+import { definirStatusManual, resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -191,7 +191,7 @@ export function TelaVoce() {
 
   async function aplicarStatus(valor: UserStatus | null) {
     try {
-      useAuth.getState().setUser(await api.updateStatus(valor));
+      await definirStatusManual(valor);
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
     }

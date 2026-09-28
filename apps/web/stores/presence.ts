@@ -112,6 +112,31 @@ function limparPostoArmazenado(userId: string): void {
 }
 
 /**
+ * Quem limpa a marca em memória do `useAutoIdle` montado agora. É um ouvinte
+ * de módulo (e não um estado de store) porque só existe um hook ativo por aba
+ * e a marca é detalhe interno dele — ninguém mais precisa *ler* esse valor, só
+ * pedir que ele seja esquecido quando o usuário escolhe um status à mão.
+ */
+let esquecerMarcaDoHook: (() => void) | null = null;
+
+/**
+ * Caminho dos seletores de status manual (menu do perfil, modal de status,
+ * telas do mobile). Escolher um status à mão tira do auto-idle a posse do
+ * ausente: sem apagar a marca, a próxima mexida no mouse chamaria
+ * `updateStatus(null)` e desfaria a escolha do usuário. Apagamos *antes* do
+ * request para que nenhuma volta em voo encadeada ao ausente dispare depois.
+ * Erros propagam — quem chama mostra o aviso.
+ */
+export async function definirStatusManual(valor: UserStatus | null): Promise<PublicUser> {
+  const userId = useAuth.getState().user?.id;
+  if (userId) limparPostoArmazenado(userId);
+  esquecerMarcaDoHook?.();
+  const atualizado = await api.updateStatus(valor);
+  useAuth.getState().setUser(atualizado);
+  return atualizado;
+}
+
+/**
  * Marca o usuário como **Ausente** depois de `IDLE_APOS_MS` sem interação na
  * aba, e o traz de volta ao primeiro sinal de vida — é o "ausente automático"
  * do Discord.
@@ -119,7 +144,9 @@ function limparPostoArmazenado(userId: string): void {
  * Quem detecta é o cliente (o servidor só vê o socket aberto, que continua
  * aberto com a aba esquecida). Só mexemos em quem *não* escolheu um status: um
  * "Não perturbe" ou "Invisível" explícito não pode ser sobrescrito por
- * inatividade. E ao voltar só desfazemos o ausente que nós mesmos pusemos.
+ * inatividade. E ao voltar só desfazemos o ausente que nós mesmos pusemos —
+ * a "marca", que só some quando desfazemos, quando fica comprovadamente
+ * obsoleta ou quando o usuário escolhe um status por `definirStatusManual`.
  */
 export function useAutoIdle(enabled: boolean): void {
   const posto = useRef(false);
@@ -129,29 +156,38 @@ export function useAutoIdle(enabled: boolean): void {
 
     const userId = useAuth.getState().user?.id;
 
-    // A marca `posto.current` vivia só em memória: se o componente remonta
-    // enquanto o status está IDLE (F5, reabrir o app desktop, aba
-    // descartada), ela voltava a `false` e ninguém restaurava o ONLINE nem
-    // reagendava um novo auto-idle — o usuário ficava preso em ausente. Por
-    // isso ela é lida do localStorage no início, mas só é confiável se o
-    // status atual ainda for IDLE; senão a chave é lixo de uma sessão
-    // anterior (ex.: alguém escolheu outro status manual enquanto o app
-    // estava fechado) e é descartada.
-    if (userId) {
-      const armazenado = lerPostoArmazenado(userId);
-      const me = useAuth.getState().user;
-      posto.current = armazenado && me?.status === "IDLE";
-      if (armazenado && !posto.current) limparPostoArmazenado(userId);
-    } else {
-      posto.current = false;
-    }
+    // A marca vive também no localStorage para sobreviver a remontagens (F5,
+    // reabrir o app desktop, aba descartada) — sem isso ninguém restaurava o
+    // ONLINE e o usuário ficava preso em ausente. Ela é aceita sem olhar o
+    // status: o `user` aqui pode ter vindo do cache local (`loadFromStorage`)
+    // com um status velho, e descartar a marca por ele era outra forma de
+    // prender o usuário. Se ela for mesmo obsoleta, `voltar()` descobre pelo
+    // status real e a apaga sem chamar a API.
+    posto.current = userId ? lerPostoArmazenado(userId) : false;
 
     let timer: number | undefined;
+    // Pedido de IDLE ainda sem resposta: nessa janela o status continua
+    // ONLINE, então `voltar()` não consegue distinguir "ausente em voo" de
+    // "marca obsoleta" pelo status — precisa saber do pedido.
+    let ausenteEmVoo: Promise<void> | null = null;
+    // Volta pedida durante o voo; `definirStatusManual` a cancela para não
+    // atropelar a escolha manual quando o IDLE terminar.
+    let desfazerAposVoo = false;
 
-    async function aplicar(status: UserStatus | null) {
+    function esquecerMarca() {
+      posto.current = false;
+      desfazerAposVoo = false;
+      if (userId) limparPostoArmazenado(userId);
+    }
+    esquecerMarcaDoHook = esquecerMarca;
+
+    // `aindaVale` deixa o IDLE em voo desistir de gravar no store se, enquanto
+    // ele viajava, o usuário escolheu um status à mão: a resposta velha
+    // chegaria depois e pintaria "Ausente" por cima da escolha.
+    async function aplicar(status: UserStatus | null, aindaVale: () => boolean = () => true) {
       try {
         const atualizado = await api.updateStatus(status);
-        useAuth.getState().setUser(atualizado);
+        if (aindaVale()) useAuth.getState().setUser(atualizado);
       } catch {
         // presença é informação de conforto: falhar aqui não merece um aviso
       }
@@ -160,18 +196,47 @@ export function useAutoIdle(enabled: boolean): void {
     function ficarAusente() {
       const me = useAuth.getState().user;
       // manualStatus não vem no PublicUser; o proxy é o status efetivo: só
-      // promovemos a ausente quem está simplesmente online
-      if (!me || me.status !== "ONLINE" || posto.current) return;
+      // promovemos a ausente quem está simplesmente online. Não olhamos a
+      // marca: com status ONLINE e nada em voo ela é obsoleta (IDLE que
+      // falhou, cache velho) e remarcar é o certo.
+      if (!me || me.status !== "ONLINE" || ausenteEmVoo) return;
       posto.current = true;
       if (userId) gravarPostoArmazenado(userId);
-      void aplicar("IDLE");
+      ausenteEmVoo = aplicar("IDLE", () => posto.current || desfazerAposVoo).then(() => {
+        ausenteEmVoo = null;
+        if (desfazerAposVoo) {
+          desfazerAposVoo = false;
+          void aplicar(null);
+        }
+      });
     }
 
     function voltar() {
       if (posto.current) {
-        posto.current = false;
-        if (userId) limparPostoArmazenado(userId);
-        void aplicar(null);
+        if (ausenteEmVoo) {
+          // o usuário voltou antes do IDLE chegar ao servidor: encadeia a
+          // volta em vez de disparar agora, senão o IDLE poderia ser gravado
+          // por último e ficar para sempre
+          posto.current = false;
+          if (userId) limparPostoArmazenado(userId);
+          desfazerAposVoo = true;
+        } else {
+          const status = useAuth.getState().user?.status;
+          if (status === "IDLE") {
+            // limpar antes de chamar: numa rajada de mousemove só o primeiro
+            // evento desfaz
+            esquecerMarca();
+            void aplicar(null);
+          } else if (status !== "OFFLINE") {
+            // ONLINE/DND: alguém escolheu outro status (outro aparelho, outra
+            // aba) e a marca não vale mais — não há o que desfazer
+            esquecerMarca();
+          }
+          // OFFLINE: socket caído (suspensão, rede). A marca fica: ao
+          // reconectar o servidor reaplica o IDLE gravado como manualStatus,
+          // e a próxima interação o desfaz. Apagar aqui era o que prendia o
+          // usuário em ausente.
+        }
       }
       window.clearTimeout(timer);
       timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
@@ -191,34 +256,11 @@ export function useAutoIdle(enabled: boolean): void {
     document.addEventListener("visibilitychange", aoMudarVisibilidade);
     timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
 
-    // Se o usuário escolher um status manual por outro caminho (ex.: menu de
-    // status) enquanto ainda estamos "donos" do IDLE, a marca fica obsoleta
-    // e precisa sumir — senão uma futura interação chamaria `aplicar(null)`
-    // e apagaria a escolha manual dele. Comparamos com o status ANTERIOR
-    // (só dispara quando ele estava IDLE e deixou de estar): `ficarAusente`
-    // marca `posto.current = true` antes do `await` de `aplicar("IDLE")`, e
-    // nessa janela o status ainda é ONLINE — qualquer outra atualização do
-    // useAuth nesse meio-tempo (refresh de token, perfil) não pode ser lida
-    // como "saiu do IDLE" e apagar a marca que acabamos de gravar.
-    const desinscrever = userId
-      ? useAuth.subscribe((state, prev) => {
-          if (
-            posto.current &&
-            prev.user?.status === "IDLE" &&
-            state.user &&
-            state.user.status !== "IDLE"
-          ) {
-            posto.current = false;
-            limparPostoArmazenado(userId);
-          }
-        })
-      : undefined;
-
     return () => {
       window.clearTimeout(timer);
       for (const e of eventos) window.removeEventListener(e, voltar);
       document.removeEventListener("visibilitychange", aoMudarVisibilidade);
-      desinscrever?.();
+      if (esquecerMarcaDoHook === esquecerMarca) esquecerMarcaDoHook = null;
     };
   }, [enabled]);
 }
