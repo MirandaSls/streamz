@@ -14,8 +14,10 @@ o único defeito que ele pode ter.
 ## Estado atual
 
 A instância de produção roda em `streamz.chat` (API em `api.`, LiveKit em
-`livekit.`), com Postgres, R2, Giphy, SMTP e LiveKit self-hosted configurados. O
-CD publica sozinho a cada merge no `main` (ADR-0007). Nada abaixo bloqueia rodar
+`livekit.`), com Postgres, R2, Giphy, SMTP e LiveKit self-hosted configurados. Não há CI/CD no
+GitHub desde 2026-09-03 (workflows removidos em `a534a08d`): mergear no `main`
+não publica nada, e publicar é rodar `scripts/publicar-local.sh` no servidor
+(ver `CLAUDE.md` e a revogação parcial da ADR-0007). Nada abaixo bloqueia rodar
 o projeto em dev — `pnpm db:up && pnpm dev` sobe tudo.
 
 ## Configurar as dependências opcionais
@@ -34,10 +36,11 @@ mensagens de erro da API.
 
 ### Versão no rodapé das configurações
 `NEXT_PUBLIC_APP_VERSION` não é passada no build da imagem web
-(`.github/workflows/ci.yml`), então o rodapé do menu de configurações mostra
-sempre `0.0.1`. A API já resolveu o equivalente — `APP_VERSION` vem da tag do
-deploy. Basta acrescentar a variável aos `build-args`, como as outras
-`NEXT_PUBLIC_*`.
+(nem `scripts/publicar-local.sh` a passa como `--build-arg`, nem
+`apps/web/Dockerfile` a declara), então o rodapé do menu de configurações
+mostra sempre `0.0.1`. A API já resolveu o equivalente — `APP_VERSION` vem da
+tag do deploy. Basta declarar o `ARG` no Dockerfile e acrescentar o
+`--build-arg` no script, como as outras `NEXT_PUBLIC_*`.
 
 ### Auto-update do desktop
 O `tauri-plugin-updater` está **desligado** de propósito: apontava para
@@ -80,7 +83,7 @@ configurada neste servidor" — de propósito, e com prova na bancada
 
 ### Assinatura do instalador Windows
 Sem Azure Trusted Signing, o `.exe` dispara o alerta do SmartScreen em quem
-baixa. O instalador em si já é gerado pelo workflow `Desktop (Windows)`.
+baixa. O instalador em si já é gerado por `scripts/build-desktop-no-servidor.sh`.
 
 ### Splash fechada pelo gerenciador de janelas deixa o processo vivo sem janela
 Problema antigo, nas **três plataformas**: fechar a janelinha `splash` "de
