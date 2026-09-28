@@ -16,6 +16,10 @@
  * O vídeo é desenhado com `object-fit: contain`, então girar o telefone não
  * corta nem estica: o que muda é a caixa, e a imagem continua inteira dentro
  * dela. O zoom acontece **depois** disso, por cima do quadro já ajustado.
+ *
+ * A mesma aritmética serve a transmissão de tela no desktop/web: roda do
+ * mouse e cápsula −/100%/+ chegam aqui como um fator multiplicativo, do
+ * mesmo jeito que a pinça, e passam pelo mesmo `comZoom`/`limitar`.
  */
 
 export interface Ajuste {
@@ -131,4 +135,59 @@ export const DUPLO_TOQUE_MS = 300;
 export function aoDuploToque(base: Ajuste, ponto: Ponto, viewport: Viewport): Ajuste {
   if (!ehOriginal(base)) return AJUSTE_INICIAL;
   return comZoom(AJUSTE_INICIAL, 2, ponto, viewport);
+}
+
+/** Fator de um clique na cápsula de zoom (desktop): +/− este passo por vez. */
+export const PASSO_DO_BOTAO = 1.25;
+
+/**
+ * Converte um evento `wheel` num fator multiplicativo para `comZoom`.
+ *
+ * `deltaMode` do navegador muda a unidade de `deltaY`: 0 é pixel, 1 é linha
+ * (~16px) e 2 é página inteira (~800px) — sem essa conversão um trackpad que
+ * manda "linhas" ampliaria 16× mais devagar que um mouse que manda pixels, ou
+ * uma página inteira saltaria direto para o teto. Depois de normalizar para
+ * pixel, `Math.exp(-px * 0.002)` dá uma curva suave: roda para cima (`deltaY`
+ * negativo) amplia, para baixo reduz. O teto de 1.5×/evento existe porque
+ * alguns trackpads mandam um `deltaY` enorme num só evento — sem prender aqui
+ * um gesto isolado saltaria para perto do teto de `ESCALA_MAX` de uma vez.
+ */
+export function fatorDaRoda(deltaY: number, deltaMode = 0): number {
+  if (!Number.isFinite(deltaY)) return 1;
+  const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 800 : deltaY;
+  // `Math.exp` pode estourar para `Infinity` com um `deltaY` finito mas
+  // enorme (trackpad) — o `deltaY` já está garantido finito acima, então o
+  // que sobra aqui é só prender o resultado ao teto/piso, nunca descartá-lo.
+  const fator = Math.exp(-px * 0.002);
+  return Math.min(1.5, Math.max(1 / 1.5, fator));
+}
+
+/**
+ * Amplia/reduz por `PASSO_DO_BOTAO` em torno do centro da caixa.
+ *
+ * A cápsula não tem foco — ao contrário da roda, que amplia sob o cursor —
+ * então o ponto fixo é o centro do viewport, como o duplo-toque no repouso.
+ * Perto do piso, `comZoom`/`limitar` já cravam a escala em exatamente 1 e
+ * zeram o deslocamento (ver `limitar`), então reduzir de perto de 1 volta ao
+ * ajuste original sem sobra de ponto flutuante.
+ */
+export function comBotao(base: Ajuste, direcao: 1 | -1, viewport: Viewport): Ajuste {
+  const fator = direcao === 1 ? PASSO_DO_BOTAO : 1 / PASSO_DO_BOTAO;
+  const foco = { x: viewport.largura / 2, y: viewport.altura / 2 };
+  return comZoom(base, fator, foco, viewport);
+}
+
+/** Percentual exibido na cápsula (100% é o repouso). */
+export function percentualDe(a: Ajuste): number {
+  return Math.round(a.escala * 100);
+}
+
+/** Se o `+` da cápsula ainda faz algo (falso já no teto). */
+export function podeAmpliar(a: Ajuste): boolean {
+  return a.escala < ESCALA_MAX - 0.001;
+}
+
+/** Se o `−` da cápsula ainda faz algo (falso já no piso). */
+export function podeReduzir(a: Ajuste): boolean {
+  return a.escala > ESCALA_MIN + 0.001;
 }

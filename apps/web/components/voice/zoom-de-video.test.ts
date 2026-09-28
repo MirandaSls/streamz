@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   AJUSTE_INICIAL,
   ESCALA_MAX,
+  ESCALA_MIN,
+  PASSO_DO_BOTAO,
   aoDuploToque,
   centro,
+  comBotao,
   comPan,
   comZoom,
   distancia,
   ehOriginal,
+  fatorDaRoda,
   limitar,
+  percentualDe,
+  podeAmpliar,
+  podeReduzir,
   transformDe,
 } from "./zoom-de-video";
 
@@ -100,5 +107,75 @@ describe("transform", () => {
     expect(transformDe({ escala: 2, x: 10, y: -5 })).toBe(
       "translate(10.00px, -5.00px) scale(2.0000)",
     );
+  });
+});
+
+describe("roda do mouse", () => {
+  it("roda para cima (deltaY negativo) amplia — fator maior que 1", () => {
+    expect(fatorDaRoda(-100)).toBeGreaterThan(1);
+  });
+
+  it("roda para baixo (deltaY positivo) reduz — fator menor que 1", () => {
+    expect(fatorDaRoda(100)).toBeLessThan(1);
+  });
+
+  it("prende cada evento a no máximo 1.5×", () => {
+    expect(fatorDaRoda(-999999)).toBeCloseTo(1.5, 5);
+  });
+
+  it("prende cada evento a no mínimo 1/1.5×", () => {
+    expect(fatorDaRoda(999999)).toBeCloseTo(1 / 1.5, 5);
+  });
+
+  it("deltaMode 1 (linhas) equivale a multiplicar por 16px", () => {
+    expect(fatorDaRoda(-10, 1)).toBeCloseTo(fatorDaRoda(-160, 0), 10);
+  });
+
+  it("deltaMode 2 (páginas) equivale a multiplicar por 800px", () => {
+    expect(fatorDaRoda(-1, 2)).toBeCloseTo(fatorDaRoda(-800, 0), 10);
+  });
+
+  it("NaN/Infinity não quebram a conta — vira 1 (sem mudança)", () => {
+    expect(fatorDaRoda(Number.NaN)).toBe(1);
+    expect(fatorDaRoda(Number.POSITIVE_INFINITY)).toBe(1);
+    expect(fatorDaRoda(Number.NEGATIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe("botão da cápsula", () => {
+  it("ampliando, escala cresce por PASSO_DO_BOTAO em torno do centro", () => {
+    const a = comBotao(AJUSTE_INICIAL, 1, TELA);
+    expect(a.escala).toBeCloseTo(PASSO_DO_BOTAO, 10);
+    expect(a.x).toBeCloseTo(0, 5);
+    expect(a.y).toBeCloseTo(0, 5);
+  });
+
+  it("reduzindo a partir de ampliado, escala cai por 1/PASSO_DO_BOTAO", () => {
+    const ampliado = comBotao(AJUSTE_INICIAL, 1, TELA);
+    const de_volta = comBotao(ampliado, -1, TELA);
+    expect(de_volta.escala).toBeCloseTo(1, 10);
+  });
+
+  it("reduzir perto de 1 cai em exatamente {1,0,0}, não em algo abaixo do piso", () => {
+    const quaseUm = { escala: 1.1, x: 3, y: -3 };
+    expect(comBotao(quaseUm, -1, TELA)).toEqual(AJUSTE_INICIAL);
+  });
+});
+
+describe("percentual e limites da cápsula", () => {
+  it("percentualDe arredonda a escala para inteiro", () => {
+    expect(percentualDe({ escala: 1, x: 0, y: 0 })).toBe(100);
+    expect(percentualDe({ escala: 2.5, x: 0, y: 0 })).toBe(250);
+    expect(percentualDe({ escala: 1.004, x: 0, y: 0 })).toBe(100);
+  });
+
+  it("podeAmpliar é falso só encostado no teto", () => {
+    expect(podeAmpliar({ escala: ESCALA_MAX, x: 0, y: 0 })).toBe(false);
+    expect(podeAmpliar({ escala: ESCALA_MAX - 0.5, x: 0, y: 0 })).toBe(true);
+  });
+
+  it("podeReduzir é falso só encostado no piso", () => {
+    expect(podeReduzir({ escala: ESCALA_MIN, x: 0, y: 0 })).toBe(false);
+    expect(podeReduzir({ escala: ESCALA_MIN + 0.5, x: 0, y: 0 })).toBe(true);
   });
 });
