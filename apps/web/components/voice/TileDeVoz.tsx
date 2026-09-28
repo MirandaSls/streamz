@@ -20,7 +20,9 @@ import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
+import CapsulaDeZoom from "@/components/voice/CapsulaDeZoom";
 import {
+  ATRIBUTO_DE_TELA_CHEIA,
   alternarTelaCheiaDe,
   soltarTelaCheiaDe,
   suportaTelaCheia,
@@ -29,6 +31,7 @@ import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
+import { useZoomDaTransmissao } from "@/components/voice/useZoomDaTransmissao";
 import { useCorDominante } from "@/lib/cor-dominante";
 import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -399,6 +402,66 @@ export function VoiceTile({
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
   const usaFundoDaFoto = Boolean(video);
   const podeParar = podePararDeAssistir({ tela, assistindo, sou, minhaTelaNativa: tile.minhaTelaNativa });
+  /**
+   * **Este** tile está em tela cheia — e não "alguma coisa está".
+   *
+   * O `telaCheia` da store é um booleano só, aceso tanto pelo palco inteiro
+   * quanto por um tile, e na emulação trocar de dono (palco → tile) nem mexe
+   * nele (`entrarNaEmulada`). A resposta certa é por elemento: a Fullscreen API
+   * do DOM aponta o elemento, e a emulação marca o dono com
+   * `ATRIBUTO_DE_TELA_CHEIA`. Os dois caminhos avisam por evento — o do DOM por
+   * `fullscreenchange`, o da emulação pela própria mudança do atributo, que um
+   * `MutationObserver` enxerga sem depender de `fullscreen.ts` expor mais nada.
+   * Só a tela no desktop pergunta: é a única que o zoom usa.
+   */
+  const [emTelaCheia, setEmTelaCheia] = useState(false);
+  useEffect(() => {
+    const el = caixa.current;
+    if (!el || semAcoes || !tela) return;
+    const doc = document as Document & { webkitFullscreenElement?: Element | null };
+    const conferir = () =>
+      setEmTelaCheia(
+        (doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null) === el ||
+          el.hasAttribute(ATRIBUTO_DE_TELA_CHEIA),
+      );
+    conferir();
+    document.addEventListener("fullscreenchange", conferir);
+    document.addEventListener("webkitfullscreenchange", conferir);
+    const observador = new MutationObserver(conferir);
+    observador.observe(el, { attributes: true, attributeFilter: [ATRIBUTO_DE_TELA_CHEIA] });
+    return () => {
+      document.removeEventListener("fullscreenchange", conferir);
+      document.removeEventListener("webkitfullscreenchange", conferir);
+      observador.disconnect();
+      setEmTelaCheia(false);
+    };
+  }, [semAcoes, tela]);
+  /**
+   * Zoom na transmissão (roda amplia no cursor, arrastar move), como no
+   * Discord — só onde a tela é **o assunto**: no destaque do palco (`grande`,
+   * que no desktop só o tile focado do `VoiceGrid` recebe) ou em tela cheia.
+   *
+   * Num tile da grade ou da tira a roda tem de continuar rolando a lista: o
+   * ouvinte de `wheel` do hook é não-passivo e engoliria a rolagem. Câmera não
+   * entra (ampliar um rosto não é leitura de nada), nem o celular (`semAcoes`),
+   * que tem a pinça dele em `TelaCheiaDeVideo`. `video` já exclui a janela
+   * solta e a minha tela sem prévia — sem quadro não há o que ampliar.
+   *
+   * A `chave` é `tile.key` (muda a cada transmissão nova): uma tela nova
+   * começa em 100%, não no recorte da anterior.
+   */
+  const zoomAtivo = tela && !!video && !semAcoes && (grande || emTelaCheia);
+  const zoom = useZoomDaTransmissao(caixa, zoomAtivo, tile.key);
+  /**
+   * Houve arrasto em **algum** clique da sequência atual (1º ou 2º).
+   *
+   * Soltar o botão depois de arrastar ainda gera `click` — e dois arrastos
+   * rápidos geram também `dblclick`. `acabouDeArrastar()` zera ao ler, e quem
+   * lê é o `onClick` (que roda antes do `dblclick` do mesmo gesto); o
+   * resultado fica aqui para o `onDoubleClick` não precisar ler de novo e
+   * achar `false`. Arrastar nunca pode trocar o foco nem a tela cheia.
+   */
+  const arrastoNaSequencia = useRef(false);
 
   return (
     <div
@@ -409,6 +472,17 @@ export function VoiceTile({
       onPointerEnter={(e) => {
         if (e.pointerType === "mouse") setPairando(true);
       }}
+      // o arrasto do zoom começa na transmissão, nunca num botão de dentro (a
+      // cápsula já para a propagação; "Ocultar prévia" não, e é por isso o
+      // `closest`)
+      onPointerDown={
+        zoomAtivo
+          ? (e) => {
+              if ((e.target as HTMLElement).closest("button")) return;
+              zoom.onPointerDown(e);
+            }
+          : undefined
+      }
       // Um clique põe no palco, e o clique no que já está no palco volta para a
       // grade (`setFocado` alterna). Era duplo clique: ninguém adivinha isso, e
       // a print mostra o Discord trocando de foco com um toque só. Os botões de
@@ -425,6 +499,11 @@ export function VoiceTile({
           onFocar(tile.key);
           return;
         }
+        // lido em todo clique, antes do `detail`: é a única leitura do gesto
+        // (ver `arrastoNaSequencia`). O 1º clique abre a sequência; o 2º soma.
+        const arrastou = zoom.acabouDeArrastar();
+        arrastoNaSequencia.current = e.detail > 1 ? arrastoNaSequencia.current || arrastou : arrastou;
+        if (arrastou) return; // soltar o arrasto do zoom não é "clicar no tile"
         if (e.detail > 1) return; // o segundo clique é do `onDoubleClick`
         window.clearTimeout(cliquePendente.current);
         cliquePendente.current = window.setTimeout(() => onFocar(tile.key), ESPERA_DO_DUPLO_CLIQUE);
@@ -442,6 +521,9 @@ export function VoiceTile({
               // cheia — é o mesmo motivo do botão, só que sem elemento
               // `<button>` cobrindo a área toda.
               if ((e.target as HTMLElement).closest("button, [data-placeholder-janela]")) return;
+              // dois arrastos rápidos na imagem ampliada também somam um
+              // `dblclick` — e mover a imagem não pode abrir/fechar a tela cheia
+              if (arrastoNaSequencia.current) return;
               window.clearTimeout(cliquePendente.current);
               void alternarTelaCheiaDe(caixa.current);
             }
@@ -479,7 +561,13 @@ export function VoiceTile({
       {emJanela ? (
         <PlaceholderJanelaAberta chave={chaveJanela} nome={nome} compacto={compacto} />
       ) : video ? (
-        <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
+        // O invólucro é quem escala, não o tile nem o `<video>`: o tile tem o
+        // `overflow-hidden` que recorta a ampliação e carrega rótulo e selos,
+        // que ficam parados; e `VideoDaFaixa` é o mesmo de `PreviaDeTela` e
+        // `TelaCheiaDeVideo`, que não têm zoom nenhum a herdar.
+        <div className="h-full w-full" style={zoomAtivo ? zoom.estilo : undefined}>
+          <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
+        </div>
       ) : tela ? (
         // Sem faixa. Ou a tela não se assiste ainda — e aí o convite logo
         // abaixo é tudo o que há para ver —, ou ela já foi assinada e o
@@ -543,6 +631,28 @@ export function VoiceTile({
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_2px_rgb(var(--status-positive-rgb)),inset_0_0_0_3px_rgb(var(--black-rgb))]"
+        />
+      )}
+
+      {/* A cápsula do zoom (− / 100% / +): no **topo central** do tile, porque é
+          a única borda livre dele e do palco à volta. Em cima à direita mora o
+          "AO VIVO"; embaixo à esquerda, o rótulo de nome; embaixo no centro e à
+          direita, a cápsula de controles e o `IconesDoCanto` do palco, que
+          flutuam por cima do destaque. E no cabeçalho do palco, com uma tela
+          no destaque, o meio fica vazio (a `p5` não desenha título) — só as
+          pontas recebem ponteiro. Aparece no hover, como o resto da moldura, e
+          fica enquanto houver ampliação: sem ela não haveria como ver o
+          percentual nem voltar a 100% sem adivinhar a roda. */}
+      {zoomAtivo && (
+        <CapsulaDeZoom
+          percentual={zoom.percentual}
+          podeAmpliar={zoom.podeAmpliar}
+          podeReduzir={zoom.podeReduzir}
+          onAmpliar={zoom.ampliar}
+          onReduzir={zoom.reduzir}
+          onRedefinir={zoom.redefinir}
+          visivel={pairando || zoom.ampliado}
+          className="absolute left-1/2 top-3 z-10 -translate-x-1/2"
         />
       )}
 
