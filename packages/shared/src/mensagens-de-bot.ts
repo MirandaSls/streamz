@@ -25,7 +25,7 @@
 
 import { z } from "zod";
 import type { PublicUser } from "./dominio";
-import { idSchema, MAX_MESSAGE_LENGTH } from "./internos";
+import { idSchema, MAX_BOT_MESSAGE_LENGTH, MAX_MESSAGE_LENGTH } from "./internos";
 
 // ── flags de mensagem ────────────────────────────────────────
 
@@ -647,7 +647,7 @@ export type RespostaDeAutocomplete = z.infer<typeof respostaDeAutocompleteSchema
  * "não mexe".
  */
 export const payloadDeBotSchema = z.object({
-  content: z.string().max(MAX_MESSAGE_LENGTH).optional(),
+  content: z.string().max(MAX_BOT_MESSAGE_LENGTH).optional(),
   embeds: z.array(embedSchema).max(LIMITES_DE_EMBED.EMBEDS_POR_MENSAGEM).optional(),
   components: z.array(componenteDeMensagemSchema).optional(),
   flags: z.number().int().min(0).optional(),
