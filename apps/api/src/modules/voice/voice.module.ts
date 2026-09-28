@@ -9,13 +9,17 @@ import { FriendsModule } from "../friends/friends.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { MessagesModule } from "../messages/messages.module";
+import { RegistroDeChamadaService } from "./registro-de-chamada.service";
 
 @Module({
   // FriendsModule entra por causa do bloqueio: quem bloqueou não pode ser
-  // chamado numa conversa que já existia antes do bloqueio
-  imports: [AuthModule, FriendsModule, GuildsModule, RealtimeModule],
+  // chamado numa conversa que já existia antes do bloqueio. MessagesModule entra
+  // pelo `getDTO` da mensagem de sistema da chamada (RegistroDeChamadaService);
+  // não fecha ciclo — nem ele nem nenhum módulo que ele importa importa o VoiceModule
+  imports: [AuthModule, FriendsModule, GuildsModule, RealtimeModule, MessagesModule],
   controllers: [VoiceController, CallsController, LivekitWebhookController],
-  providers: [VoiceService, CallsService],
+  providers: [VoiceService, CallsService, RegistroDeChamadaService],
   // o gateway usa os dois para tratar voice.join/leave/update e call.*
   exports: [VoiceService, CallsService],
 })
