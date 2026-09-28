@@ -1,5 +1,5 @@
 import {
-  MAX_MESSAGE_LENGTH,
+  MAX_BOT_MESSAGE_LENGTH,
   NOME_DE_COMANDO_DE_CONTEXTO,
   TIPO_DE_COMANDO_DE_APP,
   TIPOS_DE_OPCAO_ACEITOS,
@@ -289,7 +289,7 @@ export const comandosParaRegistrarSchema = z
  */
 export const dadosDeRespostaSchema = z
   .object({
-    content: z.string().max(MAX_MESSAGE_LENGTH).optional(),
+    content: z.string().max(MAX_BOT_MESSAGE_LENGTH).optional(),
     flags: z.number().int().optional(),
     tts: z.boolean().optional(),
     embeds: z.array(z.record(z.unknown())).optional(),

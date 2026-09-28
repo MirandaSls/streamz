@@ -189,6 +189,27 @@ async function baixar(url: string, idDoAnexo?: string | null): Promise<Baixada> 
 }
 
 /**
+ * Os bytes de um anexo de texto (`message.txt` e afins), já decodificados —
+ * usa o mesmo `baixar` de cima (URL assinada do R2, proxy da API como segunda
+ * porta). `limiteBytes` corta o blob **antes** de decodificar, para a prévia
+ * nunca puxar um arquivo inteiro só para mostrar seis linhas; `cortado` diz
+ * se sobrou conteúdo além do que veio. `TextDecoder` sem `fatal`: o corte pode
+ * cair no meio de um caractere multibyte, e um caractere de substituição no
+ * fim é melhor que a prévia inteira quebrar.
+ */
+export async function baixarTextoDoAnexo(
+  url: string,
+  idDoAnexo: string,
+  limiteBytes: number,
+): Promise<{ texto: string; cortado: boolean }> {
+  const { blob } = await baixar(url, idDoAnexo);
+  const cortado = blob.size > limiteBytes;
+  const fatia = cortado ? blob.slice(0, limiteBytes) : blob;
+  const texto = new TextDecoder("utf-8").decode(await fatia.arrayBuffer());
+  return { texto, cortado };
+}
+
+/**
  * Um `fetch` de imagem; toda recusa vira `FalhaAoBaixar`.
  *
  * `daApi` diz se este endereço é o proxy da nossa API — é o que separa "a

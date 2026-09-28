@@ -76,6 +76,7 @@ import {
 import { EVENTO_PAINEL_DO_COMPOSER, type DetalhePainelDoComposer } from "@/lib/eventos-do-composer";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
+import { colagemPassaDoLimite, passaDoLimite, textoComoArquivo } from "@/lib/texto-longo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
@@ -590,10 +591,29 @@ export default function Composer({
       ui.toast("Você não pode mencionar todos aqui — a menção foi enviada como texto.");
     }
 
+    // Como no Discord, texto acima do limite não é cortado: vai inteiro como
+    // `message.txt`. Os bloqueios vêm antes do `setEnviando` para o rascunho
+    // ficar intacto e quem digitou poder decidir o que fazer.
+    const longo = passaDoLimite(texto);
+    if (longo && !allowAttachments) {
+      ui.toast(`Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres.`, "error");
+      return;
+    }
+    if (longo && totalAnexos >= MAX_ATTACHMENTS_PER_MESSAGE) {
+      ui.toast(
+        `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres, e não cabe mais um anexo para enviá-la como arquivo.`,
+        "error",
+      );
+      return;
+    }
+
     setEnviando(true);
     try {
       const enviados = await subirPendentes();
-      onSend(texto, [...prontos, ...enviados]);
+      if (longo) {
+        const anexoDoTexto = await api.uploadFileComProgresso(textoComoArquivo(texto), () => {});
+        onSend("", [...prontos, ...enviados, anexoDoTexto]);
+      } else onSend(texto, [...prontos, ...enviados]);
       setDraft("");
       setPendentes([]);
       setProntos([]);
@@ -782,7 +802,16 @@ export default function Composer({
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     if (!allowAttachments) return;
     const files = Array.from(event.clipboardData.files);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      // Colagem que estouraria o limite vira anexo pendente, e o campo fica como
+      // estava. Sem anexos o texto entra no campo e o envio é quem recusa.
+      const colado = event.clipboardData.getData("text/plain");
+      const campo = event.currentTarget;
+      if (!colado || !colagemPassaDoLimite(draft, colado, campo.selectionStart, campo.selectionEnd)) return;
+      event.preventDefault();
+      adicionarArquivos([textoComoArquivo(colado)]);
+      return;
+    }
     event.preventDefault();
     adicionarArquivos(files);
   }
@@ -938,7 +967,8 @@ export default function Composer({
               data-sem-anel
               rows={1}
               value={draft}
-              maxLength={MAX_MESSAGE_LENGTH}
+              // sem `maxLength`: quem digita além do limite não perde texto em
+              // silêncio — o contador fica vermelho e o envio vira `message.txt`
               onChange={(e) => atualizarTexto(e.target.value, e.target.selectionStart)}
               onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
               onClick={(e) => setCaret(e.currentTarget.selectionStart)}

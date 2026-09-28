@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_MESSAGE_LENGTH } from "@streamz/shared";
+import { MAX_BOT_MESSAGE_LENGTH } from "@streamz/shared";
 import {
   MENSAGEM_ENTRADA_PADRAO,
   montarMensagem,
@@ -57,9 +57,9 @@ describe("variaveisDesconhecidas", () => {
 
 describe("montarMensagem", () => {
   it("corta no limite da mensagem do Streamz", () => {
-    const modelo = `${"a".repeat(MAX_MESSAGE_LENGTH - 5)}{servidor}`;
+    const modelo = `${"a".repeat(MAX_BOT_MESSAGE_LENGTH - 5)}{servidor}`;
     const pronta = montarMensagem(modelo, { ...ana, servidor: "servidor de nome comprido" });
-    expect(pronta.length).toBe(MAX_MESSAGE_LENGTH);
+    expect(pronta.length).toBe(MAX_BOT_MESSAGE_LENGTH);
     expect(pronta.endsWith("…")).toBe(true);
   });
 

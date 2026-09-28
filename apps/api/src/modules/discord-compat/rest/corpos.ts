@@ -2,7 +2,7 @@ import type { PipeTransform } from "@nestjs/common";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_SIZE,
-  MAX_MESSAGE_LENGTH,
+  MAX_BOT_MESSAGE_LENGTH,
   ehSnowflake,
 } from "@streamz/shared";
 import { z } from "zod";
@@ -56,7 +56,7 @@ const mencoesPermitidasSchema = z
 
 export const corpoDeMensagemSchema = z
   .object({
-    content: z.string().max(MAX_MESSAGE_LENGTH).optional(),
+    content: z.string().max(MAX_BOT_MESSAGE_LENGTH).optional(),
     tts: z.boolean().optional(),
     nonce: z.union([z.string(), z.number()]).optional(),
     embeds: z.array(z.unknown()).optional(),
@@ -77,7 +77,7 @@ export type CorpoDeMensagem = z.infer<typeof corpoDeMensagemSchema>;
 /** O `PATCH`: `content`, `embeds`, `components` e `flags` (onda 3); o resto passa e é ignorado. */
 export const edicaoDeMensagemSchema = z
   .object({
-    content: z.string().max(MAX_MESSAGE_LENGTH).optional(),
+    content: z.string().max(MAX_BOT_MESSAGE_LENGTH).optional(),
     embeds: z.array(z.unknown()).optional(),
     components: z.array(z.unknown()).optional(),
     flags: z.number().optional(),

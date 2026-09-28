@@ -5,7 +5,7 @@
 
 // ── a-mensagens ──────────────────────────────────────────────
 
-export { MAX_MESSAGE_LENGTH } from "./internos";
+export { MAX_BOT_MESSAGE_LENGTH, MAX_MESSAGE_LENGTH } from "./internos";
 
 import { mentionsUser } from "./dominio";
 import type { ChannelType, PublicUser } from "./dominio";
