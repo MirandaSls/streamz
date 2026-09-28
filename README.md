@@ -181,10 +181,6 @@ imagem web — mudar o `.env` do servidor depois não tem efeito sobre ela. Cada
 publicação usa uma worktree destacada; nunca dê `checkout` no `/opt/stack/streamz`
 principal, cujo `HEAD` descreve o compose que está no ar.
 
-Observação: `PENDENCIAS.md` e o corpo original da ADR-0007 ainda descrevem o CD
-como automático por merge — isso está desatualizado; o comportamento real é o
-descrito acima, conforme a revogação parcial da própria ADR e o `CLAUDE.md`.
-
 ## Docs e convenções
 
 - [`CLAUDE.md`](CLAUDE.md) — guia de arquitetura para quem mexe no código:
