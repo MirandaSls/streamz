@@ -7,21 +7,12 @@ import { Monitor } from "@/components/ui/icones";
 import { VideoDaFaixa } from "@/components/voice/TileDeVoz";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useAplicativos } from "@/stores/aplicativos";
-import {
-  chaveDoTileDeTela,
-  minhaTelaAparece,
-  usePreviaDaMinhaTela,
-} from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
-import {
-  previaDaMinhaTelaLigada,
-  usePreferenciasDeTransmissao,
-} from "@/stores/preferencias-de-transmissao";
 import { ui, useUI } from "@/stores/ui";
 import { participantesDe, telasDe, usuarioDaIdentidade, useVoice } from "@/stores/voice";
 
@@ -37,10 +28,8 @@ import { participantesDe, telasDe, usuarioDaIdentidade, useVoice } from "@/store
  * **Qual transmissão.** Primeiro a de outra pessoa que eu escolhi assistir
  * (`assistindo`): ela já está assinada, então mostrá-la aqui não custa um
  * byte a mais. Só na falta dela vem a **minha** tela nativa (o participante
- * `<meuId>#tela`), e só quando a regra de `minhaTelaAparece` diz que ela
- * aparece — a mesma conta que decide a assinatura em
- * `assinaturas-de-tela.ts`. Pedir aqui por outra regra seria desenhar um
- * quadro preto sempre que as duas discordassem. A minha tela no **navegador**
+ * `<meuId>#tela`), que está sempre assinada em camada baixa
+ * (`assinaturas-de-tela.ts`). A minha tela no **navegador**
  * não entra: ela é faixa local, publicada no meu próprio participante, e a
  * captura nativa é o caso que o Discord cobre com a prévia.
  *
@@ -96,13 +85,10 @@ function usePalcoNaTela(channelId: string | null, guildId: string | null): boole
 function useTransmissaoEscolhida(channelId: string | null): Escolhida | null {
   const meuId = useAuth((s) => s.user?.id ?? null);
   const assistindo = useVoice((s) => s.assistindo);
-  const focado = useVoice((s) => s.focado);
   // `tick` é o pulso do SDK: a faixa chega **depois** da assinatura, e sem ele
   // a miniatura só apareceria no próximo re-render por outro motivo
   useVoice((s) => s.tick);
   const janelas = useJanelasDeVoz((s) => s.janelas);
-  const previaPorPreferencia = usePreferenciasDeTransmissao(previaDaMinhaTelaLigada);
-  const previaDaMinhaTela = usePreviaDaMinhaTela((s) => s.chave);
 
   if (!channelId || !meuId) return null;
   const emJanela = (dono: string) => !!janelas[chaveDaJanela("tela", dono)];
@@ -125,8 +111,6 @@ function useTransmissaoEscolhida(channelId: string | null): Escolhida | null {
     // local do navegador (ver o cabeçalho)
     if (p.identity === meuId) continue;
     for (const pub of telasDe(p)) {
-      const chave = chaveDoTileDeTela(meuId, pub.trackSid);
-      if (!minhaTelaAparece(chave, { previaPorPreferencia, previaDaMinhaTela, focado })) continue;
       if (pub.track) return { publicacao: pub, nome: nomeDe(p.identity), minha: true };
     }
   }

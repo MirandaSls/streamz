@@ -106,14 +106,22 @@ impl Loopback {
             // mesma thread) não impedem nada: o COM está de pé nos dois casos.
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
-        if let Ok(loopback) = Self::abrir_sem_o_streamz() {
-            log::info!("tela-audio: loopback via process loopback (sem o Streamz)");
-            return Ok(loopback);
-        }
+        let erro = match Self::abrir_sem_o_streamz() {
+            Ok(loopback) => {
+                log::info!("tela-audio: loopback via process loopback (sem o Streamz)");
+                return Ok(loopback);
+            }
+            Err(e) => e,
+        };
         // Fallback: Windows sem process loopback (antes do build 20348) ou
         // ativação que falhou. Aqui o eco volta — as vozes da chamada estão
         // na mistura do dispositivo —, mas é melhor que a tela sem som.
-        log::info!("tela-audio: loopback via dispositivo padrão (fallback)");
+        // Registrado como `warn` (não `info`) porque degrada o resultado para
+        // quem assiste: o motivo da queda precisa aparecer no log de suporte.
+        log::warn!(
+            "tela-audio: process loopback falhou ({erro:?}); usando loopback do dispositivo padrão — \
+             áudio da transmissão vai levar as vozes da chamada: retorno para quem assiste"
+        );
         Self::abrir_dispositivo_padrao()
     }
 

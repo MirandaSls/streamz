@@ -97,6 +97,7 @@ vi.mock("@/stores/socket-adapter", () => ({
 }));
 vi.mock("@/lib/desktop", () => ({
   isTauri: () => false,
+  ehMac: () => false,
   iniciarTelaNativa: vi.fn(async () => {}),
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
