@@ -6,7 +6,9 @@ import {
   comPan,
   comZoom,
   ehOriginal,
+  fatorDaPinca,
   fatorDaRoda,
+  fatorDoGesto,
   limitar,
   percentualDe,
   podeAmpliar as podeAmpliarAjuste,
@@ -17,6 +19,9 @@ import {
   type Viewport,
 } from "@/components/voice/zoom-de-video";
 
+/** `GestureEvent` do WebKit não está no lib.dom do TS: só o que o hook lê. */
+type GestoWebKit = Event & { scale: number; clientX: number; clientY: number };
+
 /**
  * Zoom com roda/arrasto na transmissão de tela em desktop/web (o irmão
  * mouse-e-teclado do gesto de pinça do celular em `TelaCheiaDeVideo.tsx` —
@@ -26,6 +31,15 @@ import {
  * React registra esse handler como passivo, e um listener passivo não pode
  * chamar `preventDefault` — a rolagem da página (ou de uma lista por trás do
  * palco) andaria junto com o zoom.
+ *
+ * A pinça de touchpad chega por dois caminhos, conforme o motor. No Chromium
+ * (Chrome, Edge, WebView2) ela vira `wheel` com `ctrlKey` e deltas pequenos —
+ * por isso usa `fatorDaPinca`, mais forte que o da roda. No WebKit do Mac
+ * (Safari, WKWebView) não há `wheel`: vem `GestureEvent` (`gesturestart/
+ * change/end`) com `scale` **acumulado** desde o início, que `fatorDoGesto`
+ * converte em passo. Os dois caminhos existem porque nenhum motor fala o
+ * dialeto do outro; e, como algumas versões do WebKit mandam os dois para a
+ * mesma pinça, o `wheel` com `ctrlKey` é ignorado durante um gesto.
  *
  * `acabouDeArrastar` existe porque o mesmo elemento serve dois gestos que
  * competem: o `TileDeVoz` usa 1 clique para focar e 2 para tela cheia, e um
@@ -91,20 +105,62 @@ export function useZoomDaTransmissao(
   useEffect(() => {
     const el = caixa.current;
     if (!el || !ativo) return;
+    // gesto do WebKit em andamento (entre gesturestart e gestureend) e a
+    // última escala acumulada dele
+    let emGesto = false;
+    let escalaAnterior = 1;
+
     const aoRodar = (e: WheelEvent) => {
       // sempre prevenir enquanto ativo: senão a página (ou uma lista atrás do
-      // palco) rola junto com o zoom
+      // palco) rola junto com o zoom — e, com `ctrlKey`, é o que impede o
+      // Chrome/WebView2 de ampliar a janela inteira
       e.preventDefault();
+      // algumas versões do WebKit mandam `wheel`+`ctrlKey` E `gesture*` para a
+      // mesma pinça: o gesto já cuida dela, senão o zoom sairia dobrado
+      if (emGesto && e.ctrlKey) return;
       const r = el.getBoundingClientRect();
       const foco: Ponto = { x: e.clientX - r.left, y: e.clientY - r.top };
       const viewport: Viewport = { largura: r.width, altura: r.height };
-      // `ctrlKey` não é filtrado: é assim que a pinça de trackpad chega ao
-      // Chrome, e deve ampliar no cursor igual à roda comum
-      const fator = fatorDaRoda(e.deltaY, e.deltaMode);
+      // `ctrlKey` é como a pinça de trackpad chega ao Chromium, com deltas
+      // pequenos: precisa de fator mais forte que a roda para render igual
+      const fator = e.ctrlKey ? fatorDaPinca(e.deltaY, e.deltaMode) : fatorDaRoda(e.deltaY, e.deltaMode);
       setAjuste((a) => comZoom(a, fator, foco, viewport));
     };
+
+    const aoIniciarGesto = (ev: Event) => {
+      // sem isto o Safari/WKWebView amplia a página inteira
+      ev.preventDefault();
+      emGesto = true;
+      escalaAnterior = 1;
+    };
+    const aoMudarGesto = (ev: Event) => {
+      ev.preventDefault();
+      const e = ev as GestoWebKit;
+      const r = el.getBoundingClientRect();
+      const foco: Ponto = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const viewport: Viewport = { largura: r.width, altura: r.height };
+      // `scale` é acumulado desde o início do gesto; o fator do passo é a razão
+      // entre a escala de agora e a do evento anterior
+      const fator = fatorDoGesto(escalaAnterior, e.scale);
+      escalaAnterior = e.scale;
+      setAjuste((a) => comZoom(a, fator, foco, viewport));
+    };
+    const aoEncerrarGesto = (ev: Event) => {
+      ev.preventDefault();
+      emGesto = false;
+      escalaAnterior = 1;
+    };
+
     el.addEventListener("wheel", aoRodar, { passive: false });
-    return () => el.removeEventListener("wheel", aoRodar);
+    el.addEventListener("gesturestart", aoIniciarGesto, { passive: false });
+    el.addEventListener("gesturechange", aoMudarGesto, { passive: false });
+    el.addEventListener("gestureend", aoEncerrarGesto, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", aoRodar);
+      el.removeEventListener("gesturestart", aoIniciarGesto);
+      el.removeEventListener("gesturechange", aoMudarGesto);
+      el.removeEventListener("gestureend", aoEncerrarGesto);
+    };
   }, [caixa, ativo]);
 
   // arrasto: os listeners de move/up vivem na `window` (não em props React),
