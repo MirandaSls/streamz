@@ -71,10 +71,11 @@ export const ALTURA_PADRAO = 199;
  * encolhem por baixo do que o Discord desenha. Para cima o divisor continua
  * livre.
  *
- * A faixa **não reserva** altura para os controles — a cápsula flutua por cima
- * da folga da própria grade (print `2026-09-21 às 15.04.09`, e `folgaDaGrade`
- * em `CallStage`). O piso já foi justificado pelos 96px daquela reserva, que
- * não existe mais neste modo.
+ * A faixa agora **reserva 96px** para a fileira de controles, conforme
+ * `folgaDaGrade` em `CallStage` que aplica `pb-24` em todos os modos desktop.
+ * No piso de 199, sobram assim ~103px de área útil para o palco. O piso não
+ * foi aumentado junto — os tiles encolhem, e o "Chamando" mostra dois avatares
+ * xl de 80px lado a lado; subir o piso é decisão separada.
  */
 export const ALTURA_MIN = ALTURA_PADRAO;
 

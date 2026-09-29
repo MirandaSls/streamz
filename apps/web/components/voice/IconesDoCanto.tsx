@@ -24,14 +24,13 @@ import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
  *   x=1877–1896 / y=857–874) → `BotaoDeIcone` `md` (caixa 32, ícone 20);
  * - centros em x≈1839 e x≈1886,5: 47,5 entre eles, isto é, 16 de vão entre
  *   caixas de 32 (`gap-4`);
- * - o glifo da direita termina a 21px da borda da janela: 6 de respiro dentro
- *   da caixa + **16** fora (`right-4`);
  * - centro vertical em y≈865,5 no Discord — mas o alvo aqui não é essa medida
- *   fixa: é o centro da cápsula de desligar que o usuário escolheu, e essa
- *   cápsula (`Capsula`, `controles-de-chamada.tsx`) tem **52** de altura
- *   (`bottom-5` = 20 + metade de 52 = centro em **46**), não os 48 do Discord.
- *   Caixa de 32 com a base a **30** (`bottom-[30px]`, 46 − 16) fica com o
- *   mesmo centro da cápsula, que é o que o olho compara.
+ *   fixa: é o centro da cápsula de desligar que o usuário escolheu (`Capsula`,
+ *   `controles-de-chamada.tsx`).
+ * O lugar deste par — canto direito, centro vertical alinhado à cápsula, 16px
+ * da borda — não é mais desta peça: quem posiciona é `FileiraDeControles`
+ * (grid `1fr auto 1fr`), que também esconde o par quando falta largura, antes
+ * de ele encostar na cápsula.
  * A cor do glifo na print é `#9d9ea5`, entre `--icon-muted` (`#96979e`, o
  * repouso do primitivo) e `--icon-subtle`; fica a do primitivo.
  *
@@ -54,7 +53,7 @@ export default function IconesDoCanto({
   return (
     <div
       {...moldura}
-      className={`absolute bottom-[30px] right-4 z-10 flex items-center gap-4 transition-opacity duration-200 ${
+      className={`flex items-center gap-4 transition-opacity duration-200 ${
         visivel ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >

@@ -19,6 +19,7 @@ import {
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
+import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
@@ -29,7 +30,6 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
-import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
 import { participantesDe, telasDe, useVoice } from "@/stores/voice";
 
@@ -141,44 +141,45 @@ export function posicaoDoPalco(expandido: boolean): string {
 /**
  * A folga **dentro** do palco: o que a área da grade cede ao rodapé.
  *
- * A pergunta não é "onde ficam os controles" — eles flutuam (`absolute
- * bottom-5`, ver `VoiceControls`) e ainda se apagam sozinhos depois de três
- * segundos de mouse parado (`useOcultarInativo`). A pergunta é **o que mora no
- * rodapé da área**, e a resposta muda com o modo:
+ * **Sempre 96 (`pb-24`) no desktop, faixa incluída.** Não é mais "onde ficam
+ * os controles" que decide — eles continuam flutuando (a fileira do
+ * `FileiraDeControles`, `absolute inset-x-0 bottom-5`) e ainda se apagam
+ * sozinhos depois de três segundos de mouse parado (`useOcultarInativo`) —, é
+ * que a cápsula **cobre** o que estiver por baixo dela sem essa reserva. Numa
+ * faixa de 199px a print do usuário (2026-09-28, chamada de DM "Chamando…")
+ * mostra exatamente esse defeito: a seta de expandir, a cápsula de controles
+ * e os ícones do canto se encavalando na mesma altura, por cima do avatar e
+ * do texto "Chamando…" — eram três `absolute` independentes na mesma faixa,
+ * sem ninguém abrindo espaço para eles.
  *
- * - **Na faixa sobre a conversa, nada.** A grade é tudo o que há, e ela já se
- *   centraliza na área (`justify-center`, `VoiceGrid`): a cápsula flutua por
- *   cima da folga que a proporção 16:9 deixa. É o que a print
- *   `2026-09-21 às 15.04.09` mostra numa DM (2×, escala fechada pelo rail —
- *   144px ali, 72 reais): faixa de 372,5 reais, três tiles iguais de 344×193,5
- *   numa fileira, ~86 de folga acima e ~93 abaixo. Reserva não há: com os 96 do
- *   `pb-24` a fileira estaria 48px acima do centro, e ela está centrada — a
- *   folga de baixo é a maior das duas, não a menor.
+ * **O Discord reserva o mesmo, mesmo com a barra flutuando.** Nas prints
+ * `2026-08-31 123917`, `122612` e `160106` os controles ficam numa fileira
+ * **própria**, abaixo dos tiles/avatares — nunca por cima deles. A print
+ * `2026-09-21 às 15.04.09`, que antes justificava não reservar na faixa ("a
+ * folga de baixo é a maior das duas, não a menor"), foi tirada com os
+ * controles escondidos por inatividade (`useOcultarInativo`): sem a cápsula
+ * na tela, claro que o respiro dela não fazia falta — mas ela nem sempre está
+ * escondida.
  *
- *   Reservar altura fixa ali **era o defeito**: numa faixa de 199 os 96 comiam
- *   quase metade (103 de área útil, tiles de 103 de altura onde o Discord dá
- *   193). É o mesmo argumento do `pt-14` que não existe no topo — não se paga
- *   altura de transmissão, o tempo todo, por uma peça que nem sempre está na
- *   tela.
- * - **No palco cheio e no expandido, 96.** Lá a área é alta e o `VoiceGrid`
- *   escolhe o foco (`palcoUsaFoco`): destaque em cima e a **tira de
- *   miniaturas** encostada no fundo. Tira não flutua nem se esconde — coberta
- *   pela cápsula, ela vira uma fileira de botões que não se clica. O Discord
- *   reserva o mesmo: na print `2026-09-03 203909` (foco, escala 0,8075) a tira
- *   acaba ~74 reais antes do fim da região, e é nesse vão que a barra fica. Os
- *   96 daqui são os 68 que a cápsula ocupa (48 de altura a 20 do fundo) mais o
- *   respiro.
+ * Numa faixa de 199 os 96 comem quase metade (~103 de área útil). Por isso
+ * `Chamando` (mais abaixo neste arquivo) são dois avatares `xl` (80px), que
+ * cabem inteiros nesse vão, em vez de a grade abrir mão da reserva. No palco cheio e no expandido os mesmos 96 são os 68 que a
+ * cápsula ocupa (48 de altura a 20 do fundo) mais o respiro, e é onde mora a
+ * **tira de miniaturas** do modo foco (`palcoUsaFoco`): destaque em cima,
+ * tira encostada no fundo, e ela não flutua nem se esconde — coberta pela
+ * cápsula, vira uma fileira de botões que não se clica. O Discord reserva o
+ * mesmo ali: na print `2026-09-03 203909` (foco, escala 0,8075) a tira acaba
+ * ~74 reais antes do fim da região, e é nesse vão que a barra fica.
  *
  * No celular a decisão é outra e mora no `PalcoMobile`, porque lá a folga de
  * baixo depende da orientação — é o mesmo trecho que o `VoicePanel` tem.
  */
-export function folgaDaGrade(ehMobile: boolean, faixa: boolean, expandido: boolean): string {
+export function folgaDaGrade(ehMobile: boolean): string {
   if (ehMobile) return "min-h-0 flex-1";
-  // `px-2` = `FOLGA_DO_PALCO` (8px, print 101857 x=1911–1918)
-  const base = "min-h-0 flex-1 px-2";
-  // `pb-24` só num dos ramos: a mesma propriedade nas duas metades da classe
-  // deixaria a vencedora por conta da ordem do CSS gerado, não desta conta
-  return faixa && !expandido ? base : `${base} pb-24`;
+  // `px-2` = `FOLGA_DO_PALCO` (8px, print 101857 x=1911–1918); `pb-24` (96,
+  // ver o comentário acima) vale em todos os modos desktop agora — faixa,
+  // palco cheio e expandido não distinguem mais aqui.
+  return "min-h-0 flex-1 px-2 pb-24";
 }
 
 /**
@@ -186,6 +187,17 @@ export function folgaDaGrade(ehMobile: boolean, faixa: boolean, expandido: boole
  * mesmo par de `hooks/useEhMobile.ts`.
  */
 const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/**
+ * Há vídeo no palco: alguém com câmera ligada ou transmitindo tela, entre
+ * quem está no canal agora (`estados`, o snapshot que o servidor já manda).
+ * É o que decide se a moldura — cabeçalho e controles — pode sumir por
+ * inatividade, ou fica sempre na tela: ver `molduraSempre`, dentro de
+ * `CallStage`.
+ */
+export function temVideoNoPalco(estados: VoiceStateEvent[]): boolean {
+  return estados.some((e) => e.video || e.screen);
+}
 
 export default function CallStage({
   channelId,
@@ -212,7 +224,9 @@ export default function CallStage({
   // o cabeçalho muda de assunto quando uma transmissão sobe ao destaque: sai o
   // título centralizado, entram a trilha e o selo de qualidade da print `p5`
   const meId = useAuth((s) => s.user?.id);
-  const statuses = usePresence((s) => s.statuses);
+  // o avatar "sou eu" de `Chamando` (mais abaixo) precisa do usuário inteiro,
+  // não só do id
+  const meUser = useAuth((s) => s.user);
   // `tick` é o pulso das faixas do SDK — é dele que vem a resolução do selo
   useVoice((s) => s.tick);
   const focado = useVoice((s) => s.focado);
@@ -231,6 +245,31 @@ export default function CallStage({
   const ehMobile = useEhMobile();
   const paisagem = useEhPaisagem();
 
+  const definirExpandido = useUI((s) => s.definirPalcoExpandido);
+  const palcoExpandido = useUI((s) => s.palcoExpandido);
+
+  const chamando = call.phase === "outgoing" && call.channelId === channelId;
+  /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
+  const semChamada = estados.length === 0 && !chamando;
+
+  /**
+   * **A moldura só se esconde por inatividade quando há vídeo competindo com
+   * ela** — câmera ou tela de alguém no canal (`temVideoNoPalco`). Sobre
+   * vídeo, cabeçalho e controles permanentemente na tela atrapalham a
+   * imagem, e é para isso que `useOcultarInativo` existe. Sem vídeo não há
+   * nada para proteger: a chamada é só os avatares e o texto do
+   * palco, e a moldura sumida só esconde o botão de desligar — o defeito da
+   * print do usuário (2026-09-28, DM "Chamando…", só voz), onde os controles
+   * apagavam por inatividade e sobrava um avatar gigante sem jeito de
+   * encerrar a chamada. `chamando` conta como "sem vídeo" mesmo que alguém já
+   * tenha câmera ligada na chamada anterior: a chamada saindo ainda não tem
+   * palco nenhum para o vídeo disputar.
+   */
+  const temVideo = temVideoNoPalco(estados);
+  const molduraSempre = chamando || !temVideo;
+  /** `visivel || molduraSempre` é o que os controles e a seta de expandir usam. */
+  const controlesVisiveis = visivel || molduraSempre;
+
   /**
    * **No celular o dedo não paira, e o ponteiro não fica "se movendo".**
    *
@@ -244,16 +283,11 @@ export default function CallStage({
    * A regra passa a ser a mesma da cápsula de controles (ver `ControlesMobile`):
    * em pé a moldura fica **sempre**, porque é a única superfície de controle da
    * tela; deitado ela some junto com os controles, que ali a tela é a
-   * transmissão e um toque traz tudo de volta.
+   * transmissão e um toque traz tudo de volta. `molduraSempre` soma-se a essa
+   * conta pelo mesmo motivo do desktop: sem vídeo, nem deitado há o que a
+   * moldura atrapalhe.
    */
-  const molduraVisivel = ehMobile ? !paisagem || visivel : visivel;
-
-  const definirExpandido = useUI((s) => s.definirPalcoExpandido);
-  const palcoExpandido = useUI((s) => s.palcoExpandido);
-
-  const chamando = call.phase === "outgoing" && call.channelId === channelId;
-  /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
-  const semChamada = estados.length === 0 && !chamando;
+  const molduraVisivel = molduraSempre || (ehMobile ? !paisagem || visivel : visivel);
 
   /**
    * O modo só vale **enquanto o botão que o desfaz está na tela**.
@@ -422,7 +456,6 @@ export default function CallStage({
               <Avatar
                 user={donoDaTela.user}
                 size="sm"
-                status={resolveStatus(statuses, donoDaTela.user)}
                 surface="border-black"
               />
               <span className="max-w-[20ch] truncate">
@@ -505,11 +538,17 @@ export default function CallStage({
       {/* Sem `pt-14`: o cabeçalho é flutuante (`absolute`) e se esconde sozinho
           quando o mouse para — reservar altura para ele custava 56px da
           transmissão para proteger uma faixa que nem sempre está na tela. A
-          folga de baixo segue o mesmo raciocínio, e por isso depende do modo:
-          quem decide (e por quê) é `folgaDaGrade`. */}
-      <div className={folgaDaGrade(ehMobile, faixa, expandido)}>
+          folga de baixo **não** segue o mesmo raciocínio: a cápsula de
+          controles cobre o que estiver por baixo mesmo quando some por
+          inatividade, então no desktop a reserva vale sempre — o porquê está
+          em `folgaDaGrade`. */}
+      <div className={folgaDaGrade(ehMobile)}>
         {chamando ? (
-          <Chamando nome={destinatario ? displayNameOf(destinatario) : titulo} usuario={destinatario} />
+          <Chamando
+            nome={destinatario ? displayNameOf(destinatario) : titulo}
+            usuario={destinatario}
+            eu={meUser}
+          />
         ) : conectadoAqui ? (
           /* Sem tela de espera: a grade é desenhada a partir do estado de voz
              do servidor, que já está aqui, e o `connecting` só quer dizer que a
@@ -539,47 +578,71 @@ export default function CallStage({
         )}
       </div>
 
-      {(conectadoAqui || chamando) && (
-        <>
+      {(conectadoAqui || chamando) &&
+        (ehMobile ? (
+          // No celular `VoiceControls` renderiza `ControlesMobile` por
+          // dentro, que já se posiciona sozinho — a seta de expandir e os
+          // ícones do canto nem existem aqui (ver as duas condições que
+          // sobravam abaixo, agora dentro da `FileiraDeControles`: as duas já
+          // eram `!ehMobile`). Embrulhar isto na fileira só para o celular
+          // sobraria uma grade disputando posição com o próprio leiaute que
+          // `ControlesMobile` já resolve, e mudaria uma tela que não tinha o
+          // defeito da faixa.
           <VoiceControls
-            oculto={!visivel}
+            oculto={!controlesVisiveis}
             moldura={daMoldura}
             leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
             onLeave={() => void endCall()}
           />
-          {/* A seta de expandir **não** depende do `temTelaCheia` logo abaixo:
-              ela não usa a Fullscreen API nenhuma, é leiaute nosso, e é
-              justamente onde aquela não existe (webview com o recurso
-              desligado) que ela precisa continuar. Fora do celular pelo mesmo
-              motivo do canto: no telefone o palco já é a tela toda. */}
-          {!ehMobile && (
-            <BotaoDeExpandir
-              expandido={expandido}
-              onAlternar={() => definirExpandido(!expandido)}
-              visivel={visivel}
-              moldura={daMoldura}
-            />
-          )}
-
-          {/* fora do celular: a tela cheia do palco inteiro não é o gesto do
-              telefone — lá se toca no tile (ver `PalcoMobile`).
-
-              `temTelaCheia`: onde a Fullscreen API não existe (webview com o
-              recurso desligado, WebKit antigo) o canto inteiro sai da tela. O
-              par de ícones é uma coisa só — o outro já nasce desabilitado
-              ("em breve") —, e um canto que só mostra o que não dá para usar
-              é pior que canto nenhum. Melhor isso do que um botão que o
-              usuário clica e nada acontece, que foi o defeito daqui. */}
-          {!ehMobile && temTelaCheia && (
-            <IconesDoCanto
-              telaCheia={telaCheia}
-              onTelaCheia={alternar}
-              visivel={visivel}
-              moldura={daMoldura}
-            />
-          )}
-        </>
-      )}
+        ) : (
+          // A seta de expandir, a cápsula de controles e os ícones do canto
+          // viviam cada um com seu próprio `absolute` na mesma altura — em
+          // janela estreita (ou na faixa de 199px sobre uma DM "Chamando…",
+          // print do usuário de 2026-09-28) eles se encavalavam e o texto
+          // "Chamando…" encostava na cápsula. Um `FileiraDeControles` só
+          // resolve os três junto (grade `1fr auto 1fr`), e é quem também
+          // esconde a ponta direita, e depois a esquerda, quando a largura
+          // não fecha as três.
+          <FileiraDeControles
+            esquerda={
+              // A seta de expandir **não** depende do `temTelaCheia` do lado
+              // direito: ela não usa a Fullscreen API nenhuma, é leiaute
+              // nosso, e é justamente onde aquela não existe (webview com o
+              // recurso desligado) que ela precisa continuar.
+              <BotaoDeExpandir
+                expandido={expandido}
+                onAlternar={() => definirExpandido(!expandido)}
+                visivel={controlesVisiveis}
+                moldura={daMoldura}
+              />
+            }
+            centro={
+              <VoiceControls
+                oculto={!controlesVisiveis}
+                moldura={daMoldura}
+                leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
+                onLeave={() => void endCall()}
+              />
+            }
+            direita={
+              // `temTelaCheia`: onde a Fullscreen API não existe (webview com
+              // o recurso desligado, WebKit antigo) o canto inteiro sai da
+              // tela. O par de ícones é uma coisa só — o outro já nasce
+              // desabilitado ("em breve") —, e um canto que só mostra o que
+              // não dá para usar é pior que canto nenhum. Melhor isso do que
+              // um botão que o usuário clica e nada acontece, que foi o
+              // defeito daqui.
+              temTelaCheia ? (
+                <IconesDoCanto
+                  telaCheia={telaCheia}
+                  onTelaCheia={alternar}
+                  visivel={controlesVisiveis}
+                  moldura={daMoldura}
+                />
+              ) : undefined
+            }
+          />
+        ))}
     </section>
   );
 }
@@ -587,13 +650,17 @@ export default function CallStage({
 /**
  * A seta que expande o palco dentro da janela, no canto inferior **esquerdo**.
  *
+ * **A posição não é mais deste componente.** Quem a resolve é a grade do
+ * `FileiraDeControles` (`1fr auto 1fr`, `absolute inset-x-0 bottom-5`, ver o
+ * cabeçalho de lá) — aqui dentro esta é só a ponta esquerda, um item em
+ * fluxo, como a cápsula de controles virou em `VoiceControls`. É a mesma
+ * fileira que decide se a seta soma junto com a cápsula e os ícones do canto
+ * ou desaparece primeiro numa janela estreita.
+ *
  * Lugar medido na print `2026-08-31 122612` (1:1, 1919 de largura), onde o
  * Discord põe a seta da faixa de chamada de conversa: centro em x≈407 com a
- * região de conteúdo começando em x≈375 — 32px da borda, ou seja, caixa de 32
- * (`BotaoDeIcone` `md`) com **16 de folga** (`left-4`). O centro vertical é
- * y≈501, o mesmo da fileira de controles, que é a âncora que o `IconesDoCanto`
- * já resolveu do outro lado (`bottom-[30px]`: caixa de 32 com a base a 30
- * centra nos 46 da cápsula de desligar — a conta está lá).
+ * região de conteúdo começando em x≈375 — 32px da borda — e alinhada com a
+ * fileira de controles, o mesmo canto de onde a nossa saiu.
  *
  * **A direção da seta é nossa, e diverge do print de propósito.** No Discord
  * ela aponta para baixo com a chamada aberta porque lá o clique *recolhe* a
@@ -604,8 +671,8 @@ export default function CallStage({
  *
  * Fica fora do `IconesDoCanto` porque aquele canto é medido como um par —
  * "ações sobre a janela", diz o cabeçalho de lá — e um terceiro ícone mudaria
- * o desenho que o print fixou. Esta é ação sobre o **leiaute**, e tem o canto
- * dela.
+ * o desenho que o print fixou. Esta é ação sobre o **leiaute**, e por isso
+ * mora na ponta esquerda da fileira, não dentro daquele par.
  */
 function BotaoDeExpandir({
   expandido,
@@ -621,7 +688,7 @@ function BotaoDeExpandir({
   return (
     <div
       {...moldura}
-      className={`absolute bottom-[30px] left-4 z-10 transition-opacity duration-200 ${
+      className={`transition-opacity duration-200 ${
         visivel ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
@@ -645,45 +712,57 @@ function BotaoDeExpandir({
 }
 
 /**
- * Chamada saindo: quem está sendo chamado, grande, com o anel pulsando.
+ * Chamada saindo: dois avatares lado a lado, eu e quem estou chamando — como
+ * no Discord (print de quem liga, 2026-09-28: `Avatar` `xl` de 80px cada,
+ * `gap-6` entre os dois, sem nome nem "Chamando…" na tela). O anel pulsante
+ * fica só do lado de quem está sendo chamado, nunca do meu — é o que dá tempo
+ * ao tempo, sem ele "Chamando…" em texto parece uma tela travada, e do meu
+ * lado a "espera" já acabou.
  *
- * O anel é o que dá tempo ao tempo — sem ele "Chamando…" em texto parece uma
- * tela travada, e o impulso é clicar de novo.
+ * **Não mede mais a própria altura.** Dois avatares `xl` cabem inteiros nos
+ * ~103px úteis que sobram na faixa de 199px depois da reserva de
+ * `folgaDaGrade` (96, `pb-24` — ver o comentário de lá): era o avatar `xxl`
+ * de 120px, sozinho, que não cabia, e forçava o encolhimento por
+ * `ResizeObserver` que morava aqui. Nome e "Chamando…" continuam no DOM —
+ * `sr-only`, nunca somem para quem usa leitor de tela — mas agora saem da
+ * tela sempre, não só no aperto: o Discord não escreve nenhum dos dois ali,
+ * e um avatar gigante com nome e "Chamando…" por baixo, com os controles
+ * sumindo por inatividade, foi exatamente o que a print do usuário
+ * (2026-09-28) mostrou de diferente.
  */
 function Chamando({
   nome,
   usuario,
+  eu,
 }: {
   nome: string;
   usuario: PublicUser | null;
+  eu: PublicUser | null;
 }) {
-  const statuses = usePresence((s) => s.statuses);
   return (
-    <div className="grid h-full place-items-center">
+    <div className="grid h-full min-h-0 place-items-center overflow-hidden">
       <div className="flex flex-col items-center gap-4">
-        <span className="relative grid place-items-center">
-          <span
-            aria-hidden="true"
-            className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-status-positive/20"
-          />
-          {usuario ? (
-            // o palco é preto puro (`bg-black`, linha 111 desta função) — o
-            // `Avatar` já sabe recortar contra `--black` (`FUNDO_DO_SELO`), então
-            // a bolinha usa a cor real do fundo, não mais a aproximação `-lowest`
-            <Avatar
-              user={usuario}
-              size="xxl"
-              status={resolveStatus(statuses, usuario)}
-              surface="border-black"
-            />
-          ) : (
-            <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-background-base-lowest">
-              <Phone size={44} className="text-text-muted" aria-hidden="true" />
-            </span>
+        <div className="flex items-center gap-6">
+          {eu && (
+            // na chamada não se mostra status de presença, como no Discord
+            <Avatar user={eu} size="xl" surface="border-black" />
           )}
-        </span>
-        <p className="text-xl font-bold text-text-strong">{nome}</p>
-        <p className="text-sm text-text-muted">Chamando…</p>
+          <span className="relative grid place-items-center">
+            <span
+              aria-hidden="true"
+              className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
+            />
+            {usuario ? (
+              <Avatar user={usuario} size="xl" surface="border-black" />
+            ) : (
+              <span className="grid h-20 w-20 place-items-center rounded-full bg-background-base-lowest">
+                <Phone size={30} className="text-text-muted" aria-hidden="true" />
+              </span>
+            )}
+          </span>
+        </div>
+        <p className="sr-only">{nome}</p>
+        <p className="sr-only">Chamando…</p>
       </div>
     </div>
   );
@@ -703,7 +782,6 @@ function ConviteParaEntrar({
   estados: VoiceStateEvent[];
   onEntrar: () => void;
 }) {
-  const statuses = usePresence((s) => s.statuses);
   const nomes = estados.map((e) => e.user.username);
   const texto =
     nomes.length === 1
@@ -716,23 +794,17 @@ function ConviteParaEntrar({
     <div className="grid h-full place-items-center">
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex items-center justify-center -space-x-4">
-          {estados.slice(0, 3).map((e) => {
-            const status = resolveStatus(statuses, e.user);
-            return (
-              // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro
-              // ausente esmaece: é lista de pessoas, e quem está ausente não se destaca dela
-              <Avatar
-                key={e.user.id}
-                user={e.user}
-                size="xl"
-                status={status}
-                surface="border-black"
-                className={`rounded-full ring-4 ring-black transition-opacity ${
-                  status === "IDLE" ? "opacity-60" : ""
-                }`}
-              />
-            );
-          })}
+          {estados.slice(0, 3).map((e) => (
+            // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro;
+            // na chamada não se mostra status de presença (nem esmaecer ausente), como no Discord
+            <Avatar
+              key={e.user.id}
+              user={e.user}
+              size="xl"
+              surface="border-black"
+              className="rounded-full ring-4 ring-black"
+            />
+          ))}
         </div>
         <p className="text-lg font-bold text-text-strong">{texto}</p>
         <Button
