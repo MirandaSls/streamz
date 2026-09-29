@@ -300,7 +300,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   const dms = useDMs((s) => s.channels);
   const activeDMId = useDMs((s) => s.activeId);
   const selectDM = useDMs((s) => s.select);
-  const friendsOpen = useFriends((s) => s.open);
   const fecharAmigos = useFriends((s) => s.setOpen);
   const view = useUI((s) => s.view);
   const t = useT();
@@ -318,22 +317,13 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
 
   /**
-   * O rail destaca a conversa que está **na tela** e as que têm mensagem não
-   * lida.
-   *
-   * "Na tela" exige a página Amigos fechada: ela também roda no modo "mensagens
-   * diretas" e mantém a última conversa marcada como ativa, então sem essa
-   * condição um contato ficava parado no rail sem nada de novo e sem estar
-   * aberto de fato.
+   * O rail só destaca conversas com mensagem não lida. Como no Discord, a
+   * conversa aberta não aparece ali só por estar aberta: ao ser lida, sai.
    *
    * No máximo 6 para o rail não virar uma segunda lista de conversas.
    */
-  const naTela = !friendsOpen && view === "dm" ? activeDMId : null;
   const dmsEmDestaque = dms
-    .filter(
-      (d) =>
-        d.id === naTela || (!!d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt)),
-    )
+    .filter((d) => !!d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt))
     .slice(0, 6);
 
   /**
@@ -515,9 +505,9 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
 
       {/*
         Conversas em destaque, entre o botão de início e os servidores — como no
-        Discord. Aparece quem tem mensagem não lida e a conversa aberta agora,
-        para que uma DM não fique escondida atrás da coluna de servidores quando
-        chega mensagem enquanto você está em outro lugar.
+        Discord. Aparece quem tem mensagem não lida, para que uma DM não fique
+        escondida atrás da coluna de servidores quando chega mensagem enquanto
+        você está em outro lugar.
       */}
       {dmsEmDestaque.map((dm) => {
         const naoLida = !!dm.lastMessageAt && (!dm.lastReadAt || dm.lastMessageAt > dm.lastReadAt);
