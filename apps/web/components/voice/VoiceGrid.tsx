@@ -189,6 +189,7 @@ export default function VoiceGrid({
   guildId = null,
   faixa = false,
   onAdicionar,
+  onExpandir,
 }: {
   channelId: string;
   nomeDoCanal?: string;
@@ -211,6 +212,12 @@ export default function VoiceGrid({
    * de duas pessoas não), e a grade não precisa aprender isso.
    */
   onAdicionar?: () => void;
+  /**
+   * Expandir o palco sobre a conversa com esta transmissão no destaque. Vem de
+   * fora porque só o `CallStage` de conversa direta sabe se o palco pode
+   * expandir; ausente, o duplo clique segue sendo tela cheia.
+   */
+  onExpandir?: (chave: string) => void;
 }) {
   const me = useAuth((s) => s.user);
   // `tick` é o que traz as mudanças do SDK (faixas entrando e saindo)
@@ -314,6 +321,7 @@ export default function VoiceGrid({
     falando,
     channelId,
     onFocar: setFocado,
+    onExpandir,
     // assistir e subir ao palco são o mesmo gesto: ninguém abre uma
     // transmissão para vê-la do tamanho de um selo. `setFocado` alterna, então
     // só se chama quando o tile ainda não é o do palco.
