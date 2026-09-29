@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AccountStatusService } from "../modules/auth/account-status.service";
+import { definirUsuarioDoLog } from "./logger";
 
 export interface JwtPayload {
   sub: string;
@@ -48,6 +49,8 @@ export class JwtGuard implements CanActivate {
     if (estado.desativada) throw new UnauthorizedException("Conta desativada");
 
     req.user = payload;
+    // Grava o usuário no contexto do log para filtrar por ele ao investigar erro que só acontece com alguém.
+    definirUsuarioDoLog(payload.sub);
     return true;
   }
 }

@@ -27,3 +27,5 @@ export * from "./permissoes-discord";
 export * from "./mensagens-de-bot";
 // ── menus de contexto ── fixar DM, notas, apelidos, ignorar, comandos de contexto
 export * from "./menus";
+// ── diagnóstico ── relatório de erro enviado pelo cliente
+export * from "./diagnostico";

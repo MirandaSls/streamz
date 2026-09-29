@@ -145,3 +145,11 @@ export const AUTOCOMPLETE_THROTTLE = Throttle({
  * assinatura inválida.
  */
 export const LIVEKIT_WEBHOOK_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 1200 } });
+
+// ── diagnóstico ──
+/**
+ * Erros do cliente (`POST /diagnostics/client`). A rota só escreve log, mas é
+ * autenticada e cada chamada pode trazer vários eventos: o teto impede que um
+ * cliente em loop de erro inunde o log do servidor.
+ */
+export const DIAGNOSTICS_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 10 } });

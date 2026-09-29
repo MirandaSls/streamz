@@ -6,6 +6,7 @@ import { AppModule } from "./app.module";
 import { CORS_OPTIONS } from "./common/cors";
 import { StructuredLogger, requestIdMiddleware } from "./common/logger";
 import { metricsMiddleware } from "./common/metrics";
+import { logDeAcessoMiddleware } from "./common/log-de-acesso";
 import { GatewayCompatService } from "./modules/discord-compat/gateway/servidor";
 
 async function bootstrap() {
@@ -35,6 +36,8 @@ async function bootstrap() {
   // e contagem para o /api/metrics.
   app.use(requestIdMiddleware);
   app.use(metricsMiddleware);
+  // Rastro das requisições que falharam (4xx/5xx) ou demoraram; as normais não logam.
+  app.use(logDeAcessoMiddleware);
 
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
