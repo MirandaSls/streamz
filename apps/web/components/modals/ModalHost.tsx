@@ -220,7 +220,7 @@ function renderModal(modal: Modal) {
     case "customStatus":
       return <CustomStatusModal />;
     case "userProfile":
-      return <UserProfileModal userId={modal.userId} guildId={modal.guildId} />;
+      return <UserProfileModal userId={modal.userId} guildId={modal.guildId} aba={modal.aba} />;
     case "groupSettings":
       return <GroupSettingsModal channelId={modal.channelId} />;
     case "addGroupMembers":

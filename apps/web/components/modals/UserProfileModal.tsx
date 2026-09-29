@@ -61,9 +61,13 @@ const DATA_SELO = new Intl.DateTimeFormat("pt-BR", {
 export default function UserProfileModal({
   userId,
   guildId,
+  aba: abaInicial,
 }: {
   userId: string;
   guildId?: string;
+  // O painel de perfil da DM abre direto em "Servidores em comum"/"Amigos em
+  // comum" ao clicar na linha de mútuos, como no Discord.
+  aba?: Aba;
 }) {
   const closeModal = useUI((s) => s.closeModal);
   const openModal = useUI((s) => s.openModal);
@@ -95,7 +99,7 @@ export default function UserProfileModal({
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<Aba>("sobre");
+  const [aba, setAba] = useState<Aba>(abaInicial ?? "sobre");
 
   useEffect(() => {
     void loadFriends();
