@@ -614,8 +614,10 @@ export function VoiceTile({
           (`sob-demanda/655282.7b25cb505483f3c7.css`), com o raio do tile
           (`--custom-base-tile-border-radius` = 8) —, na cor de fala de todo o
           app (`--status-positive`). A classe de "falando" do tile não está no
-          CSS capturado: a cor é a regra, não medida. */}
-      {video && ativo && (
+          CSS capturado: a cor é a regra, não medida. Só em tile de câmera: a tela
+          compartilhada não é o rosto de quem fala — o anel ali pareceria moldura
+          da transmissão, e quem fala já acende no avatar da lista/na câmera. */}
+      {video && !tela && ativo && (
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_2px_rgb(var(--status-positive-rgb)),inset_0_0_0_3px_rgb(var(--black-rgb))]"
