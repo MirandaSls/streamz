@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRight, Clock, MoreHorizontal, UserCheck, UserPlus } from "@/components/ui/icones";
+import { useEffect, useState } from "react";
+import { Clock, MoreHorizontal, UserCheck, UserPlus } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser, type UserProfile } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
-import { Badge, Button } from "@/components/ui/primitivos";
+import { Button } from "@/components/ui/primitivos";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -52,9 +52,11 @@ import { anchorOf, ui, type MenuItem } from "@/stores/ui";
  * - **sem permissão**: não existe aqui — `GET /users/:id/profile` não checa
  *   nada além de "a conta existe" (mesmo comentário em `UserProfileModal.tsx`,
  *   `abrirMenu`); quem tem a conversa vê o perfil.
- * - **hover/foco**: os discos do canto usam `:hover` de `CANTO`; o CTA e os
- *   cabeçalhos recolhíveis são `<button>` nativo, cobertos pelo
- *   `:focus-visible` global de `globals.css` (ver `Button.tsx`).
+ * - **hover/foco**: os discos do canto usam `:hover` de `CANTO`; o CTA e a
+ *   linha de mútuos (amigos/servidores, logo abaixo do username, como no
+ *   Discord — sem recolhíveis) são `<button>` nativo, cobertos pelo
+ *   `:focus-visible` global de `globals.css` (ver `Button.tsx`); a linha
+ *   sublinha no hover e abre o perfil completo já na aba certa.
  * - **desabilitado**: pedido de amizade já enviado (`relacao === "outgoing"`)
  *   mostra o disco cinza do relógio — `aria-disabled`, não o atributo nativo,
  *   para a dica continuar aparecendo (mesma família `bannerButton_fb7f94` de
@@ -138,6 +140,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const nome = displayNameOf(user);
   const mutuosAmigos = perfil?.mutualFriends ?? [];
   const mutuosServidores = perfil?.mutualGuilds ?? [];
+  const temMutuos = mutuosAmigos.length > 0 || mutuosServidores.length > 0;
   // achado pelo id do outro lado — `undefined` enquanto `incoming`/`outgoing`
   // ainda não chegaram (mesmo padrão de `UserProfileModal.tsx`)
   const meuPedido =
@@ -146,13 +149,6 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
       : relacao === "outgoing"
         ? outgoing.find((r) => r.user.id === user.id)
         : undefined;
-
-  // recolhíveis: abertos por padrão (mostra o que já existia antes deste
-  // cartão sem exigir um clique), mas dá para fechar — não há print com um
-  // contato que tenha mútuos para medir o padrão real, então isto é decisão,
-  // não medida (ver "medidas").
-  const [abertoServidores, setAbertoServidores] = useState(true);
-  const [abertoAmigos, setAbertoAmigos] = useState(true);
 
   /**
    * O menu do boneco com o visto: um item só, "Remover amigo". É o que o botão
@@ -324,8 +320,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
         </div>
 
         {/* rola por conta própria (mesmo padrão de `DMMemberList.tsx` e
-            `HeaderPopover.tsx`, a coluna 4 irmã): com os dois recolhíveis
-            abertos e um contato de muitos mútuos, o conteúdo passa da altura
+            `HeaderPopover.tsx`, a coluna 4 irmã): com um contato de muitos mútuos, o conteúdo passa da altura
             que sobra entre a faixa e o rodapé fixo */}
           {/*
             O avatar sobe por cima da faixa: 31px dele ficam abaixo dela, e o
@@ -363,9 +358,68 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
                 entrelinha do nome, não de uma margem */}
             <p className="truncate text-sm leading-[21px] text-text-strong">{user.username}</p>
 
+            {/* como no Discord: uma linha cinza e clicável sob o username, não
+                recolhíveis. Some inteira sem mútuos (nada de contagem zero); o
+                anel na cor do cartão é o que recorta os avatares sobrepostos. */}
+            {temMutuos && (
+              <div className="mt-[10px] flex flex-wrap items-center gap-x-1 text-sm leading-[18px] text-text-muted">
+                {mutuosAmigos.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => ui.openModal({ kind: "userProfile", userId: user.id, aba: "amigos" })}
+                    className="flex items-center gap-1 hover:text-text-default hover:underline"
+                  >
+                    <span className="flex items-center" aria-hidden="true">
+                      {mutuosAmigos.slice(0, 3).map((amigo, i) => (
+                        <span
+                          key={amigo.id}
+                          className={`rounded-full ring-2 ring-chat-background-default ${i > 0 ? "-ml-1" : ""}`}
+                        >
+                          <Avatar user={amigo} size="xs" />
+                        </span>
+                      ))}
+                    </span>
+                    {mutuosAmigos.length === 1 ? "1 amigo em comum" : `${mutuosAmigos.length} amigos em comum`}
+                  </button>
+                )}
+                {mutuosAmigos.length > 0 && mutuosServidores.length > 0 && (
+                  <span aria-hidden="true">•</span>
+                )}
+                {mutuosServidores.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => ui.openModal({ kind: "userProfile", userId: user.id, aba: "servidores" })}
+                    className="flex items-center gap-1 hover:text-text-default hover:underline"
+                  >
+                    <span className="flex items-center" aria-hidden="true">
+                      {mutuosServidores.slice(0, 3).map((g, i) =>
+                        g.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={g.id}
+                            src={g.iconUrl}
+                            alt=""
+                            className={`h-4 w-4 shrink-0 rounded-[4px] object-cover ring-2 ring-chat-background-default ${i > 0 ? "-ml-1" : ""}`}
+                          />
+                        ) : (
+                          <span
+                            key={g.id}
+                            className={`grid h-4 w-4 shrink-0 place-items-center rounded-[4px] bg-input-background-default text-[8px] font-bold text-text-strong ring-2 ring-chat-background-default ${i > 0 ? "-ml-1" : ""}`}
+                          >
+                            {g.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        ),
+                      )}
+                    </span>
+                    {mutuosServidores.length === 1 ? "1 servidor mútuo" : `${mutuosServidores.length} servidores mútuos`}
+                  </button>
+                )}
+              </div>
+            )}
+
             {perfil?.createdAt && (
               <>
-                <h3 className="mt-[25px] text-xs font-bold leading-4 text-text-strong">
+                <h3 className={`${temMutuos ? "mt-[20px]" : "mt-[25px]"} text-xs font-bold leading-4 text-text-strong`}>
                   Membro desde
                 </h3>
                 {/* 26px de topo a topo com a linha de 16px acima */}
@@ -373,65 +427,6 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
                   {DATA.format(new Date(perfil.createdAt))}
                 </p>
               </>
-            )}
-
-            {/* recolhíveis: somem inteiros com zero mútuos — mesma regra do
-                resto do cartão, "não há contagem zero a mostrar" */}
-            {mutuosServidores.length > 0 && (
-              <SecaoRecolhivel
-                titulo="Servidores em comum"
-                contagem={mutuosServidores.length}
-                aberto={abertoServidores}
-                onToggle={() => setAbertoServidores((v) => !v)}
-              >
-                <ul className="flex flex-col gap-0.5">
-                  {mutuosServidores.map((g) => (
-                    <li key={g.id} className="flex items-center gap-2 rounded px-1 py-1">
-                      {g.iconUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={g.iconUrl}
-                          alt=""
-                          className="h-6 w-6 shrink-0 rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-input-background-default text-[10px] font-semibold text-text-strong">
-                          {g.name.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                      <span className="truncate text-sm text-text-default">{g.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              </SecaoRecolhivel>
-            )}
-
-            {mutuosAmigos.length > 0 && (
-              <SecaoRecolhivel
-                titulo="Amigos em comum"
-                contagem={mutuosAmigos.length}
-                aberto={abertoAmigos}
-                onToggle={() => setAbertoAmigos((v) => !v)}
-              >
-                <ul className="flex flex-col gap-0.5">
-                  {mutuosAmigos.map((amigo) => (
-                    <li key={amigo.id}>
-                      {/* mesmo comportamento do "amigos em comum" do modal
-                          completo: clicar abre o popover da pessoa */}
-                      <button
-                        type="button"
-                        onClick={(e) => ui.openProfile(amigo, anchorOf(e.currentTarget))}
-                        className="flex w-full items-center gap-2 rounded px-1 py-1 hover:bg-interactive-background-hover"
-                      >
-                        <Avatar user={amigo} size="sm" />
-                        <span className="truncate text-sm text-text-default">
-                          {displayNameOf(amigo)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </SecaoRecolhivel>
             )}
           </div>
         </div>
@@ -466,55 +461,5 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
         </Button>
       </div>
     </aside>
-  );
-}
-
-/**
- * Cabeçalho recolhível de "Servidores em comum"/"Amigos em comum": chevron
- * gira ao abrir, mesmo padrão já usado em
- * `components/layout/sidebar/CategoriaEItemDeCanal.tsx` (categoria de canal)
- * e `components/chat/BlockedMessages.tsx` (mensagens bloqueadas) — não um
- * widget novo.
- *
- * O rótulo herda o estilo já medido de "Membro desde" logo acima
- * (`text-xs font-bold leading-4 text-text-strong`, mesmo arquivo): não existe
- * print 1:1 com um contato que tenha servidor ou amigo em comum para
- * fotografar este cabeçalho — nem o "elle" de 111402 (que mostra "Nenhum
- * servidor em comum" no topo do chat), nem nenhum outro catalogado —, então
- * copiar o vizinho já medido é o que evita chutar um estilo novo. O contador é
- * o mesmo `Badge tipo="numero"` que o `Tabs` do modal completo já usa para os
- * dois mesmos campos (`UserProfileModal.tsx`, `abas`).
- */
-function SecaoRecolhivel({
-  titulo,
-  contagem,
-  aberto,
-  onToggle,
-  children,
-}: {
-  titulo: string;
-  contagem: number;
-  aberto: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="mt-[25px]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={aberto}
-        className="flex w-full items-center gap-1 rounded py-0.5 text-left text-xs font-bold leading-4 text-text-strong transition hover:bg-interactive-background-hover"
-      >
-        <ChevronRight
-          size={12}
-          aria-hidden="true"
-          className={`shrink-0 transition-transform ${aberto ? "rotate-90" : ""}`}
-        />
-        <span className="truncate">{titulo}</span>
-        <Badge tipo="numero" valor={contagem} />
-      </button>
-      {aberto && <div className="mt-[10px]">{children}</div>}
-    </div>
   );
 }
