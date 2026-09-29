@@ -150,6 +150,34 @@ construir web || falhar "build da imagem da web falhou"
 cd "$STACK"
 
 # ── 3. implantar (o deploy.yml / comando forçado) ────────────
+# Antes do `up -d`: ele recria os contêineres e o `docker logs` do antigo some
+# junto (numa investigação só havia 45 min de API). Guarda o log de cada um em
+# arquivo, com a tag da imagem que estava rodando, para saber de que versão veio.
+# Nada aqui pode abortar a publicação (set -e): cada falha vira só `log`.
+DIR_LOGS="${STREAMZ_LOG_DIR:-/var/log/streamz}"
+guardar_logs() {
+  local c img versao destino
+  local agora; agora="$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$DIR_LOGS" || return 1
+  for c in streamz-api streamz-web; do
+    docker inspect "$c" >/dev/null 2>&1 || continue   # primeira publicação: nada a guardar
+    img="$(docker inspect -f '{{.Config.Image}}' "$c" 2>/dev/null || true)"
+    versao="${img##*:}"
+    [[ -n "$versao" ]] || versao=desconhecida
+    destino="$DIR_LOGS/$c-$agora-$versao.log.gz"
+    # pipefail: falha do `docker logs` também reprova; não deixa arquivo pela metade.
+    if docker logs --timestamps "$c" 2>&1 | gzip > "$destino"; then
+      log "log de $c guardado em $destino"
+    else
+      rm -f "$destino"
+      log "AVISO: não consegui guardar o log de $c — sigo com a publicação"
+    fi
+  done
+  # Retenção: sem isto o diretório cresce a cada publicação, para sempre.
+  find "$DIR_LOGS" -maxdepth 1 -name '*.log.gz' -mtime +30 -delete
+}
+guardar_logs || log "AVISO: falha ao guardar logs dos contêineres — sigo com a publicação"
+
 # Só api e web: postgres e livekit não mudam de imagem aqui. A API aplica as
 # migrations no boot (RUN_MIGRATIONS=1 no .env).
 #
