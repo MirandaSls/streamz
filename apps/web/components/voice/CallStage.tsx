@@ -251,6 +251,12 @@ export default function CallStage({
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
   /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
   const semChamada = estados.length === 0 && !chamando;
+  /**
+   * Quem compartilha a tela enquanto a chamada toca quer conferir o que está no
+   * ar. Os avatares de `Chamando` cobriam a transmissão, e ela só aparecia
+   * quando o outro lado atendia.
+   */
+  const transmitindoNoToque = chamando && estados.some((e) => e.user.id === meId && e.screen);
 
   /**
    * **A moldura só se esconde por inatividade quando há vídeo competindo com
@@ -543,7 +549,7 @@ export default function CallStage({
           inatividade, então no desktop a reserva vale sempre — o porquê está
           em `folgaDaGrade`. */}
       <div className={folgaDaGrade(ehMobile)}>
-        {chamando ? (
+        {chamando && !transmitindoNoToque ? (
           <Chamando
             nome={destinatario ? displayNameOf(destinatario) : titulo}
             usuario={destinatario}
