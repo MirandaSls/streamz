@@ -115,28 +115,25 @@ export default function VoiceLayer() {
   /**
    * Rede de segurança do timeout de quem **liga**.
    *
-   * A autoridade é o `call.ended` do servidor — o relógio de 30 s de
-   * `calls.service.ts`. Este `setTimeout` não substitui aquele: existe só para
-   * o caso de o evento nunca chegar (o processo caiu, o socket caiu e não
-   * reconectou a tempo etc.), que é o defeito que travava quem ligava em
-   * "Chamando…" para sempre. Quem **recebe** já tinha essa rede
-   * (`IncomingCallModal`); faltava pendurar a mesma para quem liga.
+   * Se o `call.ended` do servidor não chegar (processo caiu, socket caiu sem
+   * reconexão a tempo etc.), o cliente para de mostrar "Chamando…" e transita
+   * para `active` — fica sozinho na chamada, como faria o servidor. Quem
+   * **recebe** já tinha essa rede (`IncomingCallModal`); faltava pendurar a
+   * mesma para quem liga.
    *
-   * A folga de 5 s sobre `CALL_RING_TIMEOUT_MS` é de propósito: com os dois
-   * relógios rodando, o desfecho real (`call.ended` do servidor, chegando
-   * pela rede) tem de ganhar da rede de segurança local — senão o cliente
-   * encerraria a chamada sozinho um instante antes do servidor confirmar, e o
-   * motivo mostrado na UI seria "expirou" quando na verdade era o desfecho
-   * normal do servidor. 5 s cobre a viagem de ida e volta do evento com folga
-   * generosa sem fazer quem ligou esperar muito mais que os 30 s nominais.
+   * A folga de 5 s sobre `CALL_RING_TIMEOUT_MS` é de propósito: deixa o
+   * `call.ended` do servidor (chegando pela rede) ganhar da rede de segurança
+   * local. Sem isso, o cliente transicionaria para `active` um instante antes de
+   * receber o encerramento do servidor, e o motivo mostrado seria "expirou"
+   * quando na verdade era o desfecho normal. 5 s cobre a viagem de ida e volta
+   * com folga generosa sem fazer quem ligou esperar muito mais que os 30 s.
    *
    * `toqueExpirou` (e não um `dispatchCall({ type: "timeout" })` cego) é quem
    * decide se ainda vale o disparo: lê o estado **no instante em que o
-   * relógio estoura**, não o `fase` capturado no fechamento — se a chamada já
+   * relógio estoura**, não o `fase` capturado no fechamento. Se a chamada já
    * saiu de `outgoing` (atendida, recusada, `ended` do servidor) o disparo
-   * também já teria sido cancelado pela limpeza abaixo, mas essa segunda
-   * checagem é o que impede um relógio atrasado de derrubar uma chamada que
-   * já está `active`, que seria o defeito oposto e pior.
+   * também já teria sido cancelado pela limpeza abaixo. O relógio da solidão do
+   * servidor é quem finalmente encerra a chamada.
    */
   useEffect(() => {
     if (fase !== "outgoing") return;

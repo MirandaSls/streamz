@@ -1917,6 +1917,20 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     handleEnded: (evento) => {
+      // 30s sem atender: o servidor mantém quem ligou sozinho na sala (quem
+      // encerra de vez, 3 min depois, é o relógio da solidão, com reason
+      // "alone"). Sem esse desvio o "ended" genérico trataria isso como
+      // desligar — e a ideia do timeout agora é exatamente não sair.
+      const emCurso = get().call;
+      if (
+        evento.reason === "timeout" &&
+        emCurso.phase === "outgoing" &&
+        emCurso.channelId === evento.channelId
+      ) {
+        get().dispatchCall({ type: "timeout" });
+        ui.toast("Ninguém atendeu");
+        return;
+      }
       get().dispatchCall({
         type: "ended",
         channelId: evento.channelId,
@@ -1930,7 +1944,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           ui.toast("Ninguém atendeu");
         } else if (evento.reason === "alone") {
           // o servidor derrubou a chamada porque sobrou uma pessoa só; sem o
-          // aviso ela veria a tela fechar do nada
+          // aviso ela veria a tela fechar do nada. O mesmo aviso cobre quem
+          // ligou e ninguém atendeu: os dois casos chegam com a fase em
+          // "active", sem marca de quem entrou.
           ui.toast("Chamada encerrada: você ficou sozinho");
         }
         // a chamada acabou para mim: sai como se eu tivesse desligado

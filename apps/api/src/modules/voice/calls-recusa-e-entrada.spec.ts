@@ -1,6 +1,6 @@
 import { ForbiddenException } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CALL_RING_TIMEOUT_MS, DM_PERMISSIONS, WS_EVENTS } from "@streamz/shared";
+import { CALL_RING_TIMEOUT_MS, CALL_UNANSWERED_ALONE_MS, DM_PERMISSIONS, WS_EVENTS } from "@streamz/shared";
 import { CallsService } from "./calls.service";
 import { VoiceService } from "./voice.service";
 import type { FriendsService } from "../friends/friends.service";
@@ -217,14 +217,48 @@ describe("entrar numa chamada em andamento não morre aos 30 s", () => {
     expect(await naSala("dm1")).toEqual(["bia"]);
   });
 
-  it("ninguém atendendo mesmo: o toque expira e encerra como sempre", async () => {
+  it("ninguém atendendo mesmo: o toque expira, avisa timeout e quem ligou continua na sala", async () => {
     const { calls, fins, naSala } = servicos({ dm1: ["ana", "bia"] });
     await calls.start("ana", "ana", "dm1");
     await vi.advanceTimersByTimeAsync(CALL_RING_TIMEOUT_MS + 1_000);
     await esvaziar();
     expect(fins()).toHaveLength(1);
     expect(fins()[0].payload).toMatchObject({ reason: "timeout", by: null });
+    // "Ninguém atendeu" não desliga quem ligou: a sala segue de pé para o
+    // outro lado ainda poder entrar pela conversa
+    expect(await naSala("dm1")).toEqual(["ana"]);
+  });
+
+  it("passados os CALL_UNANSWERED_ALONE_MS de solidão, quem ligou sai e o fim é \"alone\"", async () => {
+    const { calls, fins, naSala } = servicos({ dm1: ["ana", "bia"] });
+    await calls.start("ana", "ana", "dm1");
+    await vi.advanceTimersByTimeAsync(CALL_RING_TIMEOUT_MS + 1_000);
+    await esvaziar();
+    // até aqui só o "timeout" do toque; a solidão ainda não venceu
+    expect(fins()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(CALL_UNANSWERED_ALONE_MS + 1_000);
+    await esvaziar();
+    expect(fins()).toHaveLength(2);
+    expect(fins()[1].payload).toMatchObject({ reason: "alone", by: null });
     expect(await naSala("dm1")).toEqual([]);
+  });
+
+  it("bia entra dentro dos 3 min de solidão: o relógio cancela e ninguém sai", async () => {
+    const { calls, fins, naSala } = servicos({ dm1: ["ana", "bia"] });
+    await calls.start("ana", "ana", "dm1");
+    await vi.advanceTimersByTimeAsync(CALL_RING_TIMEOUT_MS + 1_000);
+    await esvaziar();
+    expect(fins()).toHaveLength(1);
+    // bia entra pela conversa antes de a solidão de ana vencer (o relógio foi
+    // armado no instante em que o toque expirou, não agora — folga de 5 s
+    // para não cair em cima do próprio prazo)
+    await vi.advanceTimersByTimeAsync(CALL_UNANSWERED_ALONE_MS - 5_000);
+    await calls.accept("bia", "dm1");
+    await vi.advanceTimersByTimeAsync(CALL_UNANSWERED_ALONE_MS + 1_000);
+    await esvaziar();
+    // nenhum "alone" — o relógio de solidão foi cancelado quando bia entrou
+    expect(fins()).toHaveLength(1);
+    expect((await naSala("dm1")).sort()).toEqual(["ana", "bia"]);
   });
 
   it("o caminho feliz de 1-a-1 segue inteiro: ligar, atender, conversar, desligar", async () => {

@@ -56,7 +56,7 @@ export type CallAction =
   | { type: "connected"; channelId: string }
   /** a chamada terminou (recusada, desligada ou expirada). */
   | { type: "ended"; channelId: string; reason: CallEndedEvent["reason"] }
-  /** ninguém atendeu no tempo do toque. */
+  /** ninguém atendeu no tempo do toque — quem ligou fica sozinho na chamada; quem recebia, não. */
   | { type: "timeout" }
   /** a UI já mostrou o desfecho; volta ao repouso. */
   | { type: "reset" };
@@ -98,8 +98,13 @@ export function callReducer(state: CallState, action: CallAction, now: number): 
       return { ...state, phase: "ended", since: now, reason: action.reason };
 
     case "timeout":
-      // só o toque expira; uma chamada já ativa não morre de tempo
-      if (state.phase !== "outgoing" && state.phase !== "incoming") return state;
+      // só o toque expira; uma chamada já ativa não morre de tempo.
+      // quem ligou (outgoing) não desiste sozinho: a chamada segue ativa, só
+      // parou de tocar do outro lado — o servidor passa a segurar a sala e
+      // quem encerra depois é o relógio da solidão (reason "alone"). quem só
+      // recebia o toque (incoming) e não atendeu, esse sim acabou aqui.
+      if (state.phase === "outgoing") return { ...state, phase: "active", since: now, reason: null };
+      if (state.phase !== "incoming") return state;
       return { ...state, phase: "ended", since: now, reason: "timeout" };
 
     case "reset":

@@ -43,8 +43,17 @@ describe("callReducer", () => {
     expect(recusada.reason).toBe("declined");
   });
 
-  it("expira: quem ligou e ninguém atendeu acaba em encerrada por tempo", () => {
+  it("expira: quem ligou e ninguém atendeu segue sozinho, ativa e sem motivo", () => {
     const s = reduzir([{ type: "start", channelId: "c1" }, { type: "timeout" }]);
+    expect(s.phase).toBe("active");
+    expect(s.reason).toBeNull();
+  });
+
+  it("expira: quem recebia o toque e não atendeu acaba em encerrada por tempo", () => {
+    const s = reduzir([
+      { type: "ring", channelId: "c1", from: ANA },
+      { type: "timeout" },
+    ]);
     expect(s.phase).toBe("ended");
     expect(s.reason).toBe("timeout");
   });
