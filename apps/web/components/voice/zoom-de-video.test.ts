@@ -11,7 +11,9 @@ import {
   comZoom,
   distancia,
   ehOriginal,
+  fatorDaPinca,
   fatorDaRoda,
+  fatorDoGesto,
   limitar,
   percentualDe,
   podeAmpliar,
@@ -139,6 +141,58 @@ describe("roda do mouse", () => {
     expect(fatorDaRoda(Number.NaN)).toBe(1);
     expect(fatorDaRoda(Number.POSITIVE_INFINITY)).toBe(1);
     expect(fatorDaRoda(Number.NEGATIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe("pinça do touchpad (wheel com ctrlKey)", () => {
+  it("é mais forte que a roda para o mesmo delta pequeno", () => {
+    expect(fatorDaPinca(-5)).toBeGreaterThan(fatorDaRoda(-5));
+    expect(fatorDaPinca(5)).toBeLessThan(fatorDaRoda(5));
+  });
+
+  it("deltaY negativo amplia e positivo reduz", () => {
+    expect(fatorDaPinca(-5)).toBeGreaterThan(1);
+    expect(fatorDaPinca(5)).toBeLessThan(1);
+  });
+
+  it("prende ao teto de 1.5× e ao piso de 1/1.5×", () => {
+    expect(fatorDaPinca(-999999)).toBeCloseTo(1.5, 5);
+    expect(fatorDaPinca(999999)).toBeCloseTo(1 / 1.5, 5);
+  });
+
+  it("respeita deltaMode como a roda", () => {
+    expect(fatorDaPinca(-0.1, 1)).toBeCloseTo(fatorDaPinca(-1.6, 0), 10);
+    expect(fatorDaPinca(-0.001, 2)).toBeCloseTo(fatorDaPinca(-0.8, 0), 10);
+  });
+
+  it("NaN/Infinity viram 1", () => {
+    expect(fatorDaPinca(Number.NaN)).toBe(1);
+    expect(fatorDaPinca(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe("gesto do WebKit (scale acumulado)", () => {
+  it("de 1 para 1.2 dá 1.2", () => {
+    expect(fatorDoGesto(1, 1.2)).toBeCloseTo(1.2, 10);
+  });
+
+  it("escala igual à anterior dá 1", () => {
+    expect(fatorDoGesto(1.2, 1.2)).toBe(1);
+  });
+
+  it("zero, negativo e NaN em qualquer lado dão 1", () => {
+    expect(fatorDoGesto(0, 1.2)).toBe(1);
+    expect(fatorDoGesto(1, 0)).toBe(1);
+    expect(fatorDoGesto(-1, 1.2)).toBe(1);
+    expect(fatorDoGesto(1, -1.2)).toBe(1);
+    expect(fatorDoGesto(Number.NaN, 1.2)).toBe(1);
+    expect(fatorDoGesto(1, Number.NaN)).toBe(1);
+    expect(fatorDoGesto(1, Number.POSITIVE_INFINITY)).toBe(1);
+  });
+
+  it("prende ao teto de 1.5× e ao piso de 1/1.5×", () => {
+    expect(fatorDoGesto(1, 10)).toBeCloseTo(1.5, 10);
+    expect(fatorDoGesto(10, 1)).toBeCloseTo(1 / 1.5, 10);
   });
 });
 

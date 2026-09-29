@@ -153,13 +153,48 @@ export const PASSO_DO_BOTAO = 1.25;
  * um gesto isolado saltaria para perto do teto de `ESCALA_MAX` de uma vez.
  */
 export function fatorDaRoda(deltaY: number, deltaMode = 0): number {
+  return fatorDeDelta(deltaY, deltaMode, 0.002);
+}
+
+/** Converte `deltaY` para pixels segundo o `deltaMode` (0 px, 1 linha, 2 página). */
+function emPixels(deltaY: number, deltaMode: number): number {
+  return deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 800 : deltaY;
+}
+
+function fatorDeDelta(deltaY: number, deltaMode: number, sensibilidade: number): number {
   if (!Number.isFinite(deltaY)) return 1;
-  const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 800 : deltaY;
   // `Math.exp` pode estourar para `Infinity` com um `deltaY` finito mas
   // enorme (trackpad) — o `deltaY` já está garantido finito acima, então o
   // que sobra aqui é só prender o resultado ao teto/piso, nunca descartá-lo.
-  const fator = Math.exp(-px * 0.002);
+  const fator = Math.exp(-emPixels(deltaY, deltaMode) * sensibilidade);
   return Math.min(1.5, Math.max(1 / 1.5, fator));
+}
+
+/**
+ * Fator da pinça do touchpad no Windows (Chrome/Edge/WebView2), que chega como
+ * `wheel` com `ctrlKey`.
+ *
+ * Outra constante que `fatorDaRoda` (0.01 contra 0.002) porque a pinça manda
+ * deltas pequenos e contínuos (tipicamente 1 a 10px por evento), enquanto a
+ * roda manda saltos de ~100px: com 0.002 a pinça ficaria lenta demais para
+ * acompanhar os dedos. Mesma normalização de `deltaMode` e mesmo teto/piso.
+ */
+export function fatorDaPinca(deltaY: number, deltaMode = 0): number {
+  return fatorDeDelta(deltaY, deltaMode, 0.01);
+}
+
+/**
+ * Fator de um passo do `GestureEvent` do WebKit (macOS: Safari/WKWebView).
+ *
+ * `scale` chega **acumulado** desde o `gesturestart` (1 no começo), não como
+ * delta — então o fator do passo é a razão entre a escala atual e a anterior.
+ * Valor não-finito ou <= 0 em qualquer dos dois não tem razão possível: vira 1
+ * (sem mudança). Preso a [1/1.5, 1.5] pelo mesmo motivo de `fatorDaRoda`.
+ */
+export function fatorDoGesto(escalaAnterior: number, escalaAtual: number): number {
+  if (!Number.isFinite(escalaAnterior) || escalaAnterior <= 0) return 1;
+  if (!Number.isFinite(escalaAtual) || escalaAtual <= 0) return 1;
+  return Math.min(1.5, Math.max(1 / 1.5, escalaAtual / escalaAnterior));
 }
 
 /**
