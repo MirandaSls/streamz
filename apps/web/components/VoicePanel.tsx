@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
 import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
@@ -258,40 +259,52 @@ export default function VoicePanel({
             tocar no tile, ver `PalcoMobile`) e o segundo cairia debaixo da
             cápsula de controles. Convidar continua no menu do servidor. */}
         {conectado && !ehMobile && (
-          <>
-            {/* Convidar mora no canto inferior esquerdo do palco, alinhado com a
-                barra: é a ação de "esta sala está vazia demais", e no print ela
-                nunca entra na fileira dos controles da chamada. */}
-            <div
-              {...daMoldura}
-              className={`absolute bottom-8 left-6 z-10 transition-opacity duration-200 ${
-                visivel ? "opacity-100" : "pointer-events-none opacity-0"
-              }`}
-            >
-              <BotaoDeIcone
-                rotulo="Convidar para voz"
-                icone={<UserPlus size={22} />}
-                comFundo
-                onClick={() =>
-                  channel.guildId && ui.openModal({ kind: "invite", guildId: channel.guildId })
-                }
+          <FileiraDeControles
+            esquerda={
+              // Convidar mora na ponta esquerda da fileira: é a ação de "esta
+              // sala está vazia demais", e é a fileira — não mais este `div`
+              // sozinho — quem o alinha com o resto da barra de controles
+              // (`FileiraDeControles`, grade `1fr auto 1fr`).
+              <div
+                {...daMoldura}
+                className={`transition-opacity duration-200 ${
+                  visivel ? "opacity-100" : "pointer-events-none opacity-0"
+                }`}
+              >
+                <BotaoDeIcone
+                  rotulo="Convidar para voz"
+                  icone={<UserPlus size={22} />}
+                  comFundo
+                  onClick={() =>
+                    channel.guildId && ui.openModal({ kind: "invite", guildId: channel.guildId })
+                  }
+                />
+              </div>
+            }
+            centro={
+              // Desligar não fecha mais a coluna quando o canal continua aberto:
+              // `decidirSaida("usuario")` mantém o painel de pé e ele volta à
+              // vista do canal, com o botão de entrar de novo. Fechar era o que
+              // jogava quem desligava num `ChatView` de largura inteira que
+              // ninguém pediu.
+              <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void disconnect()} />
+            }
+            direita={
+              <IconesDoCanto
+                telaCheia={telaCheia}
+                onTelaCheia={alternar}
+                visivel={visivel}
+                moldura={daMoldura}
               />
-            </div>
-
-            <IconesDoCanto
-              telaCheia={telaCheia}
-              onTelaCheia={alternar}
-              visivel={visivel}
-              moldura={daMoldura}
-            />
-          </>
+            }
+          />
         )}
 
-        {conectado && (
-          // Desligar não fecha mais a coluna quando o canal continua aberto:
-          // `decidirSaida("usuario")` mantém o painel de pé e ele volta à vista
-          // do canal, com o botão de entrar de novo. Fechar era o que jogava
-          // quem desligava num `ChatView` de largura inteira que ninguém pediu.
+        {conectado && ehMobile && (
+          // No celular a fileira não entra: `VoiceControls` vira `ControlesMobile`
+          // por dentro e se posiciona sozinho, sem `esquerda`/`direita` para
+          // disputar espaço (ver o comentário acima sobre `IconesDoCanto` e o
+          // convite ficarem fora do celular).
           <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void disconnect()} />
         )}
       </div>

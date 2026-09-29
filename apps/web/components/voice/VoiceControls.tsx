@@ -89,9 +89,14 @@ export default function VoiceControls({
   const escondida = oculto && !mais;
 
   return (
+    // Quem posiciona esta cápsula no rodapé do palco é o `FileiraDeControles`
+    // (grade `1fr auto 1fr`, `absolute inset-x-0 bottom-5`): a seta de
+    // expandir, esta cápsula e os ícones do canto viviam cada um com seu
+    // próprio `absolute`, três peças soltas na mesma altura que se
+    // encavalavam em janela estreita. Aqui dentro ela é só um item em fluxo.
     <div
       {...moldura}
-      className={`absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 transition-opacity duration-200 ${
+      className={`flex items-center gap-3 transition-opacity duration-200 ${
         escondida ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
