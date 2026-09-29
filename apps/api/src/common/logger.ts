@@ -13,20 +13,50 @@ import type { LoggerService, LogLevel } from "@nestjs/common";
  *
  * Formato (`LOG_FORMAT=json`, padrão fora de dev):
  *   {"ts":"2026-08-25T12:00:00.000Z","level":"error","ctx":"ChatGateway",
- *    "msg":"Falha em comando WS (socket abc)","reqId":"…","stack":"…"}
+ *    "msg":"Falha em comando WS (socket abc)","reqId":"…","userId":"…","stack":"…"}
  *
  * O `reqId` vem do `AsyncLocalStorage` alimentado por `requestIdMiddleware`:
  * qualquer log disparado durante a requisição herda o id sem que o chamador
- * precise passá-lo adiante. Fora de uma requisição (boot, cron, WebSocket) o
- * campo simplesmente não aparece.
+ * precise passá-lo adiante. O `userId` entra no mesmo store: o `JwtGuard` o
+ * grava (`definirUsuarioDoLog`) depois de validar o token, e o gateway WebSocket,
+ * que não passa pelo middleware HTTP, abre o próprio contexto com
+ * `comUsuarioNoLog`. Assim dá para filtrar no agregador tudo o que um usuário
+ * disparou. Fora de requisição e de comando WS (boot, cron) os campos
+ * simplesmente não aparecem.
  */
 
-/** Contexto propagado por requisição (hoje só o id). */
+/** Contexto propagado por requisição: id da requisição e, depois da auth, o usuário. */
 interface ContextoRequisicao {
   reqId: string;
+  /** Mutável: o middleware abre o contexto antes de saber quem é o usuário. */
+  userId?: string;
 }
 
 const armazenamento = new AsyncLocalStorage<ContextoRequisicao>();
+
+/**
+ * Grava o usuário no contexto corrente. O guard roda dentro do `run` do
+ * middleware, então mutar o objeto do store basta — os logs seguintes da mesma
+ * requisição já o enxergam. Sem contexto (fora de requisição) não faz nada.
+ */
+export function definirUsuarioDoLog(userId: string): void {
+  const store = armazenamento.getStore();
+  if (store) store.userId = userId;
+}
+
+/** Id do usuário associado ao log em andamento, se houver. */
+export function usuarioDoLog(): string | undefined {
+  return armazenamento.getStore()?.userId;
+}
+
+/**
+ * Roda `fn` num contexto de log próprio com o usuário informado. Serve ao
+ * gateway WebSocket, onde não há middleware HTTP para abrir o contexto; cada
+ * chamada ganha um `reqId` novo para separar um comando do outro.
+ */
+export function comUsuarioNoLog<T>(userId: string | undefined, fn: () => T): T {
+  return armazenamento.run({ reqId: randomUUID(), userId }, fn);
+}
 
 /** Id da requisição em andamento, se houver. */
 export function requestId(): string | undefined {
@@ -155,6 +185,7 @@ export class StructuredLogger implements LoggerService {
       ctx: contexto,
       msg: texto,
       reqId: requestId(),
+      userId: usuarioDoLog(),
       stack: stack ?? stackDaMensagem,
       extra: extras.length ? extras.map((e) => descreve(e).texto) : undefined,
     };
@@ -190,6 +221,7 @@ function formatarTexto(linha: {
   ctx?: string;
   msg: string;
   reqId?: string;
+  userId?: string;
   stack?: string;
   extra?: string[];
 }): string {
@@ -199,6 +231,7 @@ function formatarTexto(linha: {
     linha.level.toUpperCase().padEnd(5),
     linha.ctx ? `[${linha.ctx}]` : "",
     linha.reqId ? `(${linha.reqId.slice(0, 8)})` : "",
+    linha.userId ? `user=${linha.userId.slice(0, 8)}` : "",
     linha.msg,
   ].filter(Boolean);
   const extra = linha.extra?.length ? ` ${linha.extra.join(" ")}` : "";
