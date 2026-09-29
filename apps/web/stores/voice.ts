@@ -41,6 +41,7 @@ import type {
   Room,
   TrackPublication,
 } from "livekit-client";
+import type { DisconnectReason } from "livekit-client";
 import {
   ESTADO_DA_CONEXAO,
   FONTE,
@@ -50,6 +51,7 @@ import {
   livekitCarregado,
 } from "@/lib/livekit";
 import { api } from "@/lib/api";
+import { reportarDiagnostico } from "@/lib/diagnostico";
 import {
   abrirNoSistema,
   capacidadesDeTela,
@@ -1333,6 +1335,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         if (proximo) await ajustarCameraNoSender();
       } catch (e) {
         set({ camOn: false });
+        reportarDiagnostico("voz.midia", `${(e as Error)?.name}: ${(e as Error)?.message}`, {
+          etapa: "ligar camera",
+        });
         ui.toast(explicarAparelhoAusente(e, "camera") ?? errorMessage(e, "Não foi possível ligar a câmera"), "error");
       }
       get().syncFlags();
@@ -1477,6 +1482,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         // o vídeo pode ter subido e o som falhado: nada da tela fica no ar
         await despublicarTela(lp);
         set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
+        reportarFalhaDeTela(e, "publicar tela");
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -1585,6 +1591,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         telaPreparada = null;
         telaNativa = false;
         set({ screenOn: false, telaComSom: false, audioDaTelaMudo: false });
+        reportarFalhaDeTela(e, "tela nativa");
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
       get().syncFlags();
@@ -2209,6 +2216,16 @@ async function conectarMidia(
   }
 }
 
+/**
+ * Falha ao compartilhar tela vai para o diagnóstico, menos o cancelamento
+ * proposital do seletor (`NotAllowedError`/`AbortError`): ali ninguém errou.
+ */
+function reportarFalhaDeTela(e: unknown, etapa: string) {
+  const nome = (e as Error)?.name;
+  if (nome === "NotAllowedError" || nome === "AbortError") return;
+  reportarDiagnostico("voz.midia", `${nome}: ${(e as Error)?.message}`, { etapa });
+}
+
 /** Conecta o `Room` e liga os eventos do SDK ao `tick`/`falando` da store. */
 async function entrarNaSala(
   creds: { token: string; url: string },
@@ -2364,13 +2381,26 @@ async function entrarNaSala(
       else falandoPorAviso.delete(dono);
       recomporFalantes();
     })
-    .on(RoomEvent.Disconnected, () => {
+    .on(RoomEvent.Disconnected, (motivo?: DisconnectReason) => {
       // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
       // quem chegou depois manda, e uma sala aposentada não tem o direito de
       // anunciar queda nem de zerar `sala`
       if (sala !== room) return;
       // sair de propósito passa por `fecharSala`, que remove os ouvintes antes:
       // se este handler rodou, a sala caiu sozinha
+      // O servidor da API não sabe de quedas de mídia (só o LiveKit vê): sem
+      // este relato, um usuário com dezenas de `PEER_CONNECTION_DISCONNECTED`
+      // aparecia só nos logs do LiveKit. `DisconnectReason` é enum de valor,
+      // então vem de `exigirLivekit()` (a sala já existe, o chunk já chegou).
+      reportarDiagnostico(
+        "voz.queda",
+        `sala caiu: ${motivo !== undefined ? (exigirLivekit().DisconnectReason[motivo] ?? String(motivo)) : "sem motivo"}`,
+        {
+          sala: room.name,
+          userAgent: navigator.userAgent,
+          rede: (navigator as any).connection?.effectiveType,
+        },
+      );
       sala = null;
       pararMedicaoDePing();
       desarmarDetectorLocal(() => {});
@@ -2387,7 +2417,19 @@ async function entrarNaSala(
     });
 
   const crono = cronometroDeVoz("entrarNaSala");
-  await room.connect(creds.url, creds.token);
+  try {
+    await room.connect(creds.url, creds.token);
+  } catch (e) {
+    // relata e relança: o chamador segue tratando o erro como antes
+    reportarDiagnostico("voz.conexao", errorMessage(e, "room.connect falhou"), {
+      sala: room.name,
+      etapa: "room.connect",
+      nome: (e as Error)?.name,
+      stack: (e as Error)?.stack,
+      userAgent: navigator.userAgent,
+    });
+    throw e;
+  }
   crono.etapa("room.connect (ICE + sinalização)");
   // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
   iniciarMedicaoDePing(room);
@@ -2484,6 +2526,14 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
     // quem relatou "entrei na call e o áudio não funciona". Mesmo prefixo dos
     // avisos de `lib/microfone`, para o relato vir inteiro num filtro só.
     console.warn("[voz] o microfone não subiu; a sala continua sem ele", e);
+    // Permissão negada também entra: é informação útil para suporte. Só fica
+    // de fora quem já saiu, porque aí a rejeição é consequência da saída.
+    if (sala === room) {
+      reportarDiagnostico("voz.midia", `${(e as Error)?.name}: ${(e as Error)?.message}`, {
+        etapa: "abrir/publicar microfone",
+        sala: room.name,
+      });
+    }
     // Recusar a permissão não é "deu erro": tem causa e conserto, e quem sabe
     // apontar o conserto certo (o cadeado, ou o https quando o endereço nem
     // chega a pedir permissão) é o `explicarMidia` que as configurações de voz
