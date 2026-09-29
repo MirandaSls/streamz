@@ -487,6 +487,15 @@ export function cadeiaDoMicrofone(inicial: {
     // suspenso pela cadeia anterior: sem isto o grafo nasce parado e não sai som
     if (c.state === "suspended") await c.resume().catch(() => {});
 
+    // diagnóstico sem UI: headset Bluetooth em modo chamada (HFP) abre a captura
+    // a 8/16 kHz e a voz sai abafada, sem erro nenhum para acusar
+    const taxaCaptura = track.getSettings?.().sampleRate;
+    console.info("[voz] taxa da captura", { captura: taxaCaptura, contexto: c.sampleRate });
+    if (taxaCaptura !== undefined && taxaCaptura < 32000) {
+      console.warn(
+        `[voz] captura a ${taxaCaptura} Hz: típico de headset Bluetooth em modo chamada; a voz tende a sair abafada`,
+      );
+    }
     fonte = c.createMediaStreamSource(new MediaStream([track]));
     ganho = c.createGain();
     destino = c.createMediaStreamDestination();
