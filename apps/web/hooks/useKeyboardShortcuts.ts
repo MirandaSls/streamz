@@ -3,12 +3,13 @@
 import { useEffect } from "react";
 import { isUnread } from "@streamz/shared";
 import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
-import { ACOES_DE_VOZ, actionForEvent, type ShortcutAction } from "@/lib/shortcuts";
+import { ACOES_DE_VOZ, actionForEvent, cedeParaTelaCheia, type ShortcutAction } from "@/lib/shortcuts";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useSettings, ZOOM } from "@/stores/settings";
 import { useUI } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 import { abrirCaixaDeEntrada } from "@/lib/caixa-de-entrada";
 import { pedirPainelDoComposer } from "@/lib/eventos-do-composer";
 
@@ -38,6 +39,10 @@ export function useKeyboardShortcuts(): void {
 
       const zoom = action === "zoomMais" || action === "zoomMenos" || action === "zoomPadrao";
       if (!zoom && temCamadaAberta()) return;
+
+      // tela cheia conta como camada para o Esc: quem sai dela é o listener da
+      // emulada, que só age se ninguém cancelou o evento antes
+      if (cedeParaTelaCheia(action, useVoice.getState().telaCheia)) return;
 
       event.preventDefault();
       executar(action);
