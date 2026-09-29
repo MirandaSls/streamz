@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import MemberList from "@/components/MemberList";
@@ -15,6 +15,13 @@ import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
+import { AlertTriangle, Check } from "@/components/ui/icones";
+import {
+  abrirNoSistema,
+  ouvirAtualizacaoDoWebView2,
+  reiniciarApp,
+  type EstadoDoWebView2,
+} from "@/lib/desktop";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -31,7 +38,7 @@ import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 // ── d-social ── ausente automático depois de 10 min sem interação
 import { useAutoIdle } from "@/stores/presence";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 // carrega o efeito colateral da Touch Bar do Mac (liga só dentro do app Tauri no Mac)
 import "@/stores/touch-bar";
@@ -328,6 +335,7 @@ export default function AppPage() {
       <ContextMenuHost />
       <ProfilePopoverHost />
       <Toasts />
+      <AvisoDoWebView2 />
       {/* f-desktop: só existe dentro do Tauri; desconta a própria altura no
           <html> (ver globals.css) e traz o aviso de atualização */}
       <BarraDeTitulo />
@@ -372,4 +380,80 @@ function FecharAoNavegar() {
     if (aoAbrir.current.canalId !== canalId || aoAbrir.current.dmId !== dmId) fechar();
   }, [canalId, dmId, fechar]);
   return null;
+}
+
+const LINK_WEBVIEW2 = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+
+/**
+ * Aviso da atualização do WebView2 (só Windows/Tauri; nos outros ambientes o
+ * ouvinte é no-op). "Atualizando" reaproveita o toast passageiro; "concluída" e
+ * "falhou" pedem uma ação do usuário, então ficam numa pílula fixa — mesma forma
+ * do `Toasts` — até o clique. Cada estado aparece uma vez por sessão: o evento
+ * e a consulta inicial podem trazer o mesmo estado duas vezes.
+ */
+function AvisoDoWebView2() {
+  const [aviso, setAviso] = useState<EstadoDoWebView2 | null>(null);
+  const vistos = useRef(new Set<string>());
+  useEffect(
+    () =>
+      ouvirAtualizacaoDoWebView2((e) => {
+        if (vistos.current.has(e.estado)) return;
+        vistos.current.add(e.estado);
+        if (e.estado === "atualizando") {
+          ui.toast("Atualizando componente do Windows (WebView2) para melhorar chamadas de voz…");
+        } else {
+          setAviso(e);
+        }
+      }),
+    [],
+  );
+  if (!aviso) return null;
+  const falhou = aviso.estado === "falhou";
+  return (
+    <div className="pointer-events-none fixed bottom-4 left-1/2 z-[60] flex max-w-[90vw] -translate-x-1/2 justify-center">
+      <div
+        role="status"
+        className="pointer-events-auto flex items-center gap-2 rounded-full bg-background-surface-higher px-3.5 py-2 text-sm text-text-default shadow-popout anim-menu"
+      >
+        {falhou ? (
+          <AlertTriangle size={16} aria-hidden="true" className="shrink-0 text-status-danger" />
+        ) : (
+          <Check size={16} aria-hidden="true" className="shrink-0 text-brand-500" />
+        )}
+        <span className="min-w-0">
+          {falhou ? (
+            <>
+              Não foi possível atualizar o WebView2. Se as chamadas caírem com frequência,
+              instale a versão mais recente em{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => void abrirNoSistema(LINK_WEBVIEW2)}
+              >
+                go.microsoft.com/fwlink/p/?LinkId=2124703
+              </button>
+            </>
+          ) : (
+            "Componente do Windows atualizado. Reinicie o Streamz para aplicar."
+          )}
+        </span>
+        {!falhou && (
+          <button
+            type="button"
+            className="shrink-0 font-medium text-brand-500 hover:underline"
+            onClick={() => void reiniciarApp()}
+          >
+            Reiniciar
+          </button>
+        )}
+        <button
+          type="button"
+          className="shrink-0 text-text-muted hover:underline"
+          onClick={() => setAviso(null)}
+        >
+          Dispensar
+        </button>
+      </div>
+    </div>
+  );
 }
