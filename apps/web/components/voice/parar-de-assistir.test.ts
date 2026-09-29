@@ -14,7 +14,7 @@ describe("podePararDeAssistir", () => {
     expect(podePararDeAssistir({ tela: true, assistindo: true, sou: true })).toBe(false);
   });
 
-  it("não deixa na minha tela nativa (essa sai por 'Ocultar prévia')", () => {
+  it("não deixa na minha tela nativa (essa fica sempre à vista)", () => {
     expect(
       podePararDeAssistir({ tela: true, assistindo: true, sou: false, minhaTelaNativa: true }),
     ).toBe(false);
