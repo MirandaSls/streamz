@@ -1,11 +1,10 @@
 import { create } from "zustand";
 import {
-  ECO_PADRAO,
-  GANHO_PADRAO,
   MARCA_DA_MIGRACAO,
+  MARCA_DA_MIGRACAO_ECO_FORA_DO_MAC,
   MARCA_DA_MIGRACAO_TRATAMENTO,
   migrarProcessamento,
-  RUIDO_PADRAO,
+  tratamentoPadrao,
 } from "@/lib/ruido-padrao";
 import {
   type CallEndedEvent,
@@ -57,6 +56,7 @@ import {
   ehAndroidNoTauri,
   iniciarServicoDeChamada,
   iniciarTelaNativa,
+  ehMac,
   isTauri,
   ouvirSaidaPelaNotificacao,
   ouvirTelaEncerrada,
@@ -568,18 +568,18 @@ export interface AudioPrefs {
 export type NivelDeRuido = "off" | "padrao" | "avancada";
 
 /**
- * O padrão de fábrica do processamento é o preset "No app": eco e ganho do
- * sistema desligados, limpeza a cargo da supressão avançada. O porquê — e o
- * custo (eco de volta para quem fala em alto-falante) — está por extenso em
- * `lib/ruido-padrao.ts`, que é de onde saem as três constantes.
+ * O padrão de fábrica do processamento depende da plataforma: no Mac o preset
+ * "No app" (eco e ganho desligados), fora dele eco e ganho ligados. O porquê —
+ * e o custo de cada lado — está por extenso em `lib/ruido-padrao.ts`. É função
+ * e não constante porque a plataforma só se sabe no cliente, na hora de ler.
  */
-const AUDIO_PADRAO: AudioPrefs = {
+const audioPadrao = (): AudioPrefs => ({
   entrada: 1,
   saida: 1,
   sensibilidade: 0.35,
   pttAtrasoMs: PTT_RELEASE_MS,
-  processamento: { eco: ECO_PADRAO, ruido: RUIDO_PADRAO, ganho: GANHO_PADRAO },
-};
+  processamento: tratamentoPadrao(ehMac()),
+});
 
 const AUDIO_KEY = "voiceAudioPrefs";
 
@@ -651,6 +651,7 @@ export function carregarSilenciados(): Record<string, boolean> {
 }
 
 function carregarAudio(): AudioPrefs {
+  const AUDIO_PADRAO = audioPadrao();
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
     if (!raw) {
@@ -660,6 +661,7 @@ function carregarAudio(): AudioPrefs {
       // desfeita na abertura seguinte.
       gravarNoStorage(MARCA_DA_MIGRACAO, "1");
       gravarNoStorage(MARCA_DA_MIGRACAO_TRATAMENTO, "1");
+      gravarNoStorage(MARCA_DA_MIGRACAO_ECO_FORA_DO_MAC, "1");
       return AUDIO_PADRAO;
     }
     const lido = JSON.parse(raw) as Partial<AudioPrefs>;
@@ -669,17 +671,24 @@ function carregarAudio(): AudioPrefs {
     const bruto = (lido.processamento as { ruido?: unknown } | undefined)?.ruido;
     if (typeof bruto === "boolean") processamento.ruido = bruto ? "padrao" : "off";
     // padrões que mudaram depois que este storage foi gravado: supressão
-    // avançada (2026-09-16) e tratamento "No app" (2026-09-22). Cada uma roda
-    // uma vez só, guardada pela sua marca — sem elas, quem voltasse ao valor
-    // antigo de propósito seria arrastado de novo a cada abertura.
-    const migrado = migrarProcessamento(processamento, {
-      ruidoMigrado: lerDoStorage(MARCA_DA_MIGRACAO) === "1",
-      tratamentoMigrado: lerDoStorage(MARCA_DA_MIGRACAO_TRATAMENTO) === "1",
-    });
+    // avançada (2026-09-16), tratamento "No app" (2026-09-22) e eco ligado fora
+    // do Mac (2026-09-29). Cada uma roda uma vez só, guardada pela sua marca —
+    // sem elas, quem voltasse ao valor antigo de propósito seria arrastado de
+    // novo a cada abertura.
+    const migrado = migrarProcessamento(
+      processamento,
+      {
+        ruidoMigrado: lerDoStorage(MARCA_DA_MIGRACAO) === "1",
+        tratamentoMigrado: lerDoStorage(MARCA_DA_MIGRACAO_TRATAMENTO) === "1",
+        ecoForaDoMacMigrado: lerDoStorage(MARCA_DA_MIGRACAO_ECO_FORA_DO_MAC) === "1",
+      },
+      ehMac(),
+    );
     const final = { ...AUDIO_PADRAO, ...lido, processamento: migrado.processamento };
     if (migrado.mudou) gravarNoStorage(AUDIO_KEY, JSON.stringify(final));
     gravarNoStorage(MARCA_DA_MIGRACAO, "1");
     gravarNoStorage(MARCA_DA_MIGRACAO_TRATAMENTO, "1");
+    gravarNoStorage(MARCA_DA_MIGRACAO_ECO_FORA_DO_MAC, "1");
     return final;
   } catch {
     return AUDIO_PADRAO;
