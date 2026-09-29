@@ -109,6 +109,23 @@ export const ACOES_DE_VOZ: ReadonlySet<ShortcutAction> = new Set<ShortcutAction>
   "alternarSurdo",
 ]);
 
+/**
+ * Ações cuja tecla padrão é Esc. Na tela cheia emulada do desktop o Esc é de
+ * quem sai dela (`ligarEscapeDaEmulada`, `components/voice/fullscreen.ts`), que
+ * ignora a tecla se alguém já deu `preventDefault`. Como o ouvinte global roda
+ * em captura, chegaria antes e engoliria o Esc — além de marcar o canal como
+ * lido por baixo da transmissão.
+ */
+const ACOES_DE_ESCAPE: ReadonlySet<ShortcutAction> = new Set<ShortcutAction>([
+  "marcarLido",
+  "marcarServidorLido",
+]);
+
+/** A ação deve ceder a tecla porque a tela cheia emulada está aberta? */
+export function cedeParaTelaCheia(action: ShortcutAction, telaCheia: boolean): boolean {
+  return telaCheia && ACOES_DE_ESCAPE.has(action);
+}
+
 type Modificador = "ctrl" | "alt" | "shift" | "meta";
 
 const MODIFICADORES: Record<string, Modificador> = {

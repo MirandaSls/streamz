@@ -3,6 +3,7 @@ import {
   ACOES_DE_VOZ,
   SHORTCUTS,
   actionForEvent,
+  cedeParaTelaCheia,
   formatShortcut,
   matchesShortcut,
   normalizeKey,
@@ -165,5 +166,22 @@ describe("ACOES_DE_VOZ", () => {
     expect(ACOES_DE_VOZ.has(actionForEvent(tecla("M", { ctrl: true, shift: true }))!)).toBe(true);
     expect(ACOES_DE_VOZ.has(actionForEvent(tecla("D", { ctrl: true, shift: true }))!)).toBe(true);
     expect(ACOES_DE_VOZ.has(actionForEvent(tecla("k", { ctrl: true }))!)).toBe(false);
+  });
+});
+
+describe("cedeParaTelaCheia", () => {
+  it("com tela cheia, Esc e Shift+Esc cedem a tecla", () => {
+    expect(cedeParaTelaCheia(actionForEvent(tecla("Escape"))!, true)).toBe(true);
+    expect(cedeParaTelaCheia(actionForEvent(tecla("Escape", { shift: true }))!, true)).toBe(true);
+  });
+
+  it("sem tela cheia, mantém o comportamento atual", () => {
+    expect(cedeParaTelaCheia("marcarLido", false)).toBe(false);
+    expect(cedeParaTelaCheia("marcarServidorLido", false)).toBe(false);
+  });
+
+  it("com tela cheia, atalhos que não são de Esc seguem valendo", () => {
+    expect(cedeParaTelaCheia("quickSwitcher", true)).toBe(false);
+    expect(cedeParaTelaCheia("zoomMais", true)).toBe(false);
   });
 });

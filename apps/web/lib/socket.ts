@@ -2,7 +2,8 @@ import { io, type Socket } from "socket.io-client";
 import { WS_EVENTS } from "@streamz/shared";
 import { WS_URL } from "./config";
 import { getAccessToken, renovarTokens } from "./session";
-import { ouvirSaidaDoApp } from "@/lib/desktop";
+import { identificacaoDoCliente, ouvirSaidaDoApp } from "@/lib/desktop";
+import { reportarDiagnostico } from "@/lib/diagnostico";
 
 /**
  * Conexão única com o gateway, resiliente a queda de rede e a token expirado.
@@ -27,6 +28,15 @@ let jaConectou = false;
 
 /** Uma tentativa de refresh por ciclo de conexão, para não entrar em laço. */
 let tentouRenovar = false;
+
+/** Falhas de handshake seguidas; zera no `connect`. */
+let falhasSeguidas = 0;
+
+/** Já reportamos esta sequência de falhas — só volta a reportar após um `connect`. */
+let reportouFalha = false;
+
+/** Quantas falhas seguidas até valer um relato ao servidor (1-2 são ruído de rede). */
+const FALHAS_PARA_REPORTAR = 3;
 
 /** O ouvinte de visibilidade é global e registrado uma vez só. */
 let ouvindoVisibilidade = false;
@@ -56,8 +66,8 @@ export function getSocket(): Socket {
     // função, não objeto: o Socket.IO chama a cada (re)conexão
     auth: (cb: (dados: Record<string, unknown>) => void) => {
       getAccessToken()
-        .then((token) => cb({ token: token ?? "" }))
-        .catch(() => cb({ token: "" }));
+        .then((token) => cb({ token: token ?? "", cliente: identificacaoDoCliente() ?? undefined }))
+        .catch(() => cb({ token: "", cliente: identificacaoDoCliente() ?? undefined }));
     },
     autoConnect: true,
     transports: ["websocket"],
@@ -66,6 +76,8 @@ export function getSocket(): Socket {
   s.on("connect", () => {
     console.info("[voz] socket conectado");
     tentouRenovar = false;
+    falhasSeguidas = 0;
+    reportouFalha = false;
     for (const channelId of salas) s.emit(WS_EVENTS.CHANNEL_JOIN, channelId);
     if (jaConectou) {
       for (const ouvinte of ouvintesReconexao) {
@@ -80,7 +92,25 @@ export function getSocket(): Socket {
   });
 
   // handshake recusado (token expirado, entre outros): renova e tenta de novo
-  s.on("connect_error", () => void renovarEReconectar(s));
+  s.on("connect_error", (err: Error & { description?: unknown; context?: unknown }) => {
+    falhasSeguidas += 1;
+    // o servidor não vê quem nem consegue chegar nele: sem este relato, "não
+    // conecta" some sem rastro. Uma vez por sequência, para não inundar.
+    if (falhasSeguidas >= FALHAS_PARA_REPORTAR && !reportouFalha) {
+      reportouFalha = true;
+      try {
+        reportarDiagnostico("ws.conexao", `falha ao conectar: ${err?.message}`, {
+          falhasSeguidas,
+          description: err?.description,
+          context: err?.context,
+          online: typeof navigator !== "undefined" ? navigator.onLine : undefined,
+        });
+      } catch {
+        // diagnóstico é best-effort: nunca pode atrapalhar a reconexão
+      }
+    }
+    void renovarEReconectar(s);
+  });
 
   s.on("disconnect", (motivo) => {
     console.info("[voz] socket caiu", { motivo });
@@ -159,4 +189,6 @@ export function disconnectSocket(): void {
   salas.clear();
   jaConectou = false;
   tentouRenovar = false;
+  falhasSeguidas = 0;
+  reportouFalha = false;
 }

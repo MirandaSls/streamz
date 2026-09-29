@@ -33,7 +33,6 @@ import {
   submenuConvidarParaOServidor,
 } from "@/lib/menu-de-usuario";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
-import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -42,11 +41,10 @@ import { useGuilds } from "@/stores/guilds";
 import { chaveDaJanela, type TipoDeJanelaDeVoz } from "@/stores/janelas-de-voz";
 import { useNotas } from "@/stores/notas";
 import { minhasRegrasNoCanalAgora, usePermissions } from "@/stores/permissions";
-import { usePreferenciasDeTransmissao } from "@/stores/preferencias-de-transmissao";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
 import { ui, type MenuItem } from "@/stores/ui";
-import { aplicarAssinaturasDeTela, participantesDe, telasDe, useVoice } from "@/stores/voice";
+import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
@@ -282,7 +280,6 @@ export function abrirMenuDeParticipante(
  * Discord.
  */
 export function abrirMenuDaMinhaTela(x: number, y: number): void {
-  const prefs = usePreferenciasDeTransmissao.getState();
   const itens: MenuItem[] = [
     {
       label: "Parar de transmitir",
@@ -301,97 +298,16 @@ export function abrirMenuDaMinhaTela(x: number, y: number): void {
 
   // a chave é a do meu tile de tela (`<meuId>:tela`), a mesma que o palco usa
   const eu = useAuth.getState().user;
-  itens.push({ separator: true });
   if (eu && podeAbrirJanelaSolta()) {
+    itens.push({ separator: true });
     itens.push({
       label: "Transmissão em Nova Janela",
       icon: <ExternalLink size={18} />,
       onSelect: () => abrirJanelaDoTile("tela", eu),
     });
-    itens.push({ separator: true });
   }
-
-  // "Mais opções" agora só leva preferências do navegador sobre a prévia da
-  // própria tela (`stores/preferencias-de-transmissao.ts`), não mais estado
-  // por tile — por isso os dois checkboxes aparecem sempre que estou
-  // transmitindo, sem depender de a captura nativa já ter subido.
-  itens.push({
-    label: "Mais opções",
-    submenu: [
-      {
-        label: "Mostrar meu compartilhamento de tela",
-        control: "checkbox",
-        checked: prefs.mostrarMinhaTela,
-        onSelect: () => alternarMostrarMinhaTela(!prefs.mostrarMinhaTela),
-      },
-      {
-        label: "Pausar prévia quando o Streamz não estiver em foco",
-        control: "checkbox",
-        checked: prefs.pausarSemFoco,
-        onSelect: () =>
-          usePreferenciasDeTransmissao.getState().setPausarSemFoco(!prefs.pausarSemFoco),
-      },
-    ],
-  });
 
   ui.openContextMenu(x, y, itens, MENU_WIDTH_WIDE);
-}
-
-/**
- * Liga/desliga "Mostrar meu compartilhamento de tela"
- * (`stores/preferencias-de-transmissao.ts`). Ligar só grava a preferência —
- * quem reassina a faixa em LOW é `aplicarAssinaturas`
- * (`stores/assinaturas-de-tela.ts`), reaplicado em outro lugar assim que a
- * store muda. Desligar, se o meu tile estiver em destaque no palco agora,
- * também tira o foco e a prévia manual pelo mesmo par que o botão "Ver
- * prévia" usava (`alternarPreviaDaMinhaTela`) — senão o palco continuaria
- * mostrando o vídeo em tamanho de cinema com a preferência já desligada, em
- * vez do aviso "Você está compartilhando sua tela".
- */
-function alternarMostrarMinhaTela(ligar: boolean): void {
-  usePreferenciasDeTransmissao.getState().setMostrarMinhaTela(ligar);
-  if (ligar) return;
-  const eu = useAuth.getState().user;
-  const chave = eu ? chaveDaMinhaTelaAtiva(eu.id) : null;
-  if (chave && useVoice.getState().focado === chave) alternarPreviaDaMinhaTela(chave, false);
-}
-
-/**
- * A chave (`dono:trackSid`) da minha transmissão de tela **nativa** agora —
- * a mesma conta que `VoiceGrid.tsx` faz para o tile (`minhaTelaNativa` +
- * `chaveDoTileDeTela`), refeita aqui porque este menu não tem os `tiles` dela
- * à mão. `null` sem captura nativa em publicação (navegador — onde a tela é
- * a faixa **local** da própria pessoa, sempre visível, sem aviso para
- * ocultar —, ou a captura nativa ainda não subiu).
- *
- * Só o participante `<meuId>#tela` conta: `participantesDe` também devolve a
- * pessoa (identidade === `meuId`), cuja tela — quando existe — é a local do
- * navegador, e essa nunca tem "Ver prévia"/"Ocultar prévia" no tile (ver o
- * comentário de `minhaTelaOculta` em `TileDeVoz.tsx`). Contá-la aqui também
- * faria o checkbox nascer marcado sem nunca ter escondido nada.
- */
-function chaveDaMinhaTelaAtiva(meuId: string): string | null {
-  for (const p of participantesDe(meuId)) {
-    if (p.identity === meuId) continue;
-    for (const pub of telasDe(p)) {
-      return chaveDoTileDeTela(meuId, pub.trackSid);
-    }
-  }
-  return null;
-}
-
-/**
- * O mesmo toggle do botão "Ver prévia"/"Ocultar prévia" do tile
- * (`onPreviaDaMinhaTela` em `VoiceGrid.tsx`): guarda a escolha em
- * `usePreviaDaMinhaTela`, tira a tela do destaque se for ela quem está lá
- * (senão o palco ficaria com o aviso "Você está compartilhando sua tela" em
- * tamanho de cinema) e reaplica as assinaturas — sem isso o LiveKit
- * continuaria (des)assinando pela decisão antiga até o próximo evento do SDK.
- */
-function alternarPreviaDaMinhaTela(chave: string, ver: boolean): void {
-  usePreviaDaMinhaTela.setState({ chave: ver ? chave : null });
-  if (!ver && useVoice.getState().focado === chave) useVoice.getState().setFocado(null);
-  aplicarAssinaturasDeTela();
 }
 
 /** Tamanho inicial das janelas soltas, em 16:9 como os tiles do palco. */

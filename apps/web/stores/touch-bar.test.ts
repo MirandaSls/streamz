@@ -15,6 +15,7 @@ vi.mock("@/lib/desktop", () => ({
   isTauri: () => false,
   ehMacNoTauri: () => false,
   ehAndroidNoTauri: () => false,
+  ehMac: () => false,
   abrirNoSistema: vi.fn(async () => false),
   iniciarTelaNativa: vi.fn(async () => ({})),
   pararTelaNativa: vi.fn(async () => {}),

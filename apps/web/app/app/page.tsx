@@ -1,5 +1,6 @@
 "use client";
 
+import { instalarCapturaDeErros } from "@/lib/diagnostico";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -129,6 +130,8 @@ export default function AppPage() {
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
+  // erros de JS não tratados viram relatório de diagnóstico (best-effort)
+  useEffect(() => instalarCapturaDeErros(), []);
   // Carga inicial ao entrar no app. A lista de servidores só era buscada no
   // `onReconnect` — que, por desenho, não dispara na primeira conexão —, então
   // abrir/recarregar o app deixava o rail vazio até o socket cair e voltar.

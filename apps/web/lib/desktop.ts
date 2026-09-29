@@ -115,6 +115,20 @@ export function ehMacNoTauri(): boolean {
 }
 
 /**
+ * Mac de verdade, no app ou no navegador. O problema que isto responde é do
+ * WebKit no macOS (a `VoiceProcessingIO` ligada pelo cancelamento de eco,
+ * ver `lib/ruido-padrao.ts`) e vale igual no Safari e no WKWebView do Tauri —
+ * por isso não basta `ehMacNoTauri`. O iPad que se diz `Macintosh` fica de
+ * fora pelo `maxTouchPoints`: nenhum Mac tem tela de toque. Seguro em SSR
+ * (sem `navigator`, não é Mac).
+ */
+export function ehMac(): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (!/Macintosh|Mac OS X/i.test(navigator.userAgent)) return false;
+  return !(navigator.maxTouchPoints > 1);
+}
+
+/**
  * Dispara uma notificação nativa.
  * Aceita `notify({ title, body, onClick })` ou a forma curta `notify(title, body)`.
  */

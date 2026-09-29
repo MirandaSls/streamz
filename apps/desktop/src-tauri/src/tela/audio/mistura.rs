@@ -29,7 +29,9 @@ pub fn converter_para_estereo(bruto: &[u8], amostra: Amostra, canais: usize, sai
             Amostra::I32 => (i32::from_le_bytes([b[0], b[1], b[2], b[3]]) >> 16) as i16,
             Amostra::F32 => {
                 let v = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-                (v.clamp(-1.0, 1.0) * 32767.0) as i16
+                // arredonda em vez de truncar: `as i16` corta para zero e
+                // deixa um viés de distorção em sinal baixo
+                (v.clamp(-1.0, 1.0) * 32767.0).round() as i16
             }
         }
     };
@@ -63,7 +65,10 @@ pub fn planar_f32_para_estereo(canais: &[&[f32]], saida: &mut Vec<i16>) {
         [esquerdo, direito, ..] => (*esquerdo, *direito),
     };
     let quadros = esquerdo.len().min(direito.len());
-    let converter = |x: f32| -> i16 { (x.clamp(-1.0, 1.0) * 32767.0) as i16 };
+    let converter = |x: f32| -> i16 {
+        // arredondar (não truncar) evita viés para zero; o clamp satura
+        (x.clamp(-1.0, 1.0) * 32767.0).round() as i16
+    };
     for i in 0..quadros {
         saida.push(converter(esquerdo[i]));
         saida.push(converter(direito[i]));
@@ -182,7 +187,7 @@ mod testes {
             bruto.extend_from_slice(&v.to_le_bytes());
         }
         converter_para_estereo(&bruto, Amostra::F32, 4, &mut saida);
-        assert_eq!(saida, vec![16383, -16383, 32767, -32767]);
+        assert_eq!(saida, vec![16384, -16384, 32767, -32767]);
 
         let mut mono = Vec::new();
         converter_para_estereo(&7i16.to_le_bytes(), Amostra::I16, 1, &mut mono);
@@ -190,11 +195,19 @@ mod testes {
     }
 
     #[test]
+    fn float_arredonda_em_vez_de_truncar() {
+        // 0.99999 * 32767 = 32766.67: truncar daria 32766, arredondar 32767
+        let mut saida = Vec::new();
+        planar_f32_para_estereo(&[&[0.99999, -0.99999]], &mut saida);
+        assert_eq!(saida, vec![32767, 32767, -32767, -32767]);
+    }
+
+    #[test]
     fn planar_mono_e_estereo() {
         // mono: cada quadro duplica para L e R
         let mut saida = Vec::new();
         planar_f32_para_estereo(&[&[0.5, -0.5]], &mut saida);
-        assert_eq!(saida, vec![16383, 16383, -16383, -16383]);
+        assert_eq!(saida, vec![16384, 16384, -16384, -16384]);
 
         // estéreo: intercala L,R; e clamp de 1.5 vira 32767 (limite de i16)
         let mut saida = Vec::new();

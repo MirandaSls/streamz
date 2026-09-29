@@ -38,6 +38,7 @@ import { ApplicationsModule } from "./modules/applications/applications.module";
 import { DiscordCompatModule } from "./modules/discord-compat/discord-compat.module";
 import { InteractionsModule } from "./modules/interactions/interactions.module";
 import { UpdatesModule } from "./modules/updates/updates.module";
+import { DiagnosticsModule } from "./modules/diagnostics/diagnostics.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
@@ -87,6 +88,7 @@ import { validateEnv } from "./common/env";
     SoundboardModule,
     MediaModule,
     UpdatesModule,
+    DiagnosticsModule,
     // ── h-moderacao ──
     AuditModule,
     ModerationModule,
