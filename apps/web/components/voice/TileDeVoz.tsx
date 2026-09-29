@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Apps,
-  Eye,
   ExternalLink,
-  EyeOff,
   HeadphoneOff,
   MicOff,
   Monitor,
@@ -66,16 +64,16 @@ export interface Tile {
   state: VoiceStateEvent;
   publication: TrackPublication | null;
   tela: boolean;
-  /** só para tela: o vídeo aparece — escolhi assistir, é a minha no navegador ou pedi a prévia da minha nativa. */
+  /** só para tela: o vídeo aparece — escolhi assistir ou é a minha. */
   assistindo: boolean;
   /** id do dono — o que casa um `focado` guardado como pessoa. */
   userId: string;
   /** há faixa **viva** para desenhar (é o que decide a tela cheia no celular). */
   comVideo: boolean;
   /**
-   * A minha tela pela captura nativa do desktop (`<userId>#tela`). Ela não se
-   * assina por padrão: sem prévia (`assistindo` falso) o tile mostra o aviso
-   * "Você está compartilhando sua tela" em vez do vídeo.
+   * A minha tela pela captura nativa do desktop (`<userId>#tela`): sempre
+   * assinada em LOW (`assinaturas-de-tela.ts`), sem convite "Assistir" nem
+   * "parar de assistir".
    */
   minhaTelaNativa?: boolean;
 }
@@ -88,8 +86,6 @@ export interface AcoesDoTile {
   onFocar: (chave: string | null) => void;
   onAssistir: (userId: string, chave: string) => void;
   onPararDeAssistir: (userId: string) => void;
-  /** "Ver prévia"/"Ocultar prévia" no tile da minha tela nativa. */
-  onPreviaDaMinhaTela?: (chave: string, ver: boolean) => void;
 }
 
 /**
@@ -249,7 +245,6 @@ export function VoiceTile({
   onFocar,
   onAssistir,
   onPararDeAssistir,
-  onPreviaDaMinhaTela,
   grande = false,
   compacto = false,
   semAcoes = false,
@@ -385,18 +380,12 @@ export function VoiceTile({
   const perfil = usePresence((e) => e.profiles[state.user.id]);
   const fundo = useCorDominante((perfil ?? state.user).avatarUrl, corDoAvatar(state.user.id));
   /**
-   * A minha tela nativa sem prévia pedida. A faixa pode até estar chegando (a
-   * miniatura do hover a assina em baixa), mas o tile continua no aviso: quem
-   * decide se ela aparece aqui é o "Ver prévia".
-   */
-  const minhaTelaOculta = !!tile.minhaTelaNativa && !assistindo;
-  /**
    * Só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. E
    * nunca com `emJanela`: a janela solta já decodifica a mesma faixa
    * (`JanelasDeVoz.tsx`); colar o `<video>` aqui **também** seria decodificar
    * duas vezes o quadro que a pessoa já está vendo na outra janela.
    */
-  const video = publication?.track && !minhaTelaOculta && !emJanela ? publication : null;
+  const video = publication?.track && !emJanela ? publication : null;
   /** ver o comentário do componente: a cor dominante só pinta o tile quando
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
@@ -473,8 +462,7 @@ export function VoiceTile({
         if (e.pointerType === "mouse") setPairando(true);
       }}
       // o arrasto do zoom começa na transmissão, nunca num botão de dentro (a
-      // cápsula já para a propagação; "Ocultar prévia" não, e é por isso o
-      // `closest`)
+      // cápsula já para a propagação; o `closest` cobre qualquer outro botão)
       onPointerDown={
         zoomAtivo
           ? (e) => {
@@ -681,68 +669,12 @@ export function VoiceTile({
           raio **16** (`--radius-lg`), que numa pílula de 32 é o `rounded-full`.
           O verde de marca saiu: ali o Discord usa um fundo translúcido, e a
           outra variante do mesmo botão (`.watchButton_ca5185`) nomeia
-          justamente o par `--control-overlay-secondary-*` — o mesmo que este
-          arquivo já usa para "botão flutuando sobre vídeo" (ver `AcaoDoTile` e
-          o "Ver prévia" ao lado). Chapa de marca com sombra sobre a
-          transmissão anunciava um CTA de página, não um convite discreto.
+          justamente o par `--control-overlay-secondary-*` — o mesmo que o
+          contrato já usa para "botão flutuando sobre vídeo". Chapa de marca
+          com sombra sobre a transmissão anunciava um CTA de página, não um convite discreto.
           Rótulo curto pela mesma razão: quem lê "Assistir" sobre uma
           transmissão não precisa que lhe repitam o substantivo — a frase
           inteira continua no `aria-label`. */}
-      {/* A minha própria transmissão, no desktop: aviso em vez de vídeo, como
-          no Discord. Baixar de volta a tela que esta máquina acabou de
-          codificar é decodificar 1440p só para se ver — ver
-          `assinaturas-de-tela.ts`. O botão reaproveita a pílula de 32px do
-          convite ao lado, no cinza secundário: não é um chamado para agir. */}
-      {/* Não junto do `emJanela`: com a janela aberta o placeholder de cima já
-          cobre o mesmo `inset-0` e conta a história certa ("aberto em outra
-          janela"), e não a desta caixa ("Ver prévia"), que não faz sentido
-          para uma tela que já está sendo vista — só noutro lugar. */}
-      {minhaTelaOculta && !emJanela && (
-        <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
-          {!compacto && (
-            <span className="text-sm font-semibold text-text-strong">
-              Você está compartilhando sua tela
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPreviaDaMinhaTela?.(tile.key, true);
-            }}
-            aria-label="Ver prévia da sua transmissão"
-            className={`flex h-8 items-center rounded-full bg-control-secondary-background-default font-semibold text-control-secondary-text-default shadow-popout transition hover:bg-control-secondary-background-hover hover:text-control-secondary-text-hover ${
-              compacto ? "w-8 justify-center" : "gap-2 px-3 text-[13px]"
-            }`}
-          >
-            <Eye size={14} aria-hidden="true" />
-            {!compacto && "Ver prévia"}
-          </button>
-        </span>
-      )}
-
-      {/* Desfazer o "Ver prévia" da minha captura nativa — o **único** ícone
-          que ainda pousa sobre uma transmissão, e ele é nosso: no Discord a
-          própria tela não tem prévia para ligar, então também não há o que
-          desligar. Sem ele o "Ver prévia" seria de mão única, e prévia ligada
-          é faixa assinada (`assinaturas-de-tela.ts`) — o custo que o aviso
-          existe para evitar.
-
-          Canto inferior **direito**, e não o de cima: lá mora o "AO VIVO", que
-          desde as prints `p2`/`p4`/`p6` não pisca mais no hover. Embaixo à
-          esquerda fica o rótulo de nome; esta é a quina que sobra. */}
-      {!semAcoes && tile.minhaTelaNativa && assistindo && (
-        <div
-          className={`absolute bottom-1 right-1 z-20 transition focus-within:opacity-100 ${
-            pairando ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <AcaoDoTile label="Ocultar prévia" onClick={() => onPreviaDaMinhaTela?.(tile.key, false)}>
-            <EyeOff size={14} />
-          </AcaoDoTile>
-        </div>
-      )}
-
       {/* `!emJanela`: abrir a janela solta já assina a transmissão sozinho
           (`useAssinaturaDaTela` em `JanelasDeVoz.tsx`) — mas entre o clique
           que abre a janela e esse efeito rodar há um quadro em que
@@ -943,9 +875,8 @@ export function VoiceTile({
  *
  * Nada de vídeo aqui: `VoiceTile` já zera `video` quando `emJanela` (ver o
  * comentário de lá) para não colar a mesma faixa duas vezes — a janela solta
- * decodifica o quadro dela sozinha (`JanelasDeVoz.tsx`). No lugar, o mesmo
- * papel do "Você está compartilhando sua tela" ao lado: ícone discreto,
- * aviso, e o único caminho de volta.
+ * decodifica o quadro dela sozinha (`JanelasDeVoz.tsx`). No lugar: ícone
+ * discreto, aviso, e o único caminho de volta.
  *
  * O clique na área inteira foca a janela (é a mesma pessoa que clicaria no
  * tile para focar no palco, só que agora o conteúdo está lá, não aqui); o
@@ -998,41 +929,6 @@ function PlaceholderJanelaAberta({
         Voltar para cá
       </button>
     </div>
-  );
-}
-
-/** Botão da barra de ações que aparece no hover do tile. */
-function AcaoDoTile({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      {/* migração 0.8: fica `<button>` — `BotaoDeIcone` não tem tamanho 28
-          (só 24/32/40) nem fundo permanente (`comFundo` só pinta no
-          hover/active); aqui o fundo escuro é o **repouso**, para o ícone se
-          ler sobre o vídeo mesmo sem hover. Cor pelo par que o próprio
-          contrato já usa para "botão redondo flutuando sobre vídeo"
-          (`TelaCheiaDeVideo`, `ImageModal`): `control-overlay-secondary`. */}
-      <button
-        type="button"
-        onClick={(e) => {
-          // o tile inteiro é clicável (põe no palco): sem isto, silenciar
-          // alguém também trocaria o foco
-          e.stopPropagation();
-          onClick(e);
-        }}
-        aria-label={label}
-        className="grid h-7 w-7 place-items-center rounded bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default transition hover:bg-control-overlay-secondary-background-hover"
-      >
-        {children}
-      </button>
-    </Tooltip>
   );
 }
 

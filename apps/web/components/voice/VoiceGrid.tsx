@@ -30,20 +30,11 @@ import {
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import {
-  chaveDoTileDeTela,
-  minhaTelaAparece,
-  usePreviaDaMinhaTela,
-} from "@/stores/assinaturas-de-tela";
+import { chaveDoTileDeTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
-import {
-  previaDaMinhaTelaLigada,
-  usePreferenciasDeTransmissao,
-} from "@/stores/preferencias-de-transmissao";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
 import { ui } from "@/stores/ui";
 import {
-  aplicarAssinaturasDeTela,
   camerasDe,
   participantesDe,
   telasDe,
@@ -111,24 +102,6 @@ import {
  * com o app inteiro: a grade desmonta ao trocar de tela, e a chamada não.
  */
 
-// "Mostrar meu compartilhamento de tela", "Pausar prévia sem foco" e o próprio
-// foco da janela mudam a assinatura da minha tela, e nenhum deles passa pela
-// store de voz — então quem reaplica é daqui, no nível do módulo e não num
-// efeito: a grade desmonta ao trocar de tela, e a janela perder o foco com a
-// grade desmontada deixaria a prévia assinada (e decodificada) em segundo
-// plano. Só reaplica quando a **decisão** muda, não a cada escrita na store.
-// O ciclo store de voz → assinaturas → preferências impede que isto more em
-// `assinaturas-de-tela.ts`, que não pode importar `aplicarAssinaturasDeTela`.
-if (typeof window !== "undefined") {
-  let anterior = previaDaMinhaTelaLigada(usePreferenciasDeTransmissao.getState());
-  usePreferenciasDeTransmissao.subscribe((s) => {
-    const agora = previaDaMinhaTelaLigada(s);
-    if (agora === anterior) return;
-    anterior = agora;
-    aplicarAssinaturasDeTela();
-  });
-}
-
 /** Uma vaga do palco: alguém, ou o convite que ocupa a vaga vazia. */
 type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
 
@@ -161,9 +134,9 @@ function assinaturaDasCelulas(celulas: readonly Celula[]): string {
  * regra antiga só excluía a captura nativa do desktop (`minhaTelaNativa`), e no
  * navegador `assistindo` é verdadeiro para a minha própria tela por definição.
  *
- * Pôr a minha no palco também custa caro no desktop: lá ela seria assinada de
- * volta do SFU (ver `assinaturas-de-tela.ts`), que é a volta de 1440p que o
- * "Ver prévia" existe para evitar.
+ * No desktop ela já volta do SFU só na camada baixa (ver
+ * `assinaturas-de-tela.ts`): no destaque seria um vídeo de baixa em tamanho de
+ * cinema.
  */
 export function telaQueAssumeOPalco(tiles: readonly Tile[], meuId?: string): Tile | null {
   return tiles.find((t) => t.tela && t.assistindo && t.userId !== meuId) ?? null;
@@ -251,12 +224,6 @@ export default function VoiceGrid({
   const focarAutomaticamente = useVoice((s) => s.focarAutomaticamente);
   const assistir = useVoice((s) => s.assistir);
   const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
-  const previaDaMinhaTela = usePreviaDaMinhaTela((s) => s.chave);
-  // a minha tela aparece por padrão (paridade Discord), salvo a preferência
-  // desligada ou a janela fora de foco com "pausar" ligado — um booleano, para
-  // a grade não re-renderizar a cada escrita que não muda a decisão
-  const previaPorPreferencia = usePreferenciasDeTransmissao(previaDaMinhaTelaLigada);
-  const setMostrarMinhaTela = usePreferenciasDeTransmissao((s) => s.setMostrarMinhaTela);
   // menu de vídeo do palco (paridade Discord): prévia da própria câmera e
   // mostrar/ocultar quem está sem vídeo — ver `preferencias-do-palco.ts`
   const previaDaCamera = usePreferenciasDoPalco((s) => s.previaDaCamera);
@@ -302,26 +269,19 @@ export default function VoiceGrid({
       telasDe(p).map((pub): Tile => {
         const key = chaveDoTileDeTela(state.user.id, pub.trackSid);
         // A minha tela pela captura nativa do desktop: vem do `<userId>#tela`,
-        // um participante que não é a pessoa. Ela se assina (em LOW) pela
-        // preferência "Mostrar meu compartilhamento de tela" ou quando eu peço
-        // a prévia / a ponho no palco; fora disso — preferência desligada, ou
-        // pausada com a janela sem foco — o tile mostra o aviso "Você está
-        // compartilhando sua tela". A conta é a mesma da assinatura
-        // (`minhaTelaAparece`), para o tile nunca desenhar faixa desassinada.
+        // um participante que não é a pessoa. Ela está sempre assinada (em
+        // LOW, ver `assinaturas-de-tela.ts`), então aparece como a do navegador.
         const minhaTelaNativa = sou && p.identity !== state.user.id;
-        const mostrando =
-          minhaTelaNativa &&
-          minhaTelaAparece(key, { previaPorPreferencia, previaDaMinhaTela, focado });
         return {
           key,
           state,
           publication: pub,
           tela: true,
-          // No navegador a minha tela é faixa local e aparece sempre; a dos
-          // outros, só quando escolho assistir.
-          assistindo: minhaTelaNativa ? mostrando : sou || assistindo.has(state.user.id),
+          // A minha tela aparece sempre; a dos outros, só quando escolho
+          // assistir.
+          assistindo: sou || assistindo.has(state.user.id),
           userId: state.user.id,
-          comVideo: !!pub.track && (!minhaTelaNativa || mostrando),
+          comVideo: !!pub.track,
           minhaTelaNativa,
         };
       }),
@@ -362,20 +322,6 @@ export default function VoiceGrid({
       if (focado !== chave) setFocado(chave);
     },
     onPararDeAssistir: pararDeAssistir,
-    // a escolha fica fora da store de voz (ver `usePreviaDaMinhaTela`), então
-    // quem a muda reaplica as assinaturas na mão
-    onPreviaDaMinhaTela: (chave: string, ver: boolean) => {
-      usePreviaDaMinhaTela.setState({ chave: ver ? chave : null });
-      // "Ocultar prévia" com a prévia vindo da preferência: limpar a escolha do
-      // tile não bastaria (a preferência a manteria no ar), então ocultar
-      // desliga "Mostrar meu compartilhamento de tela" — é o mesmo interruptor
-      // que o Discord mexe. O `subscribe` do topo do módulo reaplica.
-      if (!ver && previaPorPreferencia) setMostrarMinhaTela(false);
-      // ocultar com a tela no palco tira ela de lá: no destaque ela seguiria
-      // assinada, e o aviso em tamanho de cinema não serve para nada
-      if (!ver && focado === chave) setFocado(null);
-      aplicarAssinaturasDeTela();
-    },
   };
 
   // **Virtualização da tira de miniaturas do modo foco.** A tira rola de lado

@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
   ElementInfo,
-  RemoteTrackPublication,
   RemoteVideoTrack,
   Track,
   TrackPublication,
@@ -14,16 +13,9 @@ import { HeadphoneOff, MicOff, Monitor } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { livekitCarregado } from "@/lib/livekit";
-import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { useJanelasDeVoz, type JanelaDeVoz } from "@/stores/janelas-de-voz";
-import {
-  aplicarAssinaturasDeTela,
-  camerasDe,
-  participantesDe,
-  telasDe,
-  useVoice,
-} from "@/stores/voice";
+import { camerasDe, participantesDe, telasDe, useVoice } from "@/stores/voice";
 
 /**
  * O conteúdo das janelas soltas da chamada ("Usuário em Nova Janela" e
@@ -108,7 +100,7 @@ function ConteudoDaJanela({
   const publication = publicacaoDaJanela(janela);
   const ausente = !state || (tipo === "tela" && !publication);
 
-  useAssinaturaDaTela(janela, meId, publication);
+  useAssinaturaDaTela(janela, meId);
 
   // Pessoa saiu da chamada, ou parou de transmitir: a janela não tem mais o que
   // mostrar. Câmera desligada **não** fecha — cai no avatar, como o tile.
@@ -231,17 +223,10 @@ function publicacaoDaJanela({ tipo, userId }: JanelaDeVoz): TrackPublication | n
 }
 
 /**
- * `pub instanceof RemoteTrackPublication`, sem importar o SDK como valor (ver
- * `lib/livekit.ts`): sem ele carregado não há sala, e sem sala não há
- * publicação remota nenhuma — a resposta é `false`. Mesmo padrão de
- * `ehPublicacaoRemota` em `stores/voice.ts`.
+ * `track instanceof RemoteVideoTrack`, sem importar o SDK como valor (ver
+ * `lib/livekit.ts`): sem ele carregado não há sala, e sem sala não há faixa
+ * remota nenhuma — a resposta é `false`.
  */
-function ehPublicacaoRemota(pub: TrackPublication | null): pub is RemoteTrackPublication {
-  const lk = livekitCarregado();
-  return !!lk && !!pub && pub instanceof lk.RemoteTrackPublication;
-}
-
-/** O mesmo, para `track instanceof RemoteVideoTrack`. */
 function ehFaixaDeVideoRemota(track: Track): track is RemoteVideoTrack {
   const lk = livekitCarregado();
   return !!lk && track instanceof lk.RemoteVideoTrack;
@@ -259,26 +244,11 @@ function ehFaixaDeVideoRemota(track: Track): track is RemoteVideoTrack {
  * apagaria o que ela acabou de escolher. Foco automático não conta — é o
  * próprio `assistir` da janela que o provoca.
  *
- * **A minha tela pela captura nativa** (`<userId>#tela`, remota para o meu
- * cliente): ela não se assina sozinha, e o caminho é o "Ver prévia" do tile
- * (`usePreviaDaMinhaTela`), sempre em camada baixa — inclusive quando a
- * origem é a janela solta que `abrirMenuDaMinhaTela` oferece para a própria
- * transmissão (`podeAbrirJanelaSolta`, liberada no desktop pelo
- * `on_new_window` de `lib.rs`): o efeito abaixo entra nesse caso e a janela
- * não nasce preta. A minha tela no navegador (sem captura nativa) é local e
- * não se assina.
+ * **A minha tela** não passa por aqui: pela captura nativa (`<userId>#tela`)
+ * ela já está sempre assinada, em camada baixa (`assinaturas-de-tela.ts`), e
+ * no navegador é faixa local, que não se assina.
  */
-function useAssinaturaDaTela(
-  { tipo, userId }: JanelaDeVoz,
-  meId: string | undefined,
-  publication: TrackPublication | null,
-): void {
-  const sou = !!meId && userId === meId;
-  // só a publicação remota da minha tela precisa de prévia; o sid identifica o
-  // tile (`chaveDoTileDeTela`), e muda se a transmissão recomeçar
-  const sidDaMinhaTelaNativa =
-    tipo === "tela" && sou && ehPublicacaoRemota(publication) ? publication.trackSid : null;
-
+function useAssinaturaDaTela({ tipo, userId }: JanelaDeVoz, meId: string | undefined): void {
   useEffect(() => {
     if (tipo !== "tela" || !meId || userId === meId) return;
     const jaAssistia = useVoice.getState().assistindo.has(userId);
@@ -293,22 +263,6 @@ function useAssinaturaDaTela(
       if (!escolhidaNoPalco) s.pararDeAssistir(userId);
     };
   }, [tipo, userId, meId]);
-
-  useEffect(() => {
-    if (!sidDaMinhaTelaNativa || !meId) return;
-    const chave = chaveDoTileDeTela(meId, sidDaMinhaTelaNativa);
-    const anterior = usePreviaDaMinhaTela.getState().chave;
-    if (anterior === chave) return; // a prévia do tile já estava ligada: não é nossa
-    usePreviaDaMinhaTela.setState({ chave });
-    aplicarAssinaturasDeTela();
-    return () => {
-      // só desfaz se ninguém mexeu depois (o "Ocultar"/"Ver prévia" do tile
-      // passa a ser a escolha que vale)
-      if (usePreviaDaMinhaTela.getState().chave !== chave) return;
-      usePreviaDaMinhaTela.setState({ chave: anterior });
-      aplicarAssinaturasDeTela();
-    };
-  }, [sidDaMinhaTelaNativa, meId]);
 }
 
 // ── o <video> na outra janela ─────────────────────────────────────────────
