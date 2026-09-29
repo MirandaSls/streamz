@@ -48,6 +48,12 @@ mod permissoes;
 #[cfg(windows)]
 mod atenuacao;
 
+// Runtime do WebView2 parado numa versão velha (o WebRTC dele derrubava a
+// voz): o app baixa e roda o bootstrapper da Microsoft sozinho. Ver
+// `src/webview2.rs`.
+#[cfg(windows)]
+mod webview2;
+
 // O par Linux: o WebKitGTK não pergunta, **nega** microfone e câmera quando
 // ninguém responde ao `permission-request`, e o wry não responde. Ver
 // `src/permissoes_linux.rs`.
@@ -208,6 +214,8 @@ pub fn run() {
             tela::silenciar_audio_da_tela,
             suspender_atenuacao_do_windows,
             restaurar_atenuacao_do_windows,
+            #[cfg(windows)]
+            webview2::estado_do_webview2,
             #[cfg(target_os = "macos")]
             touch_bar::atualizar_touch_bar,
         ])
@@ -216,6 +224,13 @@ pub fn run() {
             // Antes de tudo: um panic ou crash já no resto do `setup` precisa
             // cair no arquivo de log.
             registro::instalar_ganchos(app.handle());
+
+            // --- Versão do WebView2 ------------------------------------------
+            // Logo depois do registro, para a versão cair no log de toda
+            // abertura. Não bloqueia: o trabalho (e a eventual instalação) roda
+            // numa thread própria.
+            #[cfg(windows)]
+            webview2::verificar_e_atualizar(app.handle());
 
             // --- Janela principal --------------------------------------------
             // Primeiro de tudo: os blocos abaixo procuram a `main` pelo rótulo.

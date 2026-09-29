@@ -772,6 +772,62 @@ export function ouvirSaidaDoApp(ouvinte: () => void): () => void {
   };
 }
 
+// ── Atualização do WebView2 (Windows) ──────────────────────────────────────
+
+/**
+ * Estado da atualização do WebView2 (o Chromium embutido no Windows), como o
+ * Rust o publica no evento `webview2:atualizacao` e no comando
+ * `estado_do_webview2`.
+ *
+ * Mora aqui, e não em `@streamz/shared`, porque é contrato **Rust ↔ web**, não
+ * API ↔ web: a API do servidor nunca vê este payload.
+ */
+export type EstadoDoWebView2 = {
+  estado: "atualizando" | "concluida" | "falhou";
+  versao: string;
+  erro?: string;
+};
+
+/**
+ * Avisa `cb` sobre a atualização do WebView2. Primeiro consulta o comando
+ * `estado_do_webview2` (a web pode ter montado depois do evento) e em seguida
+ * ouve `webview2:atualizacao`. Se o comando não existir — build antigo, macOS,
+ * Linux —, o erro é ignorado e só o evento fica valendo.
+ *
+ * Fora do Tauri é no-op. Devolve a função que desliga a escuta.
+ */
+export function ouvirAtualizacaoDoWebView2(
+  cb: (e: EstadoDoWebView2) => void,
+): () => void {
+  if (!isTauri()) return () => {};
+  let parar: (() => void) | null = null;
+  let cancelado = false;
+  void (async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const atual = await invoke<EstadoDoWebView2 | null>("estado_do_webview2");
+      if (atual && !cancelado) cb(atual);
+    } catch {
+      // sem o comando (build antigo, macOS/Linux): só o evento vale
+    }
+    if (cancelado) return;
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const desligar = await listen<EstadoDoWebView2>("webview2:atualizacao", (ev) => {
+        if (!cancelado) cb(ev.payload);
+      });
+      if (cancelado) desligar();
+      else parar = desligar;
+    } catch {
+      // sem o evento o aviso simplesmente não aparece
+    }
+  })();
+  return () => {
+    cancelado = true;
+    parar?.();
+  };
+}
+
 // ── Atenuação de comunicação do Windows ────────────────────────────────────
 
 // ── Chamada em segundo plano (Android) ─────────────────────────────────────
