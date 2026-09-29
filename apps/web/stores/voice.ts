@@ -167,6 +167,32 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "error";
 /** Sala do canal em que estou — fora da store, ver o comentário acima. */
 let sala: Room | null = null;
 /**
+ * Geração da **entrada** em sala (`connect`, `startCall`, `acceptCall`).
+ *
+ * Entrar é assíncrono em várias etapas (token ou `POST /dms/:id/call`, o chunk
+ * do SDK, `room.connect`), e nenhuma delas era cancelada quando a pessoa
+ * trocava de canal no meio. `desmontarSala` só alcança a `Room` que já está em
+ * `sala`; uma entrada ainda esperando o token não tem `Room` nenhuma para ser
+ * derrubada. Quando o token atrasado chegava, `entrarNaSala` desmontava a sala
+ * **nova**, punha a antiga em `sala` e o `AudioRemotoHost` — que toca quem
+ * estiver em `sala` — voltava a tocar a chamada anterior, com a interface
+ * dizendo que eu estava na outra. É o relato "troco de canal de voz e continuo
+ * escutando a call anterior".
+ *
+ * Cada entrada guarda o número que recebeu e confere depois de cada `await`;
+ * quem vê o número mudado desfaz o que abriu e sai calado — nem `sala`, nem
+ * `status`, nem aviso de falha. Incrementam: toda entrada (depois das guardas
+ * de "já estou aqui", que não podem cancelar a entrada em curso) e
+ * `sairDaSalaAtual`. `desmontarSala` **não**: `entrarNaSala` a chama para
+ * abrir a própria sala, e incrementar ali cancelaria a entrada que a chamou.
+ */
+let geracaoDeConexao = 0;
+
+/** A entrada que recebeu `geracao` foi substituída por outra (ou por uma saída)? */
+function entradaCancelada(geracao: number): boolean {
+  return geracao !== geracaoDeConexao;
+}
+/**
  * Coalesce as flags (mudo/surdo/câmera/tela) antes de mandar `VOICE_UPDATE`.
  *
  * Spammar mudo/desmudo chamava `syncFlags` a cada toggle, e o token bucket do
@@ -721,8 +747,16 @@ type AjustarVoz = (
     | ((estado: VoiceStoreState) => Partial<VoiceStoreState>),
 ) => void;
 
-/** Resultado de tentar abrir a mídia: falta de configuração ≠ falha. */
-type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
+/**
+ * Resultado de tentar abrir a mídia: falta de configuração ≠ falha. `cancelada`
+ * é a entrada que outra substituiu no meio (ver `geracaoDeConexao`): não é
+ * erro de ninguém, e quem a recebe não mexe em nada da store.
+ */
+type ResultadoMidia =
+  | { tipo: "ok" }
+  | { tipo: "sem-config" }
+  | { tipo: "falha"; erro: string }
+  | { tipo: "cancelada" };
 
 /** O recorte da store que `chamada-em-curso.ts` lê (a guarda do clique repetido). */
 function instantaneo(s: VoiceStoreState): ConexaoDeChamada {
@@ -838,6 +872,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
   function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
     const { channelId, guildId, call } = get();
     console.info("[voz] sairDaSalaAtual", { motivo, channelId });
+    // uma entrada ainda em voo (esperando token, SDK ou `room.connect`) não
+    // está em `sala` para `fecharSala` alcançar: é o número mudado que a faz
+    // desistir quando acordar
+    geracaoDeConexao += 1;
     // sair da call encerra o teste: ele existe para dizer "o outro lado vai te
     // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
     // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
@@ -1154,6 +1192,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       }
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
+      // depois das guardas: o clique repetido no mesmo canal não pode cancelar
+      // a entrada que ele mesmo começou. Incrementa também sem troca de sala —
+      // `reconnect` (e um `forcar` com a entrada anterior ainda em voo) refaz
+      // a mesma sala, e só a entrada mais nova pode assumir `sala`
+      const geracao = ++geracaoDeConexao;
 
       set({
         channelId: channel.id,
@@ -1196,7 +1239,13 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       emissorFlags.pedir(flags());
 
       // 2) mídia, se houver
-      const r = await conectarMidia(channel, set, rerender, get);
+      const r = await conectarMidia(channel, set, rerender, get, geracao);
+      // outra entrada (ou a saída) veio depois desta: o `status` e o erro já
+      // são dela, e esta aqui não tem mais nada a dizer
+      if (r.tipo === "cancelada" || entradaCancelada(geracao)) {
+        console.info("[voz] connect cancelado por entrada mais nova", { channelId: channel.id });
+        return;
+      }
       if (r.tipo === "falha") {
         set({ status: "error", midiaDisponivel: false, erro: r.erro });
         return;
@@ -1801,6 +1850,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // precisa fechar a sala antiga para não ficar com duas conexões de mídia.
       // A chamada mora na conversa, então a coluna do canal de voz fecha
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
+      // ver `geracaoDeConexao`: a partir daqui, uma entrada mais nova vence esta
+      const geracao = ++geracaoDeConexao;
       get().dispatchCall({ type: "start", channelId });
       set({
         channelId,
@@ -1816,6 +1867,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       try {
         await abrirConversa(channelId);
         const r = await api.startCall(channelId);
+        // a pessoa trocou de sala (ou desligou) enquanto o `POST` ia: o `join`
+        // abaixo a puxaria de volta para esta conversa no gateway
+        if (entradaCancelada(geracao)) return;
         for (const e of r.states) get().applyState(e);
 
         // ── o REST não basta: o socket também precisa entrar na voz ──
@@ -1852,11 +1906,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           set({ status: "connected", midiaDisponivel: false, erro: null });
           return;
         }
-        await entrarNaSala(r.voice, set, rerender, get);
+        if (!(await entrarNaSala(r.voice, set, rerender, get, geracao))) return;
         set({ status: "connected", midiaDisponivel: true, erro: null });
         get().syncFlags();
         if (comVideo) await get().toggleCam();
       } catch (e) {
+        // a falha de uma entrada já substituída (a `Room` dela foi derrubada
+        // pela troca) não é notícia: o estado e a chamada são da mais nova
+        if (entradaCancelada(geracao)) return;
         set({ status: "error", erro: errorMessage(e, "Não foi possível iniciar a chamada") });
         get().dispatchCall({ type: "ended", channelId, reason: "ended" });
         ui.toast(errorMessage(e, "Não foi possível iniciar a chamada"), "error");
@@ -1874,6 +1931,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // conta entrando, em `applyState`). Cancelar o aviso deixa "Recusar" à mão
       if (recusadoSemWebRTC({ guildId: null, channelId })) return false;
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
+      // ver `geracaoDeConexao`: a partir daqui, uma entrada mais nova vence esta
+      const geracao = ++geracaoDeConexao;
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
       // quem atende já ganha `voiceChannelId` pelo próprio `call.accept`, mas só
@@ -1892,10 +1951,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // direta (o token de canal de voz recusaria uma DM com 400)
       try {
         const r = await api.startCall(channelId);
+        // atender foi feito; o que veio depois (outra sala, desligar) manda no
+        // estado — esta entrada só não pode abrir sala nem mexer no `status`
+        if (entradaCancelada(geracao)) return true;
         for (const e of r.states) get().applyState(e);
-        if (r.voice) await entrarNaSala(r.voice, set, rerender, get);
+        if (r.voice && !(await entrarNaSala(r.voice, set, rerender, get, geracao))) return true;
         set({ status: "connected", midiaDisponivel: !!r.voice, erro: null });
       } catch {
+        if (entradaCancelada(geracao)) return true;
         // sem mídia a chamada ainda vale: o estado de voz já põe os dois na sala
         set({ status: "connected", midiaDisponivel: false, erro: null });
       }
@@ -2183,6 +2246,7 @@ async function conectarMidia(
   set: AjustarVoz,
   rerender: () => void,
   get: () => VoiceStoreState,
+  geracao: number,
 ): Promise<ResultadoMidia> {
   const crono = cronometroDeVoz("conectarMidia");
   // o chunk do SDK baixa enquanto o token vem, em vez de depois dele; a falha
@@ -2200,35 +2264,54 @@ async function conectarMidia(
   } else {
     try {
       const r = await api.startCall(channel.id);
+      if (entradaCancelada(geracao)) return { tipo: "cancelada" };
       for (const e of r.states) get().applyState(e);
       creds = r.voice;
     } catch (e) {
+      if (entradaCancelada(geracao)) return { tipo: "cancelada" };
       // aqui não é falta de configuração: a conversa recusou (bloqueio, acesso)
       return { tipo: "falha", erro: errorMessage(e, FALHA_MIDIA) };
     }
   }
+  // o token é a espera mais longa antes de haver `Room`: quem trocou de sala
+  // enquanto ele vinha não pode ver esta entrada abrir a sala antiga por cima
+  // da nova
+  if (entradaCancelada(geracao)) return { tipo: "cancelada" };
   if (!creds?.token || !/^wss?:\/\//i.test(creds.url ?? "")) return { tipo: "sem-config" };
   try {
-    await entrarNaSala(creds, set, rerender, get);
+    if (!(await entrarNaSala(creds, set, rerender, get, geracao))) return { tipo: "cancelada" };
     crono.etapa("na sala (o palco já pode aparecer)");
     return { tipo: "ok" };
   } catch (e) {
+    // a `Room` desta entrada foi derrubada pela troca de sala e o
+    // `room.connect` rejeitou por isso: não é falha de conexão
+    if (entradaCancelada(geracao)) return { tipo: "cancelada" };
     // credenciais existiam e mesmo assim não conectou: isso é falha
     return { tipo: "falha", erro: errorMessage(e, FALHA_MIDIA) };
   }
 }
 
-/** Conecta o `Room` e liga os eventos do SDK ao `tick`/`falando` da store. */
+/**
+ * Conecta o `Room` e liga os eventos do SDK ao `tick`/`falando` da store.
+ *
+ * Devolve `false` quando a entrada `geracao` foi substituída no meio (ver
+ * `geracaoDeConexao`) — aí nada desta entrada fica de pé, e `sala` continua
+ * sendo de quem a substituiu.
+ */
 async function entrarNaSala(
   creds: { token: string; url: string },
   set: AjustarVoz,
   rerender: () => void,
   get: () => VoiceStoreState,
-) {
+  geracao: number,
+): Promise<boolean> {
   // o SDK chega aqui, e não no boot (ver o import no topo). Antes de
   // `desmontarSala`: se o chunk não baixar, a sala que existia fica de pé e o
   // erro sobe como qualquer outra falha de conexão
   const { ParticipantEvent, Room, RoomEvent } = await carregarLivekit();
+  // antes de `desmontarSala`: a sala que está lá agora é a da entrada que
+  // substituiu esta, e derrubá-la para abrir a antiga é exatamente o defeito
+  if (entradaCancelada(geracao)) return false;
   // **Nunca duas `Room` ao mesmo tempo.** O LiveKit não aceita a mesma
   // identidade duas vezes: a conexão nova derruba a anterior, e a anterior —
   // com os ouvintes ainda pendurados — anunciava "a conexão de voz caiu" e
@@ -2396,7 +2479,24 @@ async function entrarNaSala(
     });
 
   const crono = cronometroDeVoz("entrarNaSala");
-  await room.connect(creds.url, creds.token);
+  try {
+    await room.connect(creds.url, creds.token);
+  } catch (e) {
+    // a troca de sala derrubou esta `Room` no meio do handshake e o SDK
+    // rejeitou o `connect` por isso: é cancelamento, não queda
+    if (entradaCancelada(geracao)) {
+      largarSalaCancelada(room);
+      return false;
+    }
+    throw e;
+  }
+  // o handshake terminou depois de a pessoa ter ido para outra sala (o SDK
+  // nem sempre consegue abortar a tentativa em curso): esta conexão não pode
+  // publicar microfone nem ficar tocando no `AudioRemotoHost`
+  if (entradaCancelada(geracao)) {
+    largarSalaCancelada(room);
+    return false;
+  }
   crono.etapa("room.connect (ICE + sinalização)");
   // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
   iniciarMedicaoDePing(room);
@@ -2412,6 +2512,24 @@ async function entrarNaSala(
   void aplicarSaidaEscolhida(room);
   void publicarMicrofone(room, set, crono);
   rerender();
+  return true;
+}
+
+/**
+ * Derruba a `Room` de uma entrada cancelada.
+ *
+ * Se ela ainda é a `sala` (ninguém a desmontou — a entrada nova pode nem ter
+ * mídia), o caminho é o de sempre, `desmontarSala`, que solta também o que
+ * pendurou nela. Se não, basta tirar os ouvintes e desconectar: `sala` é de
+ * outra entrada e não se toca nela.
+ */
+function largarSalaCancelada(room: Room) {
+  if (sala === room) {
+    desmontarSala();
+    return;
+  }
+  room.removeAllListeners();
+  void room.disconnect().catch(() => {});
 }
 
 /**
