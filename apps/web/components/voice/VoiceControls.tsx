@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import BotaoDeSons from "@/components/voice/BotaoDeSons";
@@ -13,6 +13,7 @@ import {
   Capsula,
   SplitDeDispositivo,
 } from "@/components/voice/controles-de-chamada";
+import { LarguraDaFileira, nivelDaBarra } from "@/components/voice/compactacao-da-barra";
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
@@ -51,6 +52,10 @@ export default function VoiceControls({
   const [mais, setMais] = useState<null | "menu" | "ajustes">(null);
   const caixa = useRef<HTMLDivElement>(null);
   const ehMobile = useEhMobile();
+  // Palco estreito: a barra perde peças em ordem (ver `compactacao-da-barra`).
+  // Sem medida (fora da fileira) fica no nível 0, a barra completa de sempre.
+  const disponivel = useContext(LarguraDaFileira);
+  const nivel = disponivel == null ? 0 : nivelDaBarra(disponivel);
 
   const camOn = useVoice((s) => s.camOn);
   const toggleCam = useVoice((s) => s.toggleCam);
@@ -84,6 +89,12 @@ export default function VoiceControls({
   // — a seta de escolher microfone tem 26px de largura, metade de um alvo de
   // toque. Ver `ControlesMobile`.
   if (ehMobile) return <ControlesMobile onLeave={onLeave} leaveLabel={leaveLabel} oculto={oculto} />;
+
+  const rotuloDoMicrofone = abrindoMicrofone
+    ? "Ativando microfone…"
+    : muted
+      ? "Desativar mudo"
+      : "Silenciar";
 
   // com o menu aberto a barra não pode sumir debaixo do cursor
   const escondida = oculto && !mais;
@@ -125,15 +136,21 @@ export default function VoiceControls({
               <MicOff size={22} />
             </button>
           </Tooltip>
+        ) : nivel >= 1 ? (
+          // Sem a seta o botão volta ao formato solto. Perdem-se as setas
+          // primeiro porque a troca de dispositivo continua em "Ajustes de
+          // voz" (menu "Mais").
+          <BotaoDeChamada
+            label={rotuloDoMicrofone}
+            tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
+            pressionado={muted}
+            onClick={toggleMute}
+          >
+            {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+          </BotaoDeChamada>
         ) : (
           <SplitDeDispositivo
-            label={
-              abrindoMicrofone
-                ? "Ativando microfone…"
-                : muted
-                  ? "Desativar mudo"
-                  : "Silenciar"
-            }
+            label={rotuloDoMicrofone}
             labelDaSeta="Escolher microfone"
             tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
             pressionado={muted}
@@ -144,25 +161,38 @@ export default function VoiceControls({
           </SplitDeDispositivo>
         )}
 
-        <SplitDeDispositivo
-          label={camOn ? "Desligar câmera" : "Ligar câmera"}
-          labelDaSeta="Escolher câmera"
-          tom={camOn ? "ativo" : "neutro"}
-          pressionado={camOn}
-          onClick={() => void toggleCam()}
-          menu={() => <ListaDeCameras camLigada={camOn} />}
-        >
-          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
-        </SplitDeDispositivo>
+        {nivel >= 1 ? (
+          <BotaoDeChamada
+            label={camOn ? "Desligar câmera" : "Ligar câmera"}
+            tom={camOn ? "ativo" : "neutro"}
+            pressionado={camOn}
+            onClick={() => void toggleCam()}
+          >
+            {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+          </BotaoDeChamada>
+        ) : (
+          <SplitDeDispositivo
+            label={camOn ? "Desligar câmera" : "Ligar câmera"}
+            labelDaSeta="Escolher câmera"
+            tom={camOn ? "ativo" : "neutro"}
+            pressionado={camOn}
+            onClick={() => void toggleCam()}
+            menu={() => <ListaDeCameras camLigada={camOn} />}
+          >
+            {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+          </SplitDeDispositivo>
+        )}
       </Capsula>
 
       <Capsula>
-        <ScreenShareButton />
+        {/* Nível 2: tela e sons saem da barra porque também vivem no painel
+            "Voz conectada" do rodapé (`VoiceConnectedBar`); sobra só o "Mais". */}
+        {nivel < 2 && <ScreenShareButton />}
 
         {/* Efeitos sonoros ao lado da tela: os dois são "o que eu acrescento à
             sala", que é o critério desta cápsula. Na barra do palco o botão do
             painel de sons é o segundo, como no Discord. */}
-        <BotaoDeSons />
+        {nivel < 2 && <BotaoDeSons />}
 
         {/* A supressão de ruído **não** mora aqui: no Discord ela é o ícone de
             ondas do painel "Voz conectada", ao lado do desligar (ver

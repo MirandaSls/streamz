@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { LarguraDaFileira } from "@/components/voice/compactacao-da-barra";
 
 /** `gap-4` entre as colunas da grade. */
 const GAP_PX = 16;
@@ -137,41 +138,44 @@ export default function FileiraDeControles({
     : { esquerda: true, direita: true };
 
   return (
-    <div
-      ref={raizRef}
-      className="pointer-events-none absolute inset-x-0 bottom-5 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4"
-    >
-      <div className="min-w-0 justify-self-start">
-        {esquerda && (
-          <div
-            ref={esquerdaRef}
-            aria-hidden={!visiveis.esquerda}
-            className={`inline-flex pointer-events-auto ${
-              visiveis.esquerda ? "" : "invisible pointer-events-none"
-            }`}
-          >
-            {esquerda}
-          </div>
-        )}
-      </div>
+    // Consumido pelo `VoiceControls` para compactar a cápsula central.
+    <LarguraDaFileira.Provider value={medidas ? medidas.raiz - PADDING_X_PX : null}>
+      <div
+        ref={raizRef}
+        className="pointer-events-none absolute inset-x-0 bottom-5 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4"
+      >
+        <div className="min-w-0 justify-self-start">
+          {esquerda && (
+            <div
+              ref={esquerdaRef}
+              aria-hidden={!visiveis.esquerda}
+              className={`inline-flex pointer-events-auto ${
+                visiveis.esquerda ? "" : "invisible pointer-events-none"
+              }`}
+            >
+              {esquerda}
+            </div>
+          )}
+        </div>
 
-      <div ref={centroRef} className="pointer-events-auto">
-        {centro}
-      </div>
+        <div ref={centroRef} className="pointer-events-auto">
+          {centro}
+        </div>
 
-      <div className="min-w-0 justify-self-end">
-        {direita && (
-          <div
-            ref={direitaRef}
-            aria-hidden={!visiveis.direita}
-            className={`inline-flex pointer-events-auto ${
-              visiveis.direita ? "" : "invisible pointer-events-none"
-            }`}
-          >
-            {direita}
-          </div>
-        )}
+        <div className="min-w-0 justify-self-end">
+          {direita && (
+            <div
+              ref={direitaRef}
+              aria-hidden={!visiveis.direita}
+              className={`inline-flex pointer-events-auto ${
+                visiveis.direita ? "" : "invisible pointer-events-none"
+              }`}
+            >
+              {direita}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </LarguraDaFileira.Provider>
   );
 }
