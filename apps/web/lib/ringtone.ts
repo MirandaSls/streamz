@@ -219,9 +219,46 @@ export function fatorNoAparelho(fator: number, deBolso: boolean): number {
   return deBolso ? Math.sqrt(fator) : fator;
 }
 
+/**
+ * Quanto se abaixa o som no macOS de mesa: **um terço**, a pedido de quem usa.
+ *
+ * O `FATOR` foi calibrado no Windows, onde o mixer por app fica entre o mestre
+ * e o nosso volume. O macOS não tem mixer por app: o mesmo fator chega direto
+ * ao mestre e sai bem mais alto — só lá o relato de "sons altos demais".
+ */
+export const ATENUACAO_NO_MAC = 1 / 3;
+
+/**
+ * Estamos num Mac de mesa? Sem `navigator` (SSR), `false`.
+ *
+ * O iPad se apresenta como "Macintosh" mas o ponteiro primário é `coarse`;
+ * ele é aparelho de bolso e já tem a compensação própria (a raiz), então não
+ * pode receber a atenuação do Mac por cima.
+ */
+export function ehMacDeMesa(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const dizMac =
+    (navigator.platform ?? "").startsWith("Mac") ||
+    (navigator.userAgent ?? "").includes("Macintosh");
+  return dizMac && !ehAparelhoDeBolso();
+}
+
+/**
+ * `fatorNoAparelho` mais a atenuação do Mac de mesa. Pura, para o teste não
+ * depender de `navigator`. Continua dentro de 0..1: só multiplica por menos de 1.
+ */
+export function fatorNaPlataforma(
+  fator: number,
+  deBolso: boolean,
+  macDeMesa: boolean,
+): number {
+  const base = fatorNoAparelho(fator, deBolso);
+  return macDeMesa ? base * ATENUACAO_NO_MAC : base;
+}
+
 /** Quanto este som sai, de 0 a 1. **Ninguém mais calcula volume de som.** */
 export function volumeDoSom(nome: NomeDeSom): number {
-  const fator = fatorNoAparelho(FATOR[nome], ehAparelhoDeBolso());
+  const fator = fatorNaPlataforma(FATOR[nome], ehAparelhoDeBolso(), ehMacDeMesa());
   return Math.min(1, Math.max(0, volumeDeSaida() * fator));
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import type { SoundboardSound } from "@streamz/shared";
+import { ATENUACAO_NO_MAC, ehMacDeMesa } from "@/lib/ringtone";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -84,7 +85,11 @@ export function tocarEfeitoSonoro(sound: SoundboardSound, volume: number): void 
 export function tocarNaSaida(url: string, volume: number): HTMLAudioElement | null {
   if (useVoicePrefs.getState().deafened) return null;
   if (typeof Audio === "undefined") return null;
-  const nivel = Math.min(1, Math.max(0, volume));
+  // O volume foi calibrado no Windows, onde há mixer por app entre o arquivo e o
+  // ouvido; no macOS não há, e o mesmo nível sai bem mais alto. Fica aqui, e não
+  // em `tocarEfeitoSonoro`, porque as duas prévias (aba do painel e modal
+  // "Adicionar som") chamam esta função direto e precisam soar como o efeito real.
+  const nivel = Math.min(1, Math.max(0, volume)) * (ehMacDeMesa() ? ATENUACAO_NO_MAC : 1);
   if (nivel <= 0) return null;
   try {
     let el = elementos.get(url);
