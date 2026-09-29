@@ -2666,6 +2666,12 @@ export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
     // provavelmente é inerte (o Chrome só a aplica onde há suporte do sistema),
     // mas uma variável a menos no tabuleiro custa uma linha
     voiceIsolation: false,
+    // sem isto o navegador escolhe a taxa/canais que quiser (em alguns aparelhos
+    // 16/44,1 kHz ou estéreo), e o RNNoise roda a 48 kHz mono: pedir o mesmo
+    // evita reamostragem e canal duplicado. `ideal`, nunca `exact`: aparelho que
+    // não suporta cairia em `OverconstrainedError` e ficaria sem microfone
+    sampleRate: { ideal: 48000 },
+    channelCount: { ideal: 1 },
   };
 }
 

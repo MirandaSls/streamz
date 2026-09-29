@@ -69,6 +69,15 @@ export interface ProcessamentoDeCaptura {
 /** O que o navegador precisa saber para abrir a captura. */
 export interface RestricoesDeMicrofone extends ProcessamentoDeCaptura {
   deviceId?: string;
+  /**
+   * Taxa e canais **pedidos** (sempre `ideal`, nunca `exact`). Ficam fora de
+   * `ProcessamentoDeCaptura` de propósito: são fixos para o app, não entram em
+   * `mesmoProcessamento` (não provocam `applyConstraints` nem reabertura) e
+   * `conferirCaptura` não os compara com `getSettings()` — a taxa real pode
+   * legitimamente diferir do ideal.
+   */
+  sampleRate?: ConstrainULong;
+  channelCount?: ConstrainULong;
 }
 
 /** A faixa local de áudio do LiveKit, só com o que este módulo usa. */
