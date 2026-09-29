@@ -133,7 +133,12 @@ import { ui, useUI } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
-import { explicarMidia, motivoDaFalha, useVoiceDevicesStore } from "@/stores/voiceDevices";
+import {
+  explicarAparelhoAusente,
+  explicarMidia,
+  motivoDaFalha,
+  useVoiceDevicesStore,
+} from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 import { encerrarFaixas, ehFonteDeTela, inicioAindaVale } from "@/stores/parar-transmissao";
 
@@ -1328,7 +1333,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         if (proximo) await ajustarCameraNoSender();
       } catch (e) {
         set({ camOn: false });
-        ui.toast(errorMessage(e, "Não foi possível ligar a câmera"), "error");
+        ui.toast(explicarAparelhoAusente(e, "camera") ?? errorMessage(e, "Não foi possível ligar a câmera"), "error");
       }
       get().syncFlags();
       rerender();
@@ -1358,7 +1363,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch (e) {
         // aparelho com uma câmera só, ou o lado pedido indisponível: a faixa
         // antiga continua no ar (o SDK não a derruba antes de conseguir a nova)
-        ui.toast(errorMessage(e, "Não foi possível trocar de câmera"), "error");
+        ui.toast(explicarAparelhoAusente(e, "camera") ?? errorMessage(e, "Não foi possível trocar de câmera"), "error");
       }
       rerender();
     },
@@ -2468,8 +2473,10 @@ async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroD
     // chega a pedir permissão) é o `explicarMidia` que as configurações de voz
     // já usam — escrever texto novo aqui seria uma segunda versão da verdade.
     const negado = ehPermissaoNegada(e) ? explicarMidia(motivoDaFalha()) : null;
+    // Aparelho ausente: a mensagem crua do navegador vem em inglês e não diz o que fazer.
     const texto =
       negado ??
+      explicarAparelhoAusente(e, "microfone") ??
       errorMessage(
         e,
         "Não foi possível ligar o microfone. Escolha outro aparelho nas configurações de voz e entre de novo.",
