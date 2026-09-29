@@ -636,6 +636,14 @@ const FILA_DE_AUDIO_MS: u32 = 200;
 /// Sem pacote novo no mixer, quanto dormir antes de perguntar de novo.
 #[cfg(any(windows, target_os = "macos"))]
 const PAUSA_SEM_AUDIO: Duration = Duration::from_millis(5);
+/// Intervalo sem amostras reais antes de começar a preencher com silêncio. O
+/// WASAPI loopback não entrega nada enquanto o sistema está mudo; sem
+/// preencher, a fila da fonte esvazia e o som que volta começa cortado.
+#[cfg(any(windows, target_os = "macos"))]
+const LACUNA_PARA_SILENCIO: Duration = Duration::from_millis(20);
+/// Duração de cada quadro de silêncio (10 ms, o passo que o SDK espera).
+#[cfg(any(windows, target_os = "macos"))]
+const QUADRO_DE_SILENCIO: Duration = Duration::from_millis(10);
 /// Tentativas de reabrir o loopback depois de o dispositivo mudar.
 #[cfg(any(windows, target_os = "macos"))]
 const REABERTURAS: u32 = 10;
@@ -654,6 +662,12 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
     };
     let mut amostras: Vec<i16> = Vec::new();
     let mut reaberturas = 0;
+    // Quando entregamos o último quadro (real ou silêncio) e quando chegou o
+    // último real: o primeiro dita o ritmo do silêncio (nunca mais rápido que
+    // tempo real), o segundo evita misturar silêncio em dados só atrasados.
+    let mut ultimo_envio = Instant::now();
+    let mut ultimo_real = Instant::now();
+    let silencio = vec![0i16; 480 * usize::from(audio::CANAIS)];
     while !parar.load(Ordering::Acquire) {
         amostras.clear();
         match loopback.ler(&mut amostras) {
@@ -683,9 +697,32 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
             }
         }
         if amostras.is_empty() {
-            std::thread::sleep(PAUSA_SEM_AUDIO);
+            if ultimo_real.elapsed() >= LACUNA_PARA_SILENCIO
+                && ultimo_envio.elapsed() >= QUADRO_DE_SILENCIO
+            {
+                let quadro = AudioFrame {
+                    data: std::borrow::Cow::Borrowed(&silencio),
+                    sample_rate: audio::TAXA,
+                    num_channels: u32::from(audio::CANAIS),
+                    samples_per_channel: 480,
+                };
+                if tauri::async_runtime::block_on(fonte.capture_frame(&quadro)).is_err() {
+                    log::error!("tela: transmitir_audio erro ao entregar silêncio à fonte");
+                    return;
+                }
+                // Avança o relógio de 10 em 10 ms (não para "agora") para
+                // não acumular atraso se a thread demorar a acordar, mas sem
+                // ficar mais de um quadro atrás.
+                let agora = Instant::now();
+                let piso = agora.checked_sub(QUADRO_DE_SILENCIO).unwrap_or(agora);
+                ultimo_envio = (ultimo_envio + QUADRO_DE_SILENCIO).max(piso);
+            } else {
+                std::thread::sleep(PAUSA_SEM_AUDIO);
+            }
             continue;
         }
+        ultimo_real = Instant::now();
+        ultimo_envio = ultimo_real;
         let quadro = AudioFrame {
             data: std::borrow::Cow::Borrowed(&amostras),
             sample_rate: audio::TAXA,
