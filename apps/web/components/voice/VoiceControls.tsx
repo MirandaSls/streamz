@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import BotaoDeSons from "@/components/voice/BotaoDeSons";
@@ -13,6 +13,7 @@ import {
   Capsula,
   SplitDeDispositivo,
 } from "@/components/voice/controles-de-chamada";
+import { LarguraDaFileira, nivelDaBarra } from "@/components/voice/compactacao-da-barra";
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
@@ -51,6 +52,10 @@ export default function VoiceControls({
   const [mais, setMais] = useState<null | "menu" | "ajustes">(null);
   const caixa = useRef<HTMLDivElement>(null);
   const ehMobile = useEhMobile();
+  // Palco estreito: a barra perde peças em ordem (ver `compactacao-da-barra`).
+  // Sem medida (fora da fileira) fica no nível 0, a barra completa de sempre.
+  const disponivel = useContext(LarguraDaFileira);
+  const nivel = disponivel == null ? 0 : nivelDaBarra(disponivel);
 
   const camOn = useVoice((s) => s.camOn);
   const toggleCam = useVoice((s) => s.toggleCam);
@@ -85,65 +90,80 @@ export default function VoiceControls({
   // toque. Ver `ControlesMobile`.
   if (ehMobile) return <ControlesMobile onLeave={onLeave} leaveLabel={leaveLabel} oculto={oculto} />;
 
+  const rotuloDoMicrofone = abrindoMicrofone
+    ? "Ativando microfone…"
+    : muted
+      ? "Desativar mudo"
+      : "Silenciar";
+
   // com o menu aberto a barra não pode sumir debaixo do cursor
   const escondida = oculto && !mais;
 
-  return (
-    // Quem posiciona esta cápsula no rodapé do palco é o `FileiraDeControles`
-    // (grade `1fr auto 1fr`, `absolute inset-x-0 bottom-5`): a seta de
-    // expandir, esta cápsula e os ícones do canto viviam cada um com seu
-    // próprio `absolute`, três peças soltas na mesma altura que se
-    // encavalavam em janela estreita. Aqui dentro ela é só um item em fluxo.
-    <div
-      {...moldura}
-      className={`flex items-center gap-3 transition-opacity duration-200 ${
-        escondida ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
-    >
-      <Capsula>
-        {/* Enquanto a faixa sobe o botão mostra o **mudo**, e o rótulo diz por
-            quê. Mostrar o microfone aberto antes de ele existir seria a mentira
-            pior: a pessoa fala e ninguém ouve. O clique continua valendo — o
-            dono da faixa reaplica o mudo escolhido assim que ela nasce (ver
-            `publicarMicrofone`). Sem cor nova: é o mesmo tom "mudo" de sempre. */}
-        {serverMute ? (
-          // Travado pelo servidor: sem seta de dispositivo — trocar de
-          // microfone não desfaz o mute que o moderador aplicou, então
-          // oferecer o menu aqui só confundiria. `aria-disabled`, **sem**
-          // `disabled` nativo — o mesmo motivo do item 8 de `BotaoDeIcone`:
-          // `<button disabled>` não dispara ponteiro no Chromium, e a dica
-          // "Silenciado pelo servidor" nunca abriria no hover. O clique é
-          // um no-op (não há para onde alternar).
-          <Tooltip label="Silenciado pelo servidor">
-            <button
-              type="button"
-              onClick={(e) => e.preventDefault()}
-              aria-disabled="true"
-              aria-label="Silenciado pelo servidor"
-              className="grid h-11 w-[52px] cursor-not-allowed place-items-center rounded-[22px] bg-status-danger/15 text-status-danger transition"
-            >
-              <MicOff size={22} />
-            </button>
-          </Tooltip>
-        ) : (
-          <SplitDeDispositivo
-            label={
-              abrindoMicrofone
-                ? "Ativando microfone…"
-                : muted
-                  ? "Desativar mudo"
-                  : "Silenciar"
-            }
-            labelDaSeta="Escolher microfone"
-            tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
-            pressionado={muted}
-            onClick={toggleMute}
-            menu={() => <MenuDeEntrada />}
+  // Peças montadas uma vez e compostas por nível, para não duplicar JSX.
+  const microfone = (
+    <>
+      {/* Enquanto a faixa sobe o botão mostra o **mudo**, e o rótulo diz por
+          quê. Mostrar o microfone aberto antes de ele existir seria a mentira
+          pior: a pessoa fala e ninguém ouve. O clique continua valendo — o
+          dono da faixa reaplica o mudo escolhido assim que ela nasce (ver
+          `publicarMicrofone`). Sem cor nova: é o mesmo tom "mudo" de sempre. */}
+      {serverMute ? (
+        // Travado pelo servidor: sem seta de dispositivo — trocar de
+        // microfone não desfaz o mute que o moderador aplicou, então
+        // oferecer o menu aqui só confundiria. `aria-disabled`, **sem**
+        // `disabled` nativo — o mesmo motivo do item 8 de `BotaoDeIcone`:
+        // `<button disabled>` não dispara ponteiro no Chromium, e a dica
+        // "Silenciado pelo servidor" nunca abriria no hover. O clique é
+        // um no-op (não há para onde alternar).
+        <Tooltip label="Silenciado pelo servidor">
+          <button
+            type="button"
+            onClick={(e) => e.preventDefault()}
+            aria-disabled="true"
+            aria-label="Silenciado pelo servidor"
+            className="grid h-11 w-[52px] cursor-not-allowed place-items-center rounded-[22px] bg-status-danger/15 text-status-danger transition"
           >
-            {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
-          </SplitDeDispositivo>
-        )}
-
+            <MicOff size={22} />
+          </button>
+        </Tooltip>
+      ) : nivel >= 1 ? (
+        // Sem a seta o botão volta ao formato solto. Perdem-se as setas
+        // primeiro porque a troca de dispositivo continua em "Ajustes de
+        // voz" (menu "Mais").
+        <BotaoDeChamada
+          label={rotuloDoMicrofone}
+          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
+          pressionado={muted}
+          onClick={toggleMute}
+        >
+          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+        </BotaoDeChamada>
+      ) : (
+        <SplitDeDispositivo
+          label={rotuloDoMicrofone}
+          labelDaSeta="Escolher microfone"
+          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
+          pressionado={muted}
+          onClick={toggleMute}
+          menu={() => <MenuDeEntrada />}
+        >
+          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+        </SplitDeDispositivo>
+      )}
+    </>
+  );
+  const camera = (
+    <>
+      {nivel >= 1 ? (
+        <BotaoDeChamada
+          label={camOn ? "Desligar câmera" : "Ligar câmera"}
+          tom={camOn ? "ativo" : "neutro"}
+          pressionado={camOn}
+          onClick={() => void toggleCam()}
+        >
+          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+        </BotaoDeChamada>
+      ) : (
         <SplitDeDispositivo
           label={camOn ? "Desligar câmera" : "Ligar câmera"}
           labelDaSeta="Escolher câmera"
@@ -154,59 +174,88 @@ export default function VoiceControls({
         >
           {camOn ? <Video size={22} /> : <VideoOff size={22} />}
         </SplitDeDispositivo>
-      </Capsula>
+      )}
+    </>
+  );
+  const botaoMais = (
+    <div ref={caixa} className="relative">
+      <BotaoDeChamada
+        label="Mais"
+        expandido={mais !== null}
+        onClick={() => setMais((v) => (v ? null : "menu"))}
+      >
+        <MoreHorizontal size={22} />
+      </BotaoDeChamada>
 
-      <Capsula>
-        <ScreenShareButton />
-
-        {/* Efeitos sonoros ao lado da tela: os dois são "o que eu acrescento à
-            sala", que é o critério desta cápsula. Na barra do palco o botão do
-            painel de sons é o segundo, como no Discord. */}
-        <BotaoDeSons />
-
-        {/* A supressão de ruído **não** mora aqui: no Discord ela é o ícone de
-            ondas do painel "Voz conectada", ao lado do desligar (ver
-            `VoiceConnectedBar`). Ali ela fica ao alcance mesmo com o palco fora
-            da tela, que é quando mais se mexe nela. */}
-
-        <div ref={caixa} className="relative">
-          <BotaoDeChamada
-            label="Mais"
-            expandido={mais !== null}
-            onClick={() => setMais((v) => (v ? null : "menu"))}
-          >
-            <MoreHorizontal size={22} />
-          </BotaoDeChamada>
-
-          {/* `bottom-[52px]` é a altura do botão (44) mais os 8 de folga que a
-              caixa sempre teve; era `bottom-12` quando o botão media 40. */}
-          {mais === "menu" && (
-            <div
-              role="menu"
-              aria-label="Mais opções"
-              className="absolute bottom-[52px] left-1/2 w-56 -translate-x-1/2 rounded-lg bg-background-surface-higher p-1.5 shadow-popout anim-menu"
-            >
-              {/* tela cheia saiu daqui: no print ela é ícone solto no canto do
-                  palco, junto do pop-out — ver `IconesDoCanto` */}
-              <ItemDoMenu onSelect={() => setMais("ajustes")} icone={<Settings size={18} />}>
-                Ajustes de voz
-              </ItemDoMenu>
-            </div>
-          )}
-
-          {mais === "ajustes" && (
-            // popover, não modal: escurecer o palco para trocar de microfone
-            // esconderia justamente a call que se está tentando consertar
-            <div
-              role="dialog"
-              aria-label="Ajustes de voz"
-              className="absolute bottom-[52px] left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-background-surface-higher p-4 shadow-popout anim-menu"
-            >
-              <VoiceSettingsPanel compacto />
-            </div>
-          )}
+      {/* `bottom-[52px]` é a altura do botão (44) mais os 8 de folga que a
+          caixa sempre teve; era `bottom-12` quando o botão media 40. */}
+      {mais === "menu" && (
+        <div
+          role="menu"
+          aria-label="Mais opções"
+          className="absolute bottom-[52px] left-1/2 w-56 -translate-x-1/2 rounded-lg bg-background-surface-higher p-1.5 shadow-popout anim-menu"
+        >
+          {/* tela cheia saiu daqui: no print ela é ícone solto no canto do
+              palco, junto do pop-out — ver `IconesDoCanto` */}
+          <ItemDoMenu onSelect={() => setMais("ajustes")} icone={<Settings size={18} />}>
+            Ajustes de voz
+          </ItemDoMenu>
         </div>
+      )}
+
+      {mais === "ajustes" && (
+        // popover, não modal: escurecer o palco para trocar de microfone
+        // esconderia justamente a call que se está tentando consertar
+        <div
+          role="dialog"
+          aria-label="Ajustes de voz"
+          className="absolute bottom-[52px] left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-background-surface-higher p-4 shadow-popout anim-menu"
+        >
+          <VoiceSettingsPanel compacto />
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    // Quem posiciona esta cápsula no rodapé do palco é o `FileiraDeControles`
+    // (grade `1fr auto 1fr`, `absolute inset-x-0 bottom-5`): a seta de
+    // expandir, esta cápsula e os ícones do canto viviam cada um com seu
+    // próprio `absolute`, três peças soltas na mesma altura que se
+    // encavalavam em janela estreita. Aqui dentro ela é só um item em fluxo.
+    <div
+      {...moldura}
+      className={`flex items-center ${nivel >= 2 ? "gap-2" : "gap-3"} transition-opacity duration-200 ${
+        escondida ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
+    >
+      {/* Nível 2: tela e sons saem da barra porque também vivem no painel
+          "Voz conectada" do rodapé (`VoiceConnectedBar`). O "Mais" entra na
+          cápsula única de mic e câmera: uma segunda cápsula só com ele gastava
+          padding e gap à toa, e cada pixel conta com o palco estreito. */}
+      <Capsula>
+        {microfone}
+        {camera}
+        {nivel >= 2 && botaoMais}
       </Capsula>
+
+      {nivel < 2 && (
+        <Capsula>
+          <ScreenShareButton />
+
+          {/* Efeitos sonoros ao lado da tela: os dois são "o que eu acrescento à
+              sala", que é o critério desta cápsula. Na barra do palco o botão do
+              painel de sons é o segundo, como no Discord. */}
+          <BotaoDeSons />
+
+          {/* A supressão de ruído **não** mora aqui: no Discord ela é o ícone de
+              ondas do painel "Voz conectada", ao lado do desligar (ver
+              `VoiceConnectedBar`). Ali ela fica ao alcance mesmo com o palco fora
+              da tela, que é quando mais se mexe nela. */}
+
+          {botaoMais}
+        </Capsula>
+      )}
 
       <BotaoDeDesligar label={leaveLabel} onClick={onLeave}>
         <PhoneOff size={24} />

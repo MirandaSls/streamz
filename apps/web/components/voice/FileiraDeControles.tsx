@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { LarguraDaFileira, larguraDoCentro } from "@/components/voice/compactacao-da-barra";
 
 /** `gap-4` entre as colunas da grade. */
 const GAP_PX = 16;
@@ -136,42 +137,52 @@ export default function FileiraDeControles({
     ? ladosVisiveis(medidas.raiz, medidas.centro, medidas.esquerda, medidas.direita)
     : { esquerda: true, direita: true };
 
+  // A direita nunca aparece sem a esquerda, então basta olhar a esquerda.
+  const lateraisEscondidos = !visiveis.esquerda;
+
   return (
-    <div
-      ref={raizRef}
-      className="pointer-events-none absolute inset-x-0 bottom-5 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4"
-    >
-      <div className="min-w-0 justify-self-start">
-        {esquerda && (
-          <div
-            ref={esquerdaRef}
-            aria-hidden={!visiveis.esquerda}
-            className={`inline-flex pointer-events-auto ${
-              visiveis.esquerda ? "" : "invisible pointer-events-none"
-            }`}
-          >
-            {esquerda}
-          </div>
-        )}
-      </div>
+    // Consumido pelo `VoiceControls` para compactar a cápsula central.
+    <LarguraDaFileira.Provider value={medidas ? larguraDoCentro(medidas.raiz, lateraisEscondidos) : null}>
+      <div
+        ref={raizRef}
+        // Sem laterais, as colunas `1fr` vazias ainda cobrariam gap e padding do
+        // centro; `gap-0 px-2` devolve esse espaço (só esconder nunca faz voltar).
+        className={`pointer-events-none absolute inset-x-0 bottom-5 z-10 grid grid-cols-[1fr_auto_1fr] items-center ${
+          lateraisEscondidos ? "gap-0 px-2" : "gap-4 px-4"
+        }`}
+      >
+        <div className="min-w-0 justify-self-start">
+          {esquerda && (
+            <div
+              ref={esquerdaRef}
+              aria-hidden={!visiveis.esquerda}
+              className={`inline-flex pointer-events-auto ${
+                visiveis.esquerda ? "" : "invisible pointer-events-none"
+              }`}
+            >
+              {esquerda}
+            </div>
+          )}
+        </div>
 
-      <div ref={centroRef} className="pointer-events-auto">
-        {centro}
-      </div>
+        <div ref={centroRef} className="pointer-events-auto">
+          {centro}
+        </div>
 
-      <div className="min-w-0 justify-self-end">
-        {direita && (
-          <div
-            ref={direitaRef}
-            aria-hidden={!visiveis.direita}
-            className={`inline-flex pointer-events-auto ${
-              visiveis.direita ? "" : "invisible pointer-events-none"
-            }`}
-          >
-            {direita}
-          </div>
-        )}
+        <div className="min-w-0 justify-self-end">
+          {direita && (
+            <div
+              ref={direitaRef}
+              aria-hidden={!visiveis.direita}
+              className={`inline-flex pointer-events-auto ${
+                visiveis.direita ? "" : "invisible pointer-events-none"
+              }`}
+            >
+              {direita}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </LarguraDaFileira.Provider>
   );
 }
