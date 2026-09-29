@@ -82,6 +82,25 @@ const WS_LIMITS: Record<string, BucketLimit> = {
 const AVISO_DE_RAJADA = { ok: false, error: "Devagar: muitos comandos seguidos" } as const;
 
 /**
+ * Intervalo mínimo entre dois `warn` de rajada do mesmo socket. Quem estoura o
+ * balde costuma estourar várias vezes seguidas (é o que é uma rajada); uma
+ * linha a cada 10 s já diz quem e em que comando, sem enterrar o resto do log.
+ */
+const INTERVALO_DO_AVISO_DE_RAJADA_MS = 10_000;
+
+/**
+ * Texto vindo do cliente pronto para ir ao log: só ASCII imprimível e sem aspas,
+ * cortado em `max`. Handshake é controlado por quem conecta — sem o filtro, uma
+ * quebra de linha no user-agent forjaria uma linha de log inteira. Vazio →
+ * `undefined`, para o chamador escolher o texto padrão.
+ */
+function textoDeLog(valor: unknown, max: number): string | undefined {
+  if (typeof valor !== "string") return undefined;
+  const limpo = valor.replace(/[^\x20-\x7E]/g, "").replace(/"/g, "'").trim().slice(0, max);
+  return limpo || undefined;
+}
+
+/**
  * Heartbeat folgado de propósito.
  *
  * Os padrões do Socket.IO (25s/20s) derrubam a conexão depois de ~45s sem
@@ -170,19 +189,59 @@ export class ChatGateway
     const token =
       (client.handshake.auth?.token as string) ||
       (client.handshake.query?.token as string);
+    // Toda recusa de connect vai ao log com o motivo: antes o catch desconectava
+    // calado, e um usuário com erro recorrente não deixava linha nenhuma na API.
+    if (!token) {
+      this.logger.warn(`ws: connect recusado socket=${client.id} motivo=token-ausente`);
+      client.disconnect(true);
+      return;
+    }
+    let payload: { sub: string; username: string };
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; username: string }>(
-        token,
-        { secret: process.env.JWT_SECRET },
-      );
+      payload = await this.jwt.verifyAsync<{ sub: string; username: string }>(token, {
+        secret: process.env.JWT_SECRET,
+      });
+    } catch (e) {
+      // Token expirado é rotina (o cliente renova o access token a cada 15 min
+      // e reconecta): em `warn` inundaria o log. Assinatura ruim ou token
+      // malformado não é rotina — esse fica visível.
+      if (e instanceof Error && e.name === "TokenExpiredError") {
+        this.logger.debug(`ws: connect recusado socket=${client.id} motivo=token-expirado`);
+      } else {
+        this.logger.warn(
+          `ws: connect recusado socket=${client.id} motivo=token-invalido erro=${this.msgDeErro(e)}`,
+        );
+      }
+      client.disconnect(true);
+      return;
+    }
+    try {
       // conta desativada/excluída não conecta, mesmo com access token válido:
       // sem isto o socket sobreviveria os 15 min de validade do token
       const estado = await this.contas.estado(payload.sub);
       if (!estado.existe || estado.excluida || estado.desativada) {
+        const motivo = !estado.existe
+          ? "conta-inexistente"
+          : estado.excluida
+            ? "conta-excluida"
+            : "conta-desativada";
+        this.logger.warn(
+          `ws: connect recusado user=${payload.sub} socket=${client.id} motivo=${motivo}`,
+        );
         client.disconnect(true);
         return;
       }
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
+      // Com que cliente cada conexão chega. `auth.cliente` é o que a web manda
+      // ("desktop/1.3.16"); sem ele é o navegador. O user-agent vai junto porque
+      // é o que distingue o app desktop no Windows — o WebView2 se apresenta como
+      // Edge ("Edg/126…") — e foi exatamente esse dado que revelou o problema do
+      // usuário que tinha erros recorrentes sem nenhuma linha no log.
+      const cliente = textoDeLog(client.handshake.auth?.cliente, 40) ?? "navegador";
+      const ua = textoDeLog(client.handshake.headers["user-agent"], 160) ?? "";
+      this.logger.log(
+        `ws: connect user=${payload.sub} socket=${client.id} cliente=${cliente} ua="${ua}"`,
+      );
       // O motivo da desconexão só existe no evento `disconnecting`, que o
       // Socket.IO dispara **antes** do `disconnect` — e é o `disconnect` que
       // chama o nosso `handleDisconnect`. Guardar aqui é o que permite lá
@@ -206,20 +265,32 @@ export class ChatGateway
       client.join(canais.map((c) => this.room(c.id)));
       client.join(guilds.map((g) => `guild:${g.guildId}`));
       await this.markOnline(payload.sub);
-    } catch {
+    } catch (e) {
+      // banco ou Redis fora do ar no meio do connect: não é recusa, é defeito
+      this.logger.error(
+        `ws: connect falhou user=${payload.sub} socket=${client.id} motivo=falha-inesperada`,
+        e instanceof Error ? e.stack : String(e),
+      );
       client.disconnect(true);
     }
   }
 
   handleDisconnect(client: Socket) {
     const user = client.data.user as SocketUser | undefined;
+    // sem usuário o connect foi recusado, e a recusa já tem a sua linha
     if (!user) return;
     void this.markOffline(user.id);
-    // f-voz: só logar quando estava em voz, senão inunda o log com toda
-    // desconexão comum (aba fechada fora de chamada, refresh, etc.)
+    // Toda desconexão vai ao log, não só as de voz: junto com o `ws: connect`
+    // é o que reconstrói a sessão de um usuário (quantas quedas, com que
+    // motivo) quando ele reclama de erro recorrente. Uma linha por queda é
+    // barato perto de não ter nada para investigar. A linha `voz: disconnect`
+    // continua à parte porque já é usada em grep e traz o canal.
+    const motivo = client.data.motivoDaDesconexao as string | undefined;
+    this.logger.log(
+      `ws: disconnect user=${user.id} socket=${client.id} motivo=${motivo ?? "desconhecido"}`,
+    );
     const channelId = client.data.voiceChannelId as string | undefined;
     if (channelId) {
-      const motivo = client.data.motivoDaDesconexao as string | undefined;
       this.logger.log(
         `voz: disconnect user=${user.id} canal=${channelId} socket=${client.id} motivo=${motivo ?? "desconhecido"}`,
       );
@@ -425,11 +496,17 @@ export class ChatGateway
     if (!user) return { ok: false, error: "Sessão expirada" };
     if (!this.allow(client, WS_EVENTS.POLL_CREATE, false)) return AVISO_DE_RAJADA;
     const payload = parseWsPayload(pollCreateSchema, body);
-    if (!payload.ok) return { ok: false, error: payload.message };
+    if (!payload.ok) {
+      this.avisarPayloadInvalido(client, payload.message, WS_EVENTS.POLL_CREATE);
+      return { ok: false, error: payload.message };
+    }
     // `optionEmojis` fica fora do `pollCreateSchema` (ver `pollOptionEmojisSchema`
     // em `comunidade.ts`); o zod daquele descarta a chave, então lê-se do corpo cru
     const emojis = parseWsPayload(pollOptionEmojisSchema, body);
-    if (!emojis.ok) return { ok: false, error: emojis.message };
+    if (!emojis.ok) {
+      this.avisarPayloadInvalido(client, emojis.message, WS_EVENTS.POLL_CREATE);
+      return { ok: false, error: emojis.message };
+    }
     try {
       const message = await this.polls.create(user.id, {
         ...payload.data,
@@ -455,7 +532,10 @@ export class ChatGateway
     if (!user) return { ok: false, error: "Sessão expirada" };
     if (!this.allow(client, WS_EVENTS.POLL_VOTE, false)) return AVISO_DE_RAJADA;
     const payload = parseWsPayload(pollVoteSchema, body);
-    if (!payload.ok) return { ok: false, error: payload.message };
+    if (!payload.ok) {
+      this.avisarPayloadInvalido(client, payload.message, WS_EVENTS.POLL_VOTE);
+      return { ok: false, error: payload.message };
+    }
     try {
       // o próprio serviço faz o broadcast do `poll.updated` para a sala
       await this.polls.vote(user.id, payload.data.messageId, payload.data.optionIndex);
@@ -473,7 +553,10 @@ export class ChatGateway
     const user = this.userOf(client);
     if (!user) return { ok: false, error: "Sessão expirada" };
     const payload = parseWsPayload(pollCloseSchema, body);
-    if (!payload.ok) return { ok: false, error: payload.message };
+    if (!payload.ok) {
+      this.avisarPayloadInvalido(client, payload.message, WS_EVENTS.POLL_CLOSE);
+      return { ok: false, error: payload.message };
+    }
     try {
       await this.polls.close(user.id, payload.data.messageId);
       return { ok: true };
@@ -496,6 +579,15 @@ export class ChatGateway
     const now = Date.now();
     const state = (buckets[event] ??= newBucket(limit, now));
     if (takeToken(state, limit, now)) return true;
+    // Descartar comando sem rastro era o que escondia um cliente em laço. O
+    // carimbo no socket segura o log numa linha a cada 10 s por conexão.
+    const ultimo = client.data.ultimoAvisoDeRajada as number | undefined;
+    if (ultimo === undefined || now - ultimo >= INTERVALO_DO_AVISO_DE_RAJADA_MS) {
+      client.data.ultimoAvisoDeRajada = now;
+      this.logger.warn(
+        `ws: rajada user=${this.userOf(client)?.id ?? "?"} socket=${client.id} evento=${event}`,
+      );
+    }
     // `avisar = false`: o comando responde por ack e o aviso vai nele
     if (avisar) {
       client.emit(WS_EVENTS.ERROR, { message: AVISO_DE_RAJADA.error } satisfies WsErrorEvent);
@@ -515,8 +607,22 @@ export class ChatGateway
   ) {
     const result = parseWsPayload(schema, body);
     if (result.ok) return result.data;
+    this.avisarPayloadInvalido(client, result.message);
     client.emit(WS_EVENTS.ERROR, { message: result.message } satisfies WsErrorEvent);
     return null;
+  }
+
+  /**
+   * Payload recusado pelo contrato. Cliente atualizado não manda payload
+   * inválido, então isto aponta versão velha ou bug de cliente — e é por isso
+   * que precisa de linha no log. `parse` não recebe o nome do evento (os
+   * handlers não o passam); os comandos de enquete, que validam por conta
+   * própria, informam.
+   */
+  private avisarPayloadInvalido(client: Socket, motivo: string, evento?: string) {
+    this.logger.warn(
+      `ws: payload inválido user=${this.userOf(client)?.id ?? "?"} socket=${client.id}${evento ? ` evento=${evento}` : ""} motivo=${motivo}`,
+    );
   }
 
   /**
@@ -535,16 +641,24 @@ export class ChatGateway
    * "Erro interno" (com log) para o resto. Serve ao `ws.error` e ao ack.
    */
   private mensagemDeErro(client: Socket, e: unknown): string {
+    const userId = this.userOf(client)?.id ?? "?";
     if (e instanceof HttpException) {
       const body = e.getResponse();
       const detail =
         typeof body === "string"
           ? body
           : ((body as { message?: string | string[] })?.message ?? e.message);
-      return Array.isArray(detail) ? detail.join("; ") : String(detail);
+      const texto = Array.isArray(detail) ? detail.join("; ") : String(detail);
+      // Recusa esperada (sem permissão, não encontrado) não é defeito do
+      // servidor, mas é justamente o que o usuário vê como "erro": sem esta
+      // linha, investigar a reclamação dele não achava nada no log.
+      this.logger.warn(
+        `ws: recusa user=${userId} socket=${client.id} status=${e.getStatus()} motivo=${texto}`,
+      );
+      return texto;
     }
     this.logger.error(
-      `Falha em comando WS (socket ${client.id})`,
+      `Falha em comando WS user=${userId} (socket ${client.id})`,
       e instanceof Error ? e.stack : String(e),
     );
     return "Erro interno";
