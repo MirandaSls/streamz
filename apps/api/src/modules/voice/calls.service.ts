@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger } from "@ne
 import {
   CALL_ALONE_TIMEOUT_MS,
   CALL_RING_TIMEOUT_MS,
+  CALL_UNANSWERED_ALONE_MS,
   WS_EVENTS,
   type CallEndedEvent,
   type CallRingEvent,
@@ -31,12 +32,18 @@ interface Toque {
  * canal de voz de servidor não tem:
  *
  * 1. o **toque**, que avisa quem ainda não entrou e desiste depois de
- *    `CALL_RING_TIMEOUT_MS`;
- * 2. a **solidão**, que encerra a chamada `CALL_ALONE_TIMEOUT_MS` depois de
- *    sobrar uma pessoa só.
+ *    `CALL_RING_TIMEOUT_MS` — sem tirar quem ligou da sala nem fechar o
+ *    registro, só cala o telefone e avisa "timeout" (quem recebeu para de
+ *    tocar; quem ligou vê "Ninguém atendeu" e continua na sala);
+ * 2. a **solidão**, que encerra a chamada depois de sobrar uma pessoa só:
+ *    `CALL_ALONE_TIMEOUT_MS` (5 min) quando a chamada já rolou e todo mundo
+ *    saiu, `CALL_UNANSWERED_ALONE_MS` (3 min) quando quem sobrou é quem
+ *    ligou e o toque acabou sem ninguém atender — `avaliarSolidao` recebe a
+ *    duração como parâmetro, e é o `expirar` do toque quem escolhe a curta.
  *
  * Os dois nunca correm juntos: enquanto alguém ainda pode atender, quem manda é
- * o toque — empilhar os relógios encerraria a chamada não atendida duas vezes.
+ * o toque; quando ele expira sem resposta, é a solidão (com a duração curta)
+ * quem assume sozinha.
  *
  * Os relógios vivem no processo, como o `@nestjs/schedule` da faxina: com mais
  * de uma instância, o toque expira na instância que iniciou a chamada. O estado
@@ -47,7 +54,7 @@ interface Toque {
 export class CallsService {
   private readonly logger = new Logger(CallsService.name);
   private readonly tocando = new Map<string, Toque>();
-  /** Canal → relógio dos 5 minutos de quem ficou sozinho na chamada. */
+  /** Canal → relógio de quem ficou sozinho na chamada (duração varia, ver `avaliarSolidao`). */
   private readonly sozinhos = new Map<string, NodeJS.Timeout>();
 
   constructor(
@@ -232,7 +239,15 @@ export class CallsService {
     return users.map((u) => toPublicUser(u));
   }
 
-  /** Ninguém atendeu em 30 s: a chamada morre e quem ligou sai da sala. */
+  /**
+   * Ninguém atendeu em 30 s: cala o toque e avisa "timeout" — mas quem ligou
+   * **não** sai da sala nem o registro fecha ainda. Derrubar os dois na hora
+   * tirava de quem recebeu o direito de entrar pela conversa depois de o
+   * telefone parar de tocar; agora quem sobrou (só quem ligou) vira assunto
+   * do relógio da solidão, armado aqui com `CALL_UNANSWERED_ALONE_MS` em vez
+   * do padrão de 5 min — 3 min sozinho depois de ligar e ninguém atender já
+   * é sinal suficiente de que não vem mais ninguém.
+   */
   private async expirar(channelId: string) {
     const toque = this.tocando.get(channelId);
     if (!toque) return;
@@ -247,22 +262,25 @@ export class CallsService {
       await this.avaliarSolidao(channelId);
       return;
     }
-    await this.voice.leave(toque.fromUserId, channelId);
-    void this.registro.fechar(channelId);
     this.emitir(channelId, { channelId, by: null, reason: "timeout" });
+    await this.avaliarSolidao(channelId, CALL_UNANSWERED_ALONE_MS);
   }
 
   // ── solidão ────────────────────────────────────────────────
 
   /**
-   * Liga ou desliga o relógio dos 5 minutos sozinho, a partir de quantos
+   * Liga ou desliga o relógio de quem ficou sozinho, a partir de quantos
    * sobraram na sala. Chamada depois de **toda** entrada e saída de chamada:
    * o relógio começa quando a pessoa *fica* sozinha e morre quando alguém entra.
+   *
+   * `duracaoMs` deixa o `expirar` do toque armar a solidão mais curta
+   * (`CALL_UNANSWERED_ALONE_MS`) de quem ligou e ninguém atendeu; todo o resto
+   * chama sem o parâmetro e usa `CALL_ALONE_TIMEOUT_MS`.
    *
    * Só vale em conversa (`guildId` null). Ficar sozinho num canal de voz de
    * servidor é normal — é uma sala aberta esperando gente, não uma chamada.
    */
-  private async avaliarSolidao(channelId: string) {
+  private async avaliarSolidao(channelId: string, duracaoMs: number = CALL_ALONE_TIMEOUT_MS) {
     // ainda há quem atender: o toque é que decide o destino desta chamada
     if ((await this.voice.count(channelId)) !== 1 || this.tocando.has(channelId)) {
       this.cancelarSolidao(channelId);
@@ -280,13 +298,13 @@ export class CallsService {
           e instanceof Error ? e.stack : String(e),
         ),
       );
-    }, CALL_ALONE_TIMEOUT_MS);
+    }, duracaoMs);
     // não segura o processo vivo por causa de uma chamada esquecida
     timer.unref?.();
     this.sozinhos.set(channelId, timer);
   }
 
-  /** Cinco minutos sozinho: tira quem sobrou da sala e encerra para a conversa. */
+  /** Tempo de solidão vencido (5 min ou 3 min, ver `avaliarSolidao`): tira quem sobrou da sala e encerra para a conversa. */
   private async expirarSozinho(channelId: string) {
     this.sozinhos.delete(channelId);
     const restantes = await this.voice.membrosDaSala(channelId);

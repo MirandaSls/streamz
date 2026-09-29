@@ -260,6 +260,15 @@ export const VOICE_RECONNECT_GRACE_MS = 45_000;
  */
 export const CALL_ALONE_TIMEOUT_MS = 5 * 60_000;
 
+/**
+ * Quanto tempo quem ligou continua na chamada, sozinho, depois de o toque
+ * expirar sem ninguém atender. Desligar na cara de quem liga assim que o toque
+ * acaba obrigava a ligar de novo para dar outra chance ao outro lado; com a sala
+ * de pé, quem recebeu ainda pode entrar pela conversa. Vale só para conversa —
+ * canal de servidor não toca.
+ */
+export const CALL_UNANSWERED_ALONE_MS = 3 * 60_000;
+
 /** Folga entre soltar a tecla de push-to-talk e o microfone fechar de novo. */
 export const PTT_RELEASE_MS = 200;
 
