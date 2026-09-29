@@ -133,6 +133,34 @@ export function explicarMidia(motivo: MotivoDeMidia): string | null {
   return "Este navegador não expõe microfone nem câmera.";
 }
 
+/**
+ * Frase para "o computador não tem esse aparelho", ou `null` quando o erro é
+ * de outra natureza.
+ *
+ * Sem microfone/câmera o `getUserMedia` rejeita com `NotFoundError` e a
+ * mensagem crua em inglês ("Requested device not found"), que não diz o que
+ * fazer. O `name` nem sempre sobrevive: na ponte do Tauri o erro chega
+ * serializado e só resta o texto (mesma razão do `ehPermissaoNegada` em
+ * stores/voice.ts), por isso o texto também vale. O teste do `name` não exige
+ * `instanceof Error` porque o `DOMException` do jsdom não é necessariamente um.
+ */
+export function explicarAparelhoAusente(
+  e: unknown,
+  aparelho: "microfone" | "camera",
+): string | null {
+  const nome = (e as { name?: unknown } | null | undefined)?.name;
+  const ausente =
+    nome === "NotFoundError" ||
+    (e instanceof Error &&
+      /NotFoundError|Requested device not found|device not found/i.test(
+        e.message,
+      ));
+  if (!ausente) return null;
+  return aparelho === "microfone"
+    ? "Nenhum microfone encontrado. Conecte um microfone e entre na chamada de novo."
+    : "Nenhuma câmera encontrada. Conecte uma câmera e tente de novo.";
+}
+
 const KEY = "voiceDevices";
 
 type Ids = Pick<VoiceDevicesState, "inputId" | "outputId" | "cameraId">;

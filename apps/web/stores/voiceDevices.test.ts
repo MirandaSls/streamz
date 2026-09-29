@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   aparelhosReais,
   escolhaDeSaida,
+  explicarAparelhoAusente,
   explicarMidia,
   nomeEscolhido,
   opcoesDe,
@@ -202,5 +203,54 @@ describe("a escolha de aparelho sobrevive ao aparelho sumir", () => {
     listar(comFone);
     await useVoiceDevicesStore.getState().refresh(true);
     expect(useVoiceDevicesStore.getState().outputId).toBe("fone");
+  });
+});
+
+describe("explicarAparelhoAusente", () => {
+  const TEXTO_MIC =
+    "Nenhum microfone encontrado. Conecte um microfone e entre na chamada de novo.";
+  const TEXTO_CAM = "Nenhuma câmera encontrada. Conecte uma câmera e tente de novo.";
+
+  it("explica o microfone ausente quando o erro tem name NotFoundError", () => {
+    const e = Object.assign(new Error("Requested device not found"), {
+      name: "NotFoundError",
+    });
+    expect(explicarAparelhoAusente(e, "microfone")).toBe(TEXTO_MIC);
+  });
+
+  it("explica a câmera ausente quando o erro tem name NotFoundError", () => {
+    expect(explicarAparelhoAusente({ name: "NotFoundError" }, "camera")).toBe(
+      TEXTO_CAM,
+    );
+  });
+
+  it("reconhece o erro serializado pela ponte do Tauri só pela mensagem", () => {
+    const e = new Error("NotFoundError: Requested device not found");
+    expect(explicarAparelhoAusente(e, "microfone")).toBe(TEXTO_MIC);
+    expect(explicarAparelhoAusente(e, "camera")).toBe(TEXTO_CAM);
+  });
+
+  it("reconhece Error com a mensagem 'Requested device not found' sem name especial", () => {
+    expect(
+      explicarAparelhoAusente(new Error("Requested device not found"), "camera"),
+    ).toBe(TEXTO_CAM);
+  });
+
+  it("devolve null para NotAllowedError", () => {
+    const e = Object.assign(new Error("Permission denied"), {
+      name: "NotAllowedError",
+    });
+    expect(explicarAparelhoAusente(e, "microfone")).toBeNull();
+  });
+
+  it("devolve null para Error genérico", () => {
+    expect(explicarAparelhoAusente(new Error("falhou"), "camera")).toBeNull();
+  });
+
+  it("devolve null para undefined e para string", () => {
+    expect(explicarAparelhoAusente(undefined, "microfone")).toBeNull();
+    expect(
+      explicarAparelhoAusente("Requested device not found", "microfone"),
+    ).toBeNull();
   });
 });
