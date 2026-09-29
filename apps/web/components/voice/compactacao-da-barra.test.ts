@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nivelDaBarra } from "./compactacao-da-barra";
+import { larguraDoCentro, nivelDaBarra } from "./compactacao-da-barra";
 
 describe("nivelDaBarra", () => {
   it("nível 0 no limite exato (432 + 8 de folga)", () => {
@@ -25,5 +25,15 @@ describe("nivelDaBarra", () => {
   it("palco largo é nível 0", () => {
     expect(nivelDaBarra(1200)).toBe(0);
     expect(nivelDaBarra(100000)).toBe(0);
+  });
+});
+
+describe("larguraDoCentro", () => {
+  it("laterais escondidos: só o padding apertado (px-2) é descontado", () => {
+    expect(larguraDoCentro(273, true)).toBe(257);
+  });
+
+  it("laterais visíveis: padding normal e os dois gaps", () => {
+    expect(larguraDoCentro(800, false)).toBe(736);
   });
 });
