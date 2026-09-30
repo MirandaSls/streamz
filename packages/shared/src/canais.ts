@@ -301,8 +301,8 @@ export interface ScreenQualityPreset {
  * Resolução × taxa de quadros, todas as combinações que a UI oferece.
  *
  * Os valores de bitrate são para **tela** (conteúdo estático com texto fino),
- * não para câmera: privilegiam nitidez por quadro. Quem compartilha jogo ou
- * vídeo troca para 60 fps no seletor.
+ * não para câmera: privilegiam nitidez por quadro. O padrão já é 60 fps (jogo e
+ * vídeo); quem compartilha texto estático pode descer para 30 fps no seletor.
  */
 export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
   "720p30": { label: "720p · 30 fps", width: 1280, height: 720, frameRate: 30, maxBitrate: 1_500_000 },
@@ -316,12 +316,12 @@ export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
 /**
  * Resolução padrão do seletor de tela.
  *
- * 1080p30, e não 1440p30: o VP8 é codificado em software, e 1440p são 1,78× os
+ * 1080p60, e não 1440p: o VP8 é codificado em software, e 1440p são 1,78× os
  * pixels de 1080p por quadro — com a câmera ligada junto, era o que deixava o
- * PC lento. Quem precisa ler texto miúdo sobe para 1440p no seletor (a escolha
- * fica guardada).
+ * PC lento. Os 60 fps dão movimento fluido (jogo, vídeo) como no Discord; quem
+ * quer poupar CPU/banda desce para 30 fps no seletor (a escolha fica guardada).
  */
-export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1080p30";
+export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1080p60";
 
 /** Taxas de quadros que a câmera oferece (o seletor de fps). */
 export const CAMERA_FPS_OPCOES = [15, 24, 30, 60] as const;

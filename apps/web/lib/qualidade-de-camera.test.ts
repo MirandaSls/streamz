@@ -34,8 +34,8 @@ describe("contrato da câmera", () => {
     expect(CAMERA_QUALITY[24].maxBitrate).toBeLessThan(CAMERA_QUALITY[30].maxBitrate);
   });
 
-  it("a padrão da tela é 1080p30", () => {
-    expect(SCREEN_QUALITY_PADRAO).toBe("1080p30");
+  it("a padrão da tela é 1080p60", () => {
+    expect(SCREEN_QUALITY_PADRAO).toBe("1080p60");
   });
 });
 
@@ -52,10 +52,10 @@ describe("preferências guardadas", () => {
   it("lê o preset de tela guardado e cai no padrão com lixo", () => {
     expect(lerScreenQuality("1440p60")).toBe("1440p60");
     expect(lerScreenQuality("720p30")).toBe("720p30");
-    expect(lerScreenQuality(null)).toBe("1080p30");
-    expect(lerScreenQuality("4k60")).toBe("1080p30");
+    expect(lerScreenQuality(null)).toBe("1080p60");
+    expect(lerScreenQuality("4k60")).toBe("1080p60");
     // chave herdada do protótipo não é preset
-    expect(lerScreenQuality("toString")).toBe("1080p30");
+    expect(lerScreenQuality("toString")).toBe("1080p60");
   });
 });
 
