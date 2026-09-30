@@ -348,6 +348,11 @@ function Painel({
           ou seja, sem este `onMouseDown` nenhum toque na tela era "fora", e a
           folha só saía pelo Esc (que num telefone não existe) ou escolhendo um
           item. Era o defeito de "abri o + e não consigo mais sair".
+
+          z-[119]/z-[120] (véu/caixa): o menu é a peça transitória mais alta do
+          app — precisa ficar acima do visualizador de imagem (`ImageModal.tsx`,
+          z-[110]), que abre menu de botão direito sobre a própria imagem; antes,
+          com um z menor, o menu nascia atrás dele.
         */
         <div
           aria-hidden="true"
@@ -355,7 +360,7 @@ function Painel({
             if (cedoDemais()) return;
             onClose();
           }}
-          className="anim-overlay fixed inset-0 z-[79] bg-black/60"
+          className="anim-overlay fixed inset-0 z-[119] bg-black/60"
         />
       )}
       <div
@@ -398,14 +403,14 @@ function Painel({
               // solta `h-8`/`w-8`/`rounded-[3px]` escrita no próprio botão em
               // `FileiraDeReacoes`, então não foi preciso tocar naquele
               // componente nem no menu de desktop que ele também atende.
-              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:rounded-full [&_[role=group]>button]:bg-background-surface-highest [&_[role=group]>button]:text-2xl"
+              "anim-folha fixed inset-x-0 bottom-0 z-[120] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:rounded-full [&_[role=group]>button]:bg-background-surface-highest [&_[role=group]>button]:text-2xl"
             : // `.menu_c1e9c4` (css-bruto/858942…): fundo, borda 1px cheia (sem
               // opacidade extra — o token já carrega o alfa) e `box-shadow:
               // var(--shadow-high)` só, sem o `--shadow-border` do `shadow-popout`
               // (aqui a borda já é real). `max-height: calc(100vh - 32px)` é
               // `--custom-menu-viewport-padding` (16px) nos dois lados; o padding
               // 8×8 sai daqui e vai para o rolador interno (`.scroller_c1e9c4`).
-              `fixed z-[80] flex max-h-[calc(100vh-32px)] flex-col overflow-hidden rounded-lg border border-border-subtle bg-background-surface-higher shadow-shadow-high anim-menu ${
+              `fixed z-[120] flex max-h-[calc(100vh-32px)] flex-col overflow-hidden rounded-lg border border-border-subtle bg-background-surface-higher shadow-shadow-high anim-menu ${
                 pos ? "" : "invisible"
               }`
         }
@@ -744,7 +749,7 @@ function Painel({
             polegar, do jeito que o desktop abre e o celular nunca deveria (as
             capturas `discord-mobile-menu-mensagem*.png` não têm menu nenhum
             flutuando: todo submenu é outra folha inteira, do mesmo tipo,
-            simplesmente empilhada por cima da primeira — o `z-[80]`/`z-[79]`
+            simplesmente empilhada por cima da primeira — o `z-[120]`/`z-[119]`
             de cada `Painel` novo nasce depois do anterior na árvore, então
             pinta por cima sem precisar de nada além de repetir `folha`).
           */
