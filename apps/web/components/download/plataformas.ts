@@ -172,7 +172,38 @@ export function origemDoInstalador(protocolo: string, origem: string): string {
  * `STREAMZ_API=… curl … | bash` definiria a variável para o `curl`, não para o
  * script que a lê.
  */
-export function comandoDoTerminalMac(origem: string, apiUrl: string): string {
+export function comandoDoTerminalMac(origem: string, apiUrl: string, versao?: string): string {
   const variavelDaApi = apiUrl === API_PADRAO_DO_INSTALADOR ? "" : `STREAMZ_API=${aspasDeShell(apiUrl)} `;
-  return `curl -fsSL ${aspasDeShell(`${origem}/instalar-mac.sh`)} | ${variavelDaApi}bash`;
+  const variavelDaVersao = versaoValida(versao) ? `STREAMZ_VERSAO=${aspasDeShell(versao)} ` : "";
+  return `curl -fsSL ${aspasDeShell(`${origem}/instalar-mac.sh`)} | ${variavelDaApi}${variavelDaVersao}bash`;
+}
+
+/** `versao` vira texto de shell: só entra no formato X.Y.Z, o resto é ignorado. */
+function versaoValida(versao: string | undefined): versao is string {
+  return versao !== undefined && /^\d+\.\d+\.\d+$/.test(versao);
+}
+
+/**
+ * Comando de uma linha que baixa o `.dmg` pelo Terminal, para o download
+ * protegido por senha.
+ *
+ * A senha não entra no comando: `read -rs` a pede no terminal (não fica no
+ * histórico do shell) e segue para o `curl` pelo stdin (`--data-binary @-`), não
+ * por argumento (que apareceria no `ps`). O corpo JSON é montado pelo python3
+ * (já vem no macOS) para escapar a senha corretamente, seja qual for.
+ */
+export function comandoDeDownloadMac(apiUrl: string, versao?: string): string {
+  const ok = versaoValida(versao);
+  const destino = ok ? `~/Downloads/Streamz-${versao}.dmg` : "~/Downloads/Streamz.dmg";
+  const corpo = `import json,sys;print(json.dumps({"senha":sys.stdin.read(),"plataforma":"macos"${ok ? `,"versao":"${versao}"` : ""}}))`;
+  const token = `curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @- ${aspasDeShell(`${apiUrl}/api/downloads/token`)}`;
+  const extrair = `import json,sys;print(json.load(sys.stdin)["url"])`;
+  return [
+    `printf 'Senha do download: '`,
+    `read -rs S`,
+    `echo`,
+    `U=$(printf %s "$S" | python3 -c '${corpo}' | ${token} | python3 -c '${extrair}')`,
+    `unset S`,
+    `[ -n "$U" ] && curl -fL -o ${destino} "$U"`,
+  ].join("; ");
 }

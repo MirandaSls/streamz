@@ -19,6 +19,8 @@
 #   STREAMZ_DESTINO   pasta de instalação (padrão: /Applications, ou
 #                     ~/Applications se não houver permissão)
 #   STREAMZ_NAO_ABRIR=1  não abre o app ao terminar
+#   STREAMZ_VERSAO    versão exata a instalar, no formato X.Y.Z (ex.: 1.3.18);
+#                     sem ela, o servidor entrega a mais recente
 #
 # Todo o corpo vive em funções e só é executado pela ÚLTIMA linha: se a conexão
 # cair no meio do `curl | bash`, o bash recebe um script cortado que não chama
@@ -211,6 +213,17 @@ eh_http_local() {
   esac
 }
 
+# Versão pedida (opcional). Validada antes de ir para o corpo JSON: o valor é
+# interpolado no `printf` do POST sem escape, então só X.Y.Z numérico passa —
+# nada que quebre o JSON ou chegue estranho ao servidor.
+VERSAO_PEDIDA=""
+resolver_versao() {
+  [ -n "${STREAMZ_VERSAO:-}" ] || return 0
+  [[ "$STREAMZ_VERSAO" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    falha "STREAMZ_VERSAO inválida ('$STREAMZ_VERSAO'): use o formato X.Y.Z, por exemplo 1.3.18."
+  VERSAO_PEDIDA=$STREAMZ_VERSAO
+}
+
 SENHA=""
 ler_senha() {
   # $1 = tentativa; resultado em SENHA
@@ -235,7 +248,7 @@ URL_DO_ARQUIVO=""
 NOME_DO_ARQUIVO=""
 TAMANHO_ESPERADO=""
 pedir_link() {
-  local resposta="$DIR_TEMP/token.json" tentativa=1 codigo senha_json
+  local resposta="$DIR_TEMP/token.json" tentativa=1 codigo senha_json campo_versao
   local tentativas=3
   # com a senha vinda do ambiente não adianta repetir: seria a mesma senha
   [ -n "${STREAMZ_SENHA:-}" ] && tentativas=1
@@ -244,12 +257,15 @@ pedir_link() {
     ler_senha "$tentativa"
     [ -n "$SENHA" ] || falha "senha vazia."
     senha_json=$(json_escapar "$SENHA")
+    campo_versao=""
+    [ -z "$VERSAO_PEDIDA" ] || campo_versao=$(printf ',"versao":"%s"' "$VERSAO_PEDIDA")
 
     # O corpo vai pelo stdin do curl (`@-`), nunca por argumento: argumento de
     # processo aparece no `ps` para qualquer usuário. `printf` é builtin, não
     # vira processo com a senha na linha de comando.
+    # A versão só entra no corpo quando pedida; sem ela o corpo é o de sempre.
     if ! codigo=$(
-      printf '{"senha":"%s","plataforma":"macos"}' "$senha_json" |
+      printf '{"senha":"%s","plataforma":"macos"%s}' "$senha_json" "$campo_versao" |
         curl --silent --show-error --proto "$PROTOCOLOS" --tlsv1.2 \
           --connect-timeout 15 --max-time 60 \
           -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -491,6 +507,7 @@ principal() {
 
   conferir_sistema
   resolver_api
+  resolver_versao
   DIR_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/streamz-instalar.XXXXXX")
 
   msg "Instalador do Streamz para macOS"
