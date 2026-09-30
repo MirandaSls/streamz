@@ -5,9 +5,27 @@ import { rotuloPlataforma, type DownloadDisponivel, type DownloadVersao } from "
 import { FieldLabel } from "@/components/auth/AuthCard";
 import { Button, Modal, Select, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
+import { API_URL } from "@/lib/config";
 import { formatBytes } from "@/lib/format";
 import { notaDeInstalacao } from "./InstalacaoNoSistema";
-import { dataDoInstalador, mensagemDeErroDoDownload } from "./plataformas";
+import { BlocoDeComando } from "./BlocoDeComando";
+import {
+  comandoDeDownloadMac,
+  comandoDoTerminalMac,
+  dataDoInstalador,
+  mensagemDeErroDoDownload,
+  ORIGEM_PADRAO_DO_INSTALADOR,
+  origemDoInstalador,
+} from "./plataformas";
+
+/** Como o Mac recebe o app: o `.dmg` pelo navegador ou um comando no Terminal. */
+type ModoMac = "dmg" | "instalar" | "baixar";
+
+const OPCOES_MAC: { valor: ModoMac; rotulo: string }[] = [
+  { valor: "dmg", rotulo: "Arquivo .dmg" },
+  { valor: "instalar", rotulo: "Instalar pelo Terminal" },
+  { valor: "baixar", rotulo: "Baixar pelo Terminal" },
+];
 
 /**
  * A etapa da senha, aberta pelo botão "Baixar" da plataforma escolhida.
@@ -48,6 +66,14 @@ export default function EtapaDaSenha({
   const [versaoEscolhida, setVersaoEscolhida] = useState<string | null>(null);
   const [listando, setListando] = useState(false);
   const idDaVersao = `${idDoFormulario}-versao`;
+  const ehMac = disponivel.plataforma === "macos";
+  const [modo, setModo] = useState<ModoMac>("dmg");
+  // tela de resultado dos modos de Terminal; só existe com a senha já aceita
+  const [comComando, setComComando] = useState(false);
+  // a origem só é conhecida no navegador: o pré-render parte da de produção
+  const [origem, setOrigem] = useState(ORIGEM_PADRAO_DO_INSTALADOR);
+  const idDoModo = `${idDoFormulario}-modo`;
+  const porTerminal = ehMac && modo !== "dmg";
   const escolhida = versoes?.find((v) => v.versao === versaoEscolhida) ?? null;
   const tamanho = escolhida?.tamanho ?? disponivel.tamanho;
   const data = dataDoInstalador(escolhida?.atualizadoEm ?? disponivel.atualizadoEm);
@@ -57,6 +83,46 @@ export default function EtapaDaSenha({
   useEffect(() => {
     if (versoes) document.getElementById(idDaVersao)?.focus();
   }, [versoes, idDaVersao]);
+
+  useEffect(() => {
+    setOrigem(origemDoInstalador(window.location.protocol, window.location.origin));
+  }, []);
+
+  function aoMudarModo(novo: ModoMac) {
+    setModo(novo);
+    setErro(null);
+    // a lista aberta num modo não vale no outro: cada um recomeça do padrão
+    setVersoes(null);
+    setVersaoEscolhida(null);
+  }
+
+  // Só confere a senha (a lista de versões exige a mesma) e troca de tela. A
+  // senha nunca entra no comando: o script pede de novo, sem deixá-la no histórico.
+  async function aoVerComando() {
+    setErro(null);
+    setCarregando(true);
+    try {
+      const { versoes: lista } = await api.downloadVersoes(senha, disponivel.plataforma);
+      if (lista.length === 0) {
+        setErro("Nenhuma versão disponível para este sistema.");
+        return;
+      }
+      setVersoes(lista);
+      setVersaoEscolhida(lista[0].versao);
+      setSenha("");
+      setComComando(true);
+    } catch (err) {
+      setErro(mensagemDeErroDoDownload(err));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  function aoVoltar() {
+    setComComando(false);
+    setVersoes(null);
+    setVersaoEscolhida(null);
+  }
 
   async function aoListarVersoes() {
     if (carregando || listando) return;
@@ -84,6 +150,10 @@ export default function EtapaDaSenha({
   async function aoEnviar(e: React.FormEvent) {
     e.preventDefault();
     if (carregando || !senha.trim()) return;
+    if (porTerminal) {
+      void aoVerComando();
+      return;
+    }
     setErro(null);
     setCarregando(true);
     try {
@@ -136,6 +206,54 @@ export default function EtapaDaSenha({
     );
   }
 
+  if (comComando && versoes) {
+    // a mais recente vai sem `versao`: o script já busca sempre a última
+    const versaoDoComando =
+      versaoEscolhida && versaoEscolhida !== versoes[0].versao ? versaoEscolhida : undefined;
+    const instalar = modo === "instalar";
+    const comando = instalar
+      ? comandoDoTerminalMac(origem, API_URL, versaoDoComando)
+      : comandoDeDownloadMac(API_URL, versaoDoComando);
+    return (
+      <Modal
+        aoFechar={aoFechar}
+        titulo={instalar ? "Instalar pelo Terminal" : "Baixar pelo Terminal"}
+        subtitulo="Senha aceita. Escolha a versão e cole o comando no Terminal."
+        rodape={
+          <>
+            <Button variante="secundario" onClick={aoVoltar} className="celular:h-[48px]">
+              Voltar
+            </Button>
+            <Button variante="primario" onClick={aoFechar} className="celular:h-[48px]">
+              Fechar
+            </Button>
+          </>
+        }
+      >
+        <FieldLabel htmlFor={idDaVersao}>Versão</FieldLabel>
+        <Select
+          id={idDaVersao}
+          opcoes={versoes.map((v, i) => ({
+            valor: v.versao,
+            rotulo: i === 0 ? `${v.versao} (mais recente)` : v.versao,
+          }))}
+          valor={versaoEscolhida}
+          aoMudar={setVersaoEscolhida}
+        />
+        <BlocoDeComando
+          className="mt-4"
+          titulo={instalar ? "Comando de instalação" : "Comando de download"}
+          comando={comando}
+          dica={
+            instalar
+              ? "Cole no Terminal. Ele pede a mesma senha de acesso."
+              : "Cole no Terminal. Ele pede a senha e salva o .dmg em Downloads."
+          }
+        />
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       aoFechar={aoFechar}
@@ -159,7 +277,7 @@ export default function EtapaDaSenha({
             disabled={!senha.trim() || listando}
             className="celular:h-[48px]"
           >
-            Baixar
+            {porTerminal ? "Ver comando" : "Baixar"}
           </Button>
         </>
       }
@@ -186,7 +304,33 @@ export default function EtapaDaSenha({
           autoFocus
         />
 
-        {versoes ? (
+        {ehMac ? (
+          <fieldset className="mt-4 min-w-0 border-0 p-0" disabled={carregando || listando}>
+            <legend className="mb-2 text-text-sm font-medium text-text-strong">Como quer baixar?</legend>
+            <div className="flex flex-col gap-2">
+              {OPCOES_MAC.map((o) => (
+                <label
+                  key={o.valor}
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-text-sm text-text-default celular:min-h-[44px] focus-within:ring-2 focus-within:ring-brand-500 ${
+                    modo === o.valor ? "border-brand-500 bg-brand-500/10" : "border-border-subtle"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={idDoModo}
+                    value={o.valor}
+                    checked={modo === o.valor}
+                    onChange={() => aoMudarModo(o.valor)}
+                    className="accent-brand-500"
+                  />
+                  {o.rotulo}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+
+        {porTerminal ? null : versoes ? (
           <div className="mt-4">
             <FieldLabel htmlFor={idDaVersao}>Versão</FieldLabel>
             <Select
