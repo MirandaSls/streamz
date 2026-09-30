@@ -311,8 +311,10 @@ export default function ImageModal({
       // o mesmo nível de popout/tooltip/modal comuns, e uma dica de reação
       // deixada aberta na mensagem por baixo (o `fixed z-[100]` dela não some
       // sozinho se o ponteiro não sai de cima) pintava por cima do véu. O
-      // visualizador é a peça mais "em cima" que existe no app — nada deveria
-      // empilhar acima dele — por isso ganha o teto, e não só um degrau.
+      // visualizador é a peça mais "em cima" que existe no app — só o menu de
+      // contexto (`ContextMenu.tsx`, z-[120]) fica acima, porque é aberto de
+      // dentro dele (botão direito na imagem) — por isso ganha o teto, e não
+      // só um degrau.
       className={`fixed inset-0 z-[110] grid anim-overlay ${
         ehMobile
           ? "grid-rows-1 bg-mobile-background-scrim-opaque"
