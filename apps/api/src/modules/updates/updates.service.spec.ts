@@ -19,6 +19,9 @@
  */
 import { describe, expect, it } from "vitest";
 import type { ConfigService } from "@nestjs/config";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UpdatesService } from "./updates.service";
 
 /** `ConfigService` de mentira: só o `get`, que é tudo que o serviço usa. */
@@ -315,5 +318,24 @@ describe("UpdatesService — outras plataformas", () => {
     // o `ios` ainda não existe: melhor "nada" que um `.apk` ou um `.app.tar.gz`
     expect(s.manifesto("ios-aarch64", "1.0.0")).toBeNull();
     expect(s.manifesto("freebsd-x86_64", "1.0.0")).toBeNull();
+  });
+});
+
+describe("UpdatesService — congelar-macos", () => {
+  it("com o arquivo na pasta, o Mac recebe null; Windows segue; sem o arquivo, o Mac volta", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "streamz-congelar-"));
+    try {
+      const s = servico({ ...TUDO, UPDATE_DIR: pasta });
+      const arquivo = join(pasta, "congelar-macos");
+      writeFileSync(arquivo, "");
+      expect(s.manifesto("darwin-aarch64", "1.0.0")).toBeNull();
+      expect(s.manifesto("darwin-x86_64", "1.0.0")).toBeNull();
+      expect(s.manifesto("windows-x86_64", "1.0.0")).not.toBeNull();
+      rmSync(arquivo);
+      expect(s.manifesto("darwin-aarch64", "1.0.0")).not.toBeNull();
+      expect(s.manifesto("darwin-x86_64", "1.0.0")).not.toBeNull();
+    } finally {
+      rmSync(pasta, { recursive: true, force: true });
+    }
   });
 });

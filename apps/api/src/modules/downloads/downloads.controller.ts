@@ -1,9 +1,12 @@
 import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
 import {
   downloadTokenSchema,
+  downloadVersoesSchema,
   type DownloadAutorizado,
   type DownloadCatalogo,
   type DownloadTokenInput,
+  type DownloadVersoes,
+  type DownloadVersoesInput,
 } from "@streamz/shared";
 import { DownloadsService } from "./downloads.service";
 import { zodBody } from "../../common/zod.pipe";
@@ -48,7 +51,19 @@ export class DownloadsController {
   autorizar(
     @Body(zodBody(downloadTokenSchema)) dto: DownloadTokenInput,
   ): Promise<DownloadAutorizado> {
-    return this.downloads.autorizar(dto.senha, dto.plataforma);
+    return this.downloads.autorizar(dto.senha, dto.plataforma, dto.versao);
+  }
+
+  /**
+   * Lista as versões disponíveis. Só depois da senha, porque o catálogo público
+   * esconde a versão de propósito.
+   */
+  @Post("versoes")
+  @DOWNLOAD_SENHA_THROTTLE
+  versoes(
+    @Body(zodBody(downloadVersoesSchema)) dto: DownloadVersoesInput,
+  ): Promise<DownloadVersoes> {
+    return this.downloads.versoes(dto.senha, dto.plataforma);
   }
 
   /**

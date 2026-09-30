@@ -17,13 +17,20 @@ import {
   type DownloadCatalogo,
   type DownloadDisponivel,
   type DownloadPlataforma,
+  type DownloadVersoes,
 } from "@streamz/shared";
 import { escolherInstalador, type EntradaInstalador } from "./instalador";
+import { listarVersoes } from "./versoes";
+
+/** Formato aceito para versão (token e parâmetro): só `X.Y.Z` numérico. */
+const VERSAO_VALIDA = /^\d+\.\d+\.\d+$/;
 
 /** Claims do token curto de download (`?t=` na rota do arquivo). */
 interface DownloadTokenClaims {
   /** plataforma autorizada; o token não vale para nenhuma outra. */
   plt: DownloadPlataforma;
+  /** versão pedida; ausente = o instalador mais recente (comportamento antigo). */
+  ver?: string;
   typ: "download";
 }
 
@@ -122,6 +129,7 @@ export class DownloadsService {
   async autorizar(
     senha: string,
     plataforma: DownloadPlataforma,
+    versao?: string,
   ): Promise<DownloadAutorizado> {
     this.exigirConfigurado();
 
@@ -129,10 +137,12 @@ export class DownloadsService {
       throw new UnauthorizedException("Senha incorreta");
     }
 
-    const arquivo = await this.arquivoDe(plataforma);
+    const arquivo = await this.arquivoDe(plataforma, versao);
     if (!arquivo) {
       throw new NotFoundException(
-        `Ainda não há instalador para ${rotuloPlataforma(plataforma)}`,
+        versao
+          ? `Não há instalador ${versao} para ${rotuloPlataforma(plataforma)}`
+          : `Ainda não há instalador para ${rotuloPlataforma(plataforma)}`,
       );
     }
 
@@ -140,7 +150,7 @@ export class DownloadsService {
       /\/+$/,
       "",
     );
-    const token = this.assinarToken(plataforma);
+    const token = this.assinarToken(plataforma, versao);
     return {
       url: `${api}/api/downloads/arquivo?t=${encodeURIComponent(token)}`,
       filename: arquivo.filename,
@@ -153,20 +163,55 @@ export class DownloadsService {
   async arquivoDoToken(token: string | undefined): Promise<ArquivoDeDownload> {
     this.exigirConfigurado();
 
-    const plataforma = token ? this.verificarToken(token) : null;
+    const claims = token ? this.verificarToken(token) : null;
     // mesma resposta para token ausente, expirado e forjado: distinguir os três
     // só ajudaria quem está sondando
-    if (!plataforma) {
+    if (!claims) {
       throw new UnauthorizedException("Link expirado — informe a senha de novo");
     }
 
-    const arquivo = await this.arquivoDe(plataforma);
+    // a versão vem do token assinado por nós; o nome do arquivo nunca vem do cliente
+    const arquivo = await this.arquivoDe(claims.plt, claims.ver);
     if (!arquivo) {
+      throw new NotFoundException(
+        claims.ver
+          ? `Não há instalador ${claims.ver} para ${rotuloPlataforma(claims.plt)}`
+          : `Ainda não há instalador para ${rotuloPlataforma(claims.plt)}`,
+      );
+    }
+    return arquivo;
+  }
+
+  /**
+   * Versões instaláveis da plataforma, da mais nova para a mais antiga.
+   *
+   * Mesma ordem do `autorizar`: senha primeiro, disco depois — senão o 404
+   * chegaria antes do 401 e denunciaria quais sistemas têm build.
+   */
+  async versoes(
+    senha: string,
+    plataforma: DownloadPlataforma,
+  ): Promise<DownloadVersoes> {
+    this.exigirConfigurado();
+
+    if (!this.senhaConfere(senha)) {
+      throw new UnauthorizedException("Senha incorreta");
+    }
+
+    const { candidatos, extensoes } = await this.candidatosDe(plataforma);
+    const lista = listarVersoes(candidatos, extensoes);
+    if (lista.length === 0) {
       throw new NotFoundException(
         `Ainda não há instalador para ${rotuloPlataforma(plataforma)}`,
       );
     }
-    return arquivo;
+    return {
+      versoes: lista.map((v) => ({
+        versao: v.versao,
+        tamanho: v.tamanho,
+        atualizadoEm: v.mtime.toISOString(),
+      })),
+    };
   }
 
   private exigirConfigurado(): void {
@@ -192,15 +237,22 @@ export class DownloadsService {
     return timingSafeEqual(a, b);
   }
 
-  private assinarToken(plataforma: DownloadPlataforma): string {
+  private assinarToken(plataforma: DownloadPlataforma, versao?: string): string {
     return this.jwt.sign(
-      { plt: plataforma, typ: "download" } satisfies DownloadTokenClaims,
+      {
+        plt: plataforma,
+        // só entra quando pedida: token sem `ver` segue valendo "o mais recente"
+        ...(versao ? { ver: versao } : {}),
+        typ: "download",
+      } satisfies DownloadTokenClaims,
       { secret: process.env.JWT_SECRET, expiresIn: DOWNLOAD_TOKEN_TTL_SECONDS },
     );
   }
 
-  /** Plataforma autorizada pelo token, ou null se ele não presta. */
-  private verificarToken(token: string): DownloadPlataforma | null {
+  /** Claims válidos (plataforma + versão opcional) do token, ou null se ele não presta. */
+  private verificarToken(
+    token: string,
+  ): { plt: DownloadPlataforma; ver?: string } | null {
     try {
       const claims = this.jwt.verify<DownloadTokenClaims>(token, {
         secret: process.env.JWT_SECRET,
@@ -208,7 +260,13 @@ export class DownloadsService {
       // `typ` separa este token do de anexo: os dois são assinados com o mesmo
       // JWT_SECRET, e sem a marca um valeria pelo outro
       if (claims?.typ !== "download") return null;
-      return DOWNLOAD_PLATAFORMAS.includes(claims.plt) ? claims.plt : null;
+      if (!DOWNLOAD_PLATAFORMAS.includes(claims.plt)) return null;
+      if (claims.ver === undefined) return { plt: claims.plt };
+      // defesa em profundidade: o token é nosso, mas a versão vira busca no disco
+      if (typeof claims.ver !== "string" || !VERSAO_VALIDA.test(claims.ver)) {
+        return null;
+      }
+      return { plt: claims.plt, ver: claims.ver };
     } catch {
       return null;
     }
@@ -227,7 +285,47 @@ export class DownloadsService {
    */
   private async arquivoDe(
     plataforma: DownloadPlataforma,
+    versao?: string,
   ): Promise<ArquivoDeDownload | null> {
+    const { candidatos, caminhos, extensoes } = await this.candidatosDe(plataforma);
+
+    if (versao !== undefined) {
+      // a versão só seleciona entre arquivos já listados do disco; nunca é
+      // usada para montar caminho
+      if (!VERSAO_VALIDA.test(versao)) return null;
+      const escolhida = listarVersoes(candidatos, extensoes).find(
+        (v) => v.versao === versao,
+      );
+      if (!escolhida) return null;
+      return {
+        caminho: caminhos.get(escolhida.nome)!,
+        filename: escolhida.nome,
+        tamanho: escolhida.tamanho,
+        atualizadoEm: escolhida.mtime,
+      };
+    }
+
+    const escolhido = escolherInstalador(candidatos, extensoes);
+    if (!escolhido) return null;
+
+    return {
+      caminho: caminhos.get(escolhido.nome)!,
+      filename: escolhido.nome,
+      tamanho: escolhido.tamanho,
+      atualizadoEm: escolhido.mtime,
+    };
+  }
+
+  /**
+   * Monta a lista de candidatos da plataforma a partir da pasta, compartilhada
+   * por `arquivoDe` e `versoes`. O caminho fica num mapa à parte porque
+   * `escolherInstalador`/`listarVersoes` só conhecem nome/mtime/tamanho.
+   */
+  private async candidatosDe(plataforma: DownloadPlataforma): Promise<{
+    candidatos: EntradaInstalador[];
+    caminhos: Map<string, string>;
+    extensoes: readonly string[];
+  }> {
     const dir = this.diretorio;
     const entradas = await readdir(dir, { withFileTypes: true }).catch(
       (e: NodeJS.ErrnoException) => {
@@ -239,8 +337,6 @@ export class DownloadsService {
     );
 
     const extensoes = EXTENSOES[plataforma];
-    // caminho de cada candidato, indexado pelo nome — `escolherInstalador` só
-    // conhece nome/mtime/tamanho, não disco, então o caminho fica de fora dela
     const caminhos = new Map<string, string>();
     const candidatos: EntradaInstalador[] = [];
 
@@ -260,14 +356,6 @@ export class DownloadsService {
       candidatos.push({ nome: entrada.name, mtime: info.mtime, tamanho: info.size });
     }
 
-    const escolhido = escolherInstalador(candidatos, extensoes);
-    if (!escolhido) return null;
-
-    return {
-      caminho: caminhos.get(escolhido.nome)!,
-      filename: escolhido.nome,
-      tamanho: escolhido.tamanho,
-      atualizadoEm: escolhido.mtime,
-    };
+    return { candidatos, caminhos, extensoes };
   }
 }
