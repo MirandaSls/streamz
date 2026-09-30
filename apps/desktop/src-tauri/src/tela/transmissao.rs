@@ -466,11 +466,16 @@ pub async fn iniciar(
     );
     let faixa = LocalVideoTrack::create_video_track("tela", RtcVideoSource::Native(fonte.clone()));
 
-    // O quadro entra na fonte **antes** de publicar: quando o SFU encaminhar a
-    // faixa, o encoder já terá conteúdo, e o outro lado vê imagem em vez do
-    // "Carregando a transmissão…" até a fonte repintar.
+    // Entregue agora, antes de publicar, o primeiro quadro não chega a encoder
+    // nenhum: o encoder só se liga à fonte depois da negociação. Valem duas
+    // outras coisas. A entrega desliga o keepalive do SDK, que empurra quadros
+    // **pretos** na fonte enquanto ela não recebeu nenhum. E o quadro fica
+    // guardado no conversor, que o repete no laço até o encoder existir e
+    // receber imagem (ver `REPETICAO_SEM_QUADRO`). Sem primeiro quadro, o
+    // preto do keepalive segue até a fonte repintar.
+    let mut conversor = Conversor::default();
     if let Some(quadro) = &primeiro {
-        Conversor::default().empurrar(&fonte, quadro, largura_max, altura_max);
+        conversor.empurrar(&fonte, quadro, largura_max, altura_max);
     }
 
     // Espelha o `publicarTela` da web: teto de bitrate do preset, sem
@@ -555,6 +560,7 @@ pub async fn iniciar(
             let motivo = transmitir(
                 capturador,
                 &fonte,
+                conversor,
                 (largura_max, altura_max),
                 fps,
                 &bandeira,
@@ -746,18 +752,45 @@ fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
 #[cfg(not(any(windows, target_os = "macos")))]
 fn transmitir_audio(_fonte: &NativeAudioSource, _parar: &AtomicBool) {}
 
+/// Quanto a captura pode ficar sem quadro novo antes de o último voltar à
+/// fonte (`Conversor::repetir`).
+///
+/// A fonte não entra no modo zero-hertz do libwebrtc (ninguém chama
+/// `ProcessConstraints` nela), então o encoder só codifica quando recebe
+/// quadro, e um pedido de keyframe espera o próximo. Esses pedidos chegam
+/// justamente quando alguém começa a ver: ao assinar a faixa, ao anexar um
+/// `<video>` novo, e quando o adaptiveStream do outro lado retoma a faixa
+/// depois de o `<video>` sumir ou ser remontado (entrar ou sair da tela
+/// cheia). Com a tela parada, o próximo quadro só viria quando ela
+/// repintasse, e o outro lado ficaria preto esse tempo todo; repetindo a cada
+/// 100 ms, o preto dura uma fração de segundo.
+///
+/// Sai barato: um quadro idêntico ao anterior o encoder resolve pulando os
+/// blocos parados, em poucos bytes na rede. E nunca dispara enquanto a fonte
+/// repinta: no ritmo do preset, o quadro novo chega antes do prazo.
+///
+/// É também o que cumpre o "repete o quadro anterior" do contrato do
+/// `Capturador` quando a fonte não repinta: janela parada, ou minimizada no
+/// DXGI.
+const REPETICAO_SEM_QUADRO: Duration = Duration::from_millis(100);
+
 /// O laço da transmissão. Devolve `None` quando parou a pedido, ou o motivo
 /// quando acabou sozinha.
+///
+/// O `conversor` vem de `iniciar` com o primeiro quadro guardado, quando houve
+/// um: a repetição o reentrega desde a primeira volta do laço, e é assim que o
+/// encoder, ligado só depois da negociação, recebe imagem sem esperar a tela
+/// repintar.
 fn transmitir(
     mut capturador: Box<dyn Capturador>,
     fonte: &NativeVideoSource,
+    mut conversor: Conversor,
     (largura_max, altura_max): (u32, u32),
     fps: u32,
     parar: &AtomicBool,
     mut eventos: UnboundedReceiver<RoomEvent>,
 ) -> Option<Motivo> {
     let intervalo = Duration::from_micros(1_000_000 / u64::from(fps));
-    let mut conversor = Conversor::default();
     loop {
         if parar.load(Ordering::Acquire) {
             return None;
@@ -775,8 +808,10 @@ fn transmitir(
                 conversor.empurrar(fonte, &quadro, largura_max, altura_max);
                 capturador.reciclar(quadro);
             }
-            // Nada repintou: o encoder segue com o último quadro que recebeu.
-            Ok(None) => {}
+            // Nada repintou: o último quadro volta à fonte, uma vez a cada
+            // `REPETICAO_SEM_QUADRO`, para um pedido de keyframe não ficar
+            // esperando a tela mudar.
+            Ok(None) => conversor.repetir(fonte),
             Err(Erro::FonteSumiu) => return Some(Motivo::FonteSumiu),
             Err(Erro::Falha(_)) => return Some(Motivo::Falha),
         }
@@ -795,20 +830,27 @@ fn sala_caiu(eventos: &mut UnboundedReceiver<RoomEvent>) -> bool {
     }
 }
 
-/// Converte quadros BGRA para o I420 do encoder e os entrega à fonte de vídeo.
+/// Converte quadros BGRA para o I420 do encoder, os entrega à fonte de vídeo
+/// e guarda o último, para repeti-lo quando a captura não traz nada novo.
 ///
-/// Está separado do laço porque o **primeiro** quadro é empurrado em
-/// `iniciar`, antes de publicar a faixa: assim a publicação já sobe com
-/// imagem.
+/// Nasce em `iniciar`, e não no laço, porque o **primeiro** quadro é empurrado
+/// lá, antes de publicar a faixa — e é este conversor que o guarda até o
+/// encoder existir para recebê-lo (ver `repetir`).
 #[derive(Default)]
 struct Conversor {
     /// O I420 na resolução da fonte, quando ela é maior que o preset e o
     /// quadro ainda vai ser reduzido. É só um passo intermediário (o
     /// `scale` devolve um buffer novo, e é esse que o encoder guarda), então
     /// dá para reaproveitá-lo: um monitor 4K são 12 MB a menos alocados por
-    /// quadro. O buffer que vai para o encoder **não** pode ser reaproveitado
-    /// — o libwebrtc segura uma referência a ele até codificar.
+    /// quadro. O buffer que vai para o encoder **não** pode ser reescrito —
+    /// o libwebrtc segura uma referência a ele até codificar —, mas
+    /// reentregá-lo como está pode, e é justamente o que `repetir` faz.
     intermediario: Option<I420Buffer>,
+    /// O último I420 entregue à fonte, e quando. A fonte não entra no modo
+    /// zero-hertz do libwebrtc, então o encoder só codifica o que recebe, e um
+    /// pedido de keyframe espera o próximo quadro; com a tela parada, só há
+    /// próximo porque `repetir` reentrega este.
+    ultimo: Option<(I420Buffer, Instant)>,
 }
 
 impl Conversor {
@@ -820,13 +862,25 @@ impl Conversor {
         altura_max: u32,
     ) {
         let buffer = self.para_i420(quadro, largura_max, altura_max);
-        fonte.capture_frame(&VideoFrame {
-            rotation: VideoRotation::VideoRotation0,
-            // zero = "agora", pelo relógio do SDK
-            timestamp_us: 0,
-            frame_metadata: None,
-            buffer,
-        });
+        entregar(fonte, &buffer);
+        self.ultimo = Some((buffer, Instant::now()));
+    }
+
+    /// Reentrega o último quadro se a captura passou `REPETICAO_SEM_QUADRO`
+    /// sem mandar outro. É o mesmo buffer, sem cópia: cada entrega passa ao
+    /// C++ uma referência contada própria (`scoped_refptr`), e o buffer que já
+    /// foi ao encoder nunca mais é escrito — o `para_i420` só escreve num
+    /// buffer novo ou no `intermediario` —, então as entregas repetidas não
+    /// disputam nada.
+    fn repetir(&mut self, fonte: &NativeVideoSource) {
+        let Some((buffer, entregue_em)) = &mut self.ultimo else {
+            return;
+        };
+        if entregue_em.elapsed() < REPETICAO_SEM_QUADRO {
+            return;
+        }
+        entregar(fonte, buffer);
+        *entregue_em = Instant::now();
     }
 
     /// BGRA → I420 na resolução da fonte e, se ela for maior que o preset,
@@ -866,6 +920,20 @@ impl Conversor {
             cheio
         }
     }
+}
+
+/// Entrega um I420 à fonte sem abrir mão dele: o quadro do libwebrtc leva a
+/// própria referência ao buffer, e o `Conversor` fica com a sua para `repetir`.
+fn entregar(fonte: &NativeVideoSource, buffer: &I420Buffer) {
+    fonte.capture_frame(&VideoFrame {
+        rotation: VideoRotation::VideoRotation0,
+        // zero = "agora", pelo relógio do SDK. Vale também para a repetição:
+        // cada entrega é um quadro novo na linha do tempo, mesmo com a imagem
+        // de antes.
+        timestamp_us: 0,
+        frame_metadata: None,
+        buffer,
+    });
 }
 
 /// Encaixa `largura`×`altura` dentro de `max_l`×`max_a` mantendo a proporção,
