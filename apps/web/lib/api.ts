@@ -50,6 +50,7 @@ import type {
   DownloadAutorizado,
   DownloadCatalogo,
   DownloadPlataforma,
+  DownloadVersoes,
   DMLeaveResult,
   FriendLists,
   FriendRequest,
@@ -127,6 +128,7 @@ const ROTAS_SEM_REFRESH = [
   "/auth/forgot-password",
   "/auth/reset-password",
   "/downloads/token",
+  "/downloads/versoes",
 ];
 
 /**
@@ -861,8 +863,14 @@ export const api = {
   // download do app de desktop (senha única, conferida no servidor)
   downloadCatalogo: () => request<DownloadCatalogo>("/downloads"),
   /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
-  downloadAutorizar: (senha: string, plataforma: DownloadPlataforma) =>
-    request<DownloadAutorizado>("/downloads/token", json({ senha, plataforma })),
+  downloadAutorizar: (senha: string, plataforma: DownloadPlataforma, versao?: string) =>
+    request<DownloadAutorizado>(
+      "/downloads/token",
+      json({ senha, plataforma, ...(versao ? { versao } : {}) }),
+    ),
+  /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
+  downloadVersoes: (senha: string, plataforma: DownloadPlataforma) =>
+    request<DownloadVersoes>("/downloads/versoes", json({ senha, plataforma })),
 
   // ── j-painel-admin ── painel do administrador da instância (só leitura)
   /** Toda conta pode perguntar; só quem está em `PLATFORM_ADMIN_EMAILS` ouve true. */

@@ -1,9 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
-import { rotuloPlataforma, type DownloadDisponivel } from "@streamz/shared";
+import { useEffect, useId, useState } from "react";
+import { rotuloPlataforma, type DownloadDisponivel, type DownloadVersao } from "@streamz/shared";
 import { FieldLabel } from "@/components/auth/AuthCard";
-import { Button, Modal, TextInput } from "@/components/ui/primitivos";
+import { Button, Modal, Select, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { notaDeInstalacao } from "./InstalacaoNoSistema";
@@ -43,7 +43,43 @@ export default function EtapaDaSenha({
   const [baixando, setBaixando] = useState<string | null>(null);
   const idDoFormulario = useId();
   const rotulo = rotuloPlataforma(disponivel.plataforma);
-  const data = dataDoInstalador(disponivel.atualizadoEm);
+  // `null` = lista não aberta: o fluxo normal baixa o mais recente sem passo extra
+  const [versoes, setVersoes] = useState<DownloadVersao[] | null>(null);
+  const [versaoEscolhida, setVersaoEscolhida] = useState<string | null>(null);
+  const [listando, setListando] = useState(false);
+  const idDaVersao = `${idDoFormulario}-versao`;
+  const escolhida = versoes?.find((v) => v.versao === versaoEscolhida) ?? null;
+  const tamanho = escolhida?.tamanho ?? disponivel.tamanho;
+  const data = dataDoInstalador(escolhida?.atualizadoEm ?? disponivel.atualizadoEm);
+
+  // o foco vai para o Select quando a lista chega: o botão que tinha o foco
+  // some do DOM e, sem isso, o foco cairia no <body>
+  useEffect(() => {
+    if (versoes) document.getElementById(idDaVersao)?.focus();
+  }, [versoes, idDaVersao]);
+
+  async function aoListarVersoes() {
+    if (carregando || listando) return;
+    if (!senha.trim()) {
+      setErro("Informe a senha para ver as versões");
+      return;
+    }
+    setErro(null);
+    setListando(true);
+    try {
+      const { versoes: lista } = await api.downloadVersoes(senha, disponivel.plataforma);
+      if (lista.length === 0) {
+        setErro("Nenhuma versão disponível para este sistema.");
+        return;
+      }
+      setVersoes(lista);
+      setVersaoEscolhida(lista[0].versao);
+    } catch (err) {
+      setErro(mensagemDeErroDoDownload(err));
+    } finally {
+      setListando(false);
+    }
+  }
 
   async function aoEnviar(e: React.FormEvent) {
     e.preventDefault();
@@ -51,7 +87,11 @@ export default function EtapaDaSenha({
     setErro(null);
     setCarregando(true);
     try {
-      const autorizado = await api.downloadAutorizar(senha, disponivel.plataforma);
+      // `undefined` quando a lista não foi aberta ou a escolhida é a mais
+      // recente: o caminho normal segue idêntico ao de antes da seletor
+      const versaoPedida =
+        versoes && versaoEscolhida && versaoEscolhida !== versoes[0].versao ? versaoEscolhida : undefined;
+      const autorizado = await api.downloadAutorizar(senha, disponivel.plataforma, versaoPedida);
       // navegação direta: o browser assume a transferência (barra de progresso,
       // pausar, retomar). Um fetch+blob teria de segurar o instalador inteiro
       // na memória da aba antes de salvar. A resposta é `Content-Disposition:
@@ -116,7 +156,7 @@ export default function EtapaDaSenha({
             form={idDoFormulario}
             variante="primario"
             carregando={carregando}
-            disabled={!senha.trim()}
+            disabled={!senha.trim() || listando}
             className="celular:h-[48px]"
           >
             Baixar
@@ -126,7 +166,8 @@ export default function EtapaDaSenha({
     >
       <form id={idDoFormulario} onSubmit={aoEnviar} noValidate>
         <p className="mb-4 text-text-sm text-text-muted">
-          {rotulo} · {formatBytes(disponivel.tamanho)}
+          {rotulo} · {formatBytes(tamanho)}
+          {escolhida ? ` · versão ${escolhida.versao}` : ""}
           {data ? ` · atualizado em ${data}` : ""}
         </p>
 
@@ -140,10 +181,37 @@ export default function EtapaDaSenha({
           autoComplete="off"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
-          disabled={carregando}
+          disabled={carregando || listando}
           erro={!!erro}
           autoFocus
         />
+
+        {versoes ? (
+          <div className="mt-4">
+            <FieldLabel htmlFor={idDaVersao}>Versão</FieldLabel>
+            <Select
+              id={idDaVersao}
+              opcoes={versoes.map((v, i) => ({
+                valor: v.versao,
+                rotulo: i === 0 ? `${v.versao} (mais recente)` : v.versao,
+              }))}
+              valor={versaoEscolhida}
+              aoMudar={setVersaoEscolhida}
+              desabilitado={carregando}
+            />
+          </div>
+        ) : (
+          <Button
+            variante="link"
+            type="button"
+            onClick={aoListarVersoes}
+            carregando={listando}
+            disabled={carregando}
+            className="mt-2 celular:min-h-[44px]"
+          >
+            Escolher outra versão
+          </Button>
+        )}
 
         <p role="alert" aria-live="polite" className="sr-only">
           {erro}
