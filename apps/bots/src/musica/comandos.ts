@@ -16,6 +16,12 @@ import {
   nomeDoModoDeRepeticao,
   truncar,
 } from "./formatar";
+import {
+  MENSAGEM_PLAYLIST_GERADA_SPOTIFY,
+  embedDeFaixa,
+  embedDeLote,
+  nomeDaFonte,
+} from "./embeds";
 import { SEM_LAVALINK, SEM_PONTE_DE_VOZ, dadosDaFaixa, obterServico } from "./servico";
 
 /** Volt Lime (`design.md`): a cor de destaque do Streamz. */
@@ -175,30 +181,44 @@ const tocar: Comando = {
 
     const resultado = await servico.buscar(jogador, consulta, ctx.usuarioId);
     if (!resultado.tracks?.length) {
+      // Playlist "gerada" do Spotify (Daily Mix etc.) volta do Lavalink como
+      // `error` genérico; sem este ramo a pessoa leria só "não achei nada".
+      if (ehLinkDoSpotify(consulta) && /\/playlist\//i.test(consulta)) {
+        await ctx.responder(MENSAGEM_PLAYLIST_GERADA_SPOTIFY);
+        return;
+      }
       await ctx.responder(`Não achei nada para **${escaparMarkdown(truncar(consulta, 80))}**.`);
       return;
     }
 
+    // A fonte do áudio pode ser outra que não a do link, então o aviso não cita
+    // uma plataforma só.
     const avisoDoSpotify = ehLinkDoSpotify(consulta)
-      ? "Do Spotify vem a faixa; o áudio vem da mesma música em outra fonte " +
-        "(YouTube ou SoundCloud), porque o Spotify não entrega áudio a terceiros."
+      ? "Do Spotify vem a lista de faixas; o áudio vem da mesma música em outra " +
+        "fonte, porque o Spotify não entrega áudio a terceiros."
       : undefined;
 
     // Playlist inteira ou uma faixa só.
     if (resultado.loadType === "playlist") {
+      // `add` com o array mantém a ordem da playlist; nada de embaralhar aqui.
       jogador.queue.add(resultado.tracks);
       const total = resultado.tracks.length;
+      const duracaoTotalMs = resultado.tracks.reduce((soma, t) => soma + (t.info.duration || 0), 0);
+      const primeira = resultado.tracks[0]!;
       if (!jogador.playing) await jogador.play();
+      const capa = resultado.playlist?.thumbnail;
       await ctx.responder({
         embeds: [
-          {
-            color: COR,
-            title: "Playlist na fila",
-            description: `**${escaparMarkdown(
-              truncar(resultado.playlist?.name ?? "Playlist", 100),
-            )}** — ${total} faixa${total === 1 ? "" : "s"}`,
-            ...(avisoDoSpotify ? { footer: { text: avisoDoSpotify } } : {}),
-          },
+          embedDeLote({
+            nome: resultado.playlist?.name ?? "Playlist",
+            ...(/^https?:\/\//i.test(consulta) ? { url: consulta } : {}),
+            ...(capa ? { capaUrl: capa } : {}),
+            fonte: nomeDaFonte(primeira.info.sourceName, primeira.info.uri),
+            total,
+            duracaoTotalMs,
+            pediuPor: ctx.usuarioId,
+            ...(avisoDoSpotify ? { nota: avisoDoSpotify } : {}),
+          }),
         ],
       });
       return;
@@ -212,11 +232,18 @@ const tocar: Comando = {
     const posicao = jogador.queue.tracks.length;
     await ctx.responder({
       embeds: [
-        embedDaFaixa(
-          jaTocando ? `Na fila, posição ${posicao}` : "Tocando agora",
-          faixa,
-          avisoDoSpotify,
-        ),
+        embedDeFaixa(jaTocando ? "fila" : "tocando", {
+          titulo: faixa.info.title,
+          autor: faixa.info.author,
+          ...(faixa.info.uri ? { url: faixa.info.uri } : {}),
+          ...(faixa.info.artworkUrl ? { capaUrl: faixa.info.artworkUrl } : {}),
+          duracaoMs: faixa.info.duration,
+          aoVivo: faixa.info.isStream,
+          fonte: nomeDaFonte(faixa.info.sourceName, faixa.info.uri),
+          pediuPor: ctx.usuarioId,
+          ...(jaTocando ? { posicaoNaFila: posicao } : {}),
+          ...(avisoDoSpotify ? { nota: avisoDoSpotify } : {}),
+        }),
       ],
     });
   },

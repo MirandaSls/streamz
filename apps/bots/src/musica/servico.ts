@@ -223,20 +223,14 @@ export class ServicoDeMusica {
       if (!ehFonteAlternativa(faixa.info.sourceName)) {
         this.youtubeBloqueado.marcar();
         const alternativa = await this.tocarPorFonteAlternativa(jogador, faixa);
-        if (alternativa) {
-          await this.avisarNoCanal(
-            jogador,
-            `O YouTube recusou **${nomeDaFaixa(faixa)}**; toquei pelo ${nomeDaFonte(alternativa.info.sourceName)}.`,
-          );
-          return;
-        }
+        // Sucesso é silencioso: o log da fonte alternativa já registra, e o usuário
+        // não precisa saber de qual fonte veio a música.
+        if (alternativa) return;
       }
+      // Detalhe de conta/bloqueio do YouTube é assunto do operador, não do usuário.
       await this.avisarNoCanal(
         jogador,
-        this.contasDoYoutube.quantidade
-          ? `O YouTube recusou tocar **${nomeDaFaixa(faixa)}** e todas as contas do bot estão barradas agora. Tente de novo mais tarde.`
-          : `O YouTube recusou tocar **${nomeDaFaixa(faixa)}** a partir deste servidor. ` +
-              "Quem administra o Streamz precisa cadastrar uma conta do YouTube para o bot.",
+        `Não consegui tocar **${nomeDaFaixa(faixa)}** em nenhuma fonte agora. Tente outra música ou tente de novo mais tarde.`,
       );
       return;
     }
@@ -422,11 +416,6 @@ export class ServicoDeMusica {
       await jogador.destroy("o bot está desligando").catch(() => undefined);
     }
   }
-}
-
-function nomeDaFonte(sourceName: string | undefined): string {
-  const nomes: Record<string, string> = { soundcloud: "SoundCloud", jiosaavn: "JioSaavn" };
-  return nomes[(sourceName ?? "").toLowerCase()] ?? sourceName ?? "outra fonte";
 }
 
 function nomeDaFaixa(faixa: Track | null | undefined): string {
