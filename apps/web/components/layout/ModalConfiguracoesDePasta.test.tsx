@@ -37,9 +37,28 @@ describe("ModalConfiguracoesDePasta — swatch da cor padrão", () => {
   });
 
   it("outra cor: continua verde, sem check", () => {
-    const s = swatchPadrao(html("#3498db"));
+    const s = swatchPadrao(html("#3ba9f2"));
     expect(s).toContain("bg-background-brand");
     expect(s).toContain('aria-checked="false"');
     expect(s).not.toContain("<svg");
+  });
+});
+
+function quadradoPersonalizado(h: string): string {
+  const m = h.match(/<label[^>]*aria-label="Cor personalizada"[^>]*>.*?<\/label>/s);
+  if (!m) throw new Error("quadrado personalizado ausente");
+  return m[0];
+}
+
+describe("ModalConfiguracoesDePasta — quadrado de cor personalizada", () => {
+  it("cor da paleta: quadrado ganha o fundo e não tem check", () => {
+    const q = quadradoPersonalizado(html("#3ba9f2"));
+    expect(q.toLowerCase()).toContain("background-color:#3ba9f2");
+    expect(q.match(/<svg/g)).toHaveLength(1);
+  });
+
+  it("cor null: sem background", () => {
+    const q = quadradoPersonalizado(html(null));
+    expect(q).not.toContain("background");
   });
 });

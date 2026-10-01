@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { idSchema } from "./internos";
-import { ROLE_COLORS } from "./permissoes";
 
 // ── pastas de servidores ─────────────────────────────────────
 //
@@ -35,15 +34,27 @@ export const MAX_GUILD_FOLDERS = 50;
 export const MAX_GUILDS_PER_FOLDER = 200;
 
 /**
- * Paleta do seletor de cor da pasta: duas linhas de 10, as do Discord.
+ * Paleta do seletor de cor da pasta: duas linhas de 10, na ordem em que o
+ * Discord as mostra (os 10 primeiros são a linha de cima).
  *
- * É a mesma paleta dos cargos (o Discord usa o mesmo seletor nos dois
- * lugares), por isso aponta para `ROLE_COLORS` em vez de repetir as 20 cores —
- * duas listas iguais escritas à mão acabam divergindo. Não há cor padrão
- * aqui de propósito: `color: null` quer dizer "a cor padrão da UI", que é o
- * accent do tema, e o contrato não deve fixar uma cor de tema.
+ * É a paleta **das pastas**, independente de `ROLE_COLORS`: o Discord usa
+ * nas pastas um conjunto próprio, bem mais vivo que o dos cargos, e os
+ * valores foram medidos do seletor dele. Por isso as duas listas não se
+ * referenciam — mudar a paleta de cargo não pode recolorir pasta.
+ *
+ * A paleta é só a sugestão da UI, não a regra de validação: o modal também
+ * aceita cor personalizada, e o schema aceita qualquer `#RRGGBB`. Assim um
+ * layout gravado com uma cor que saiu da paleta continua válido.
+ *
+ * Não há cor padrão aqui de propósito: `color: null` quer dizer "a cor padrão
+ * da UI", que é o accent do tema, e o contrato não deve fixar uma cor de tema.
  */
-export const GUILD_FOLDER_COLORS: readonly string[] = ROLE_COLORS;
+export const GUILD_FOLDER_COLORS: readonly string[] = [
+  "#31ffff", "#51ffbb", "#5af8ff", "#fd95ff", "#ff38a4",
+  "#ffff20", "#ffcf3e", "#ff8067", "#f4ffff", "#a0cee4",
+  "#23d2b0", "#39e480", "#3ba9f2", "#bb5de2", "#ff2892",
+  "#ffcc1e", "#ff7200", "#fa4f3e", "#f7ffff", "#8db6c9",
+];
 
 /** Uma pasta da barra lateral. */
 export interface GuildFolder {
@@ -85,6 +96,9 @@ const guildFolderNameSchema = z
   // `null` como coisas diferentes.
   .transform((nome) => (nome ? nome : null));
 
+// Qualquer `#RRGGBB`, não só as de `GUILD_FOLDER_COLORS`: o modal tem cor
+// personalizada, e restringir à paleta invalidaria layouts já gravados com
+// cores de uma paleta anterior.
 const guildFolderColorSchema = z
   .string({ invalid_type_error: "deve ser texto" })
   .regex(/^#[0-9a-fA-F]{6}$/, "Cor deve ser hexadecimal #RRGGBB");
