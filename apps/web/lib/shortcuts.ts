@@ -46,7 +46,8 @@ export type ShortcutAction =
   | "mostrarAtalhos"
   | "zoomMais"
   | "zoomMenos"
-  | "zoomPadrao";
+  | "zoomPadrao"
+  | "recarregar";
 
 export interface ShortcutSpec {
   action: ShortcutAction;
@@ -93,6 +94,10 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { action: "zoomMais", combos: ["Ctrl+=", "Ctrl+Shift+="], label: "atalho.zoomMais" },
   { action: "zoomMenos", combos: ["Ctrl+-"], label: "atalho.zoomMenos" },
   { action: "zoomPadrao", combos: ["Ctrl+0"], label: "atalho.zoomPadrao" },
+  // Ctrl+R (Cmd+R no mac: `matchesShortcut` trata Ctrl e Meta como o mesmo
+  // modificador). No desktop o webview do Tauri não recarrega com a tecla de
+  // forma confiável, então o app trata ele mesmo, como o Discord faz.
+  { action: "recarregar", combos: ["Ctrl+R"], label: "atalho.recarregar" },
 ];
 
 /**
