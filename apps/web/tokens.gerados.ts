@@ -3,7 +3,7 @@
  * docs/referencias-discord/tokens/variaveis-resolvidas.json (Discord, 2026-09-11).
  * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.
  *
- * Só os tokens que o apps/web usa (250 de 617).
+ * Só os tokens que o apps/web usa (251 de 642).
  * Token novo no código (classe ou var()) não existe até rodar o gerador de novo.
  *
  * Nome da classe = utilitário + nome do token do Discord sem o `--`:
@@ -183,6 +183,7 @@ export const coresDoDiscord: Record<string, string> = {
   "notice-background-critical": cor("notice-background-critical"),
   "notice-text-critical": cor("notice-text-critical"),
   "opacity-black-40": cor("opacity-black-40"),
+  "opacity-green-28": cor("opacity-green-28"),
   "opacity-white-8": cor("opacity-white-8"),
   "plum-20": cor("plum-20"),
   "polls-victor-fill": cor("polls-victor-fill"),

@@ -1087,6 +1087,26 @@ export const Download = doDiscord(
 );
 
 /*
+ * A pasta maciça do topo de uma pasta de servidores aberta no rail — outro
+ * ícone que **não** vem de ativo: o acervo não tem a pasta sozinha (o
+ * `FolderPlus` acima é outro desenho, o "nova pasta" de contorno com o "+").
+ *
+ * Medida nos prints de `docs/Reference/pastas-de-servidores` (01 e 04): no
+ * tile de 40px a tinta ocupa 15×15, a aba ocupa o canto superior esquerdo, o
+ * corpo começa a 15% da altura e os cantos arredondam 15% do lado. Desenhada
+ * no quadro de 24 (aba + corpo num caminho só) e levada ao `QUADRO` do acervo
+ * por `matrix(3 0 0 3 14 14)`: a tinta cai em 20..80 de 10..90, ou seja 75%
+ * do `size` — `size={20}` dá os 15px do Discord.
+ */
+const CAMINHO_PASTA =
+  "M2 5a3 3 0 0 1 3-3h3.93a2 2 0 0 1 1.66.9L12 5h7a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5Z";
+
+export const Folder = doDiscord(QUADRO, {
+  d: CAMINHO_PASTA,
+  desloca: "matrix(3 0 0 3 14 14)",
+});
+
+/*
  * A barra diagonal do "herdar" — o **segundo** ícone deste arquivo que não vem
  * de ativo nenhum, e o único que também não vem do Phosphor.
  *

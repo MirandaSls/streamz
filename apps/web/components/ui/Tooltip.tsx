@@ -37,7 +37,8 @@ export default function Tooltip({
   children,
   className = "",
 }: {
-  label: string;
+  /** `ReactNode` para a dica poder levar emoji desenhado (ex.: nome de pasta). */
+  label: ReactNode;
   side?: Side;
   /** atalho mostrado em pílula à direita do rótulo. */
   shortcut?: string;
@@ -46,9 +47,13 @@ export default function Tooltip({
   children: ReactNode;
   className?: string;
 }) {
+  // `rail`: o texto da dica do rail é negrito no Discord (prints 04 e 05 de
+  // pastas-de-servidores). O primitivo fixa peso 500 na caixa e é de outro
+  // cartão; o negrito entra num span interno, só nesta variante.
+  const rotulo = rail ? <span className="font-semibold">{label}</span> : label;
   return (
     <TooltipPrimitivo
-      rotulo={label}
+      rotulo={rotulo}
       lado={side}
       atalho={shortcut}
       subtitulo={subtitle}

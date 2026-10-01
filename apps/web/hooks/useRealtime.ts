@@ -57,6 +57,7 @@ import {
 import type { DMChannelView, NotificationSetting } from "@streamz/shared";
 // ── h-moderacao ──
 import type {
+  GuildLayout,
   GuildSettingsUpdatedEvent,
   MessagesBulkDeletedEvent,
   PollUpdatedEvent,
@@ -92,6 +93,7 @@ import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useNotas } from "@/stores/notas";
+import { useGuildLayout } from "@/stores/guild-layout";
 import { useEmojis } from "@/stores/emojis";
 import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
@@ -137,6 +139,8 @@ export function useRealtime(currentUserId?: string): void {
     // ── menus de contexto ── minhas notas, junto do resto do boot
     // (`load` é idempotente: não repete se algo já chamou antes)
     void useNotas.getState().load();
+    // pastas da barra de servidores, junto do carregamento das guildas
+    void useGuildLayout.getState().carregar();
     // desktop: permissão e clique da notificação resolvidos antes da primeira
     void prepararNotificacoes();
     // voltar ao app lê o canal que está na tela (o que chegou sem foco contou
@@ -393,6 +397,9 @@ export function useRealtime(currentUserId?: string): void {
       on<UsuarioIgnoradoEvent>(WS_EVENTS.USER_IGNORED, (evento) => {
         useFriends.getState().handleIgnored(evento);
       }),
+      on<GuildLayout>(WS_EVENTS.GUILD_LAYOUT_UPDATE, (layout) => {
+        useGuildLayout.getState().receber(layout);
+      }),
       on<ConversaFixadaEvent>(WS_EVENTS.DM_PIN_UPDATED, (evento) => {
         useDMs.getState().handleDmPinUpdated(evento);
       }),
@@ -521,6 +528,8 @@ export function useRealtime(currentUserId?: string): void {
         // ── menus de contexto ── notas idem — outra conexão pode ter
         // salvo/apagado alguma enquanto esta esteve fora
         void useNotas.getState().load(true);
+        // pastas reorganizadas noutro aparelho durante a queda
+        void useGuildLayout.getState().carregar();
         // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
         void useEmojis.getState().load();
         // e os sons do painel, que mudam pelo mesmo tipo de evento

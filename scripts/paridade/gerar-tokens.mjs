@@ -98,7 +98,9 @@ const EXTRAS = [
   /^--plum-20$/,
   /^--green-360$/,
   /^--(green-new-38|yellow-new-30|red-new-46|neutral-34)$/,
-  /^--opacity-(black|white)-\d+$/,
+  // green entra porque a pasta de servidores do rail usa o verde com alfa
+  // (`bg-opacity-green-28`, rgba(0,133,69,.28)), que não existe em preto/branco
+  /^--opacity-(black|white|green)-\d+$/,
 ];
 
 /**

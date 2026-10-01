@@ -11,6 +11,7 @@ import type { Channel } from "@streamz/shared";
  */
 
 const api = vi.hoisted(() => ({
+  markGuildRead: vi.fn(async (_guildId: string) => {}),
   getGuild: vi.fn(async (_guildId: string): Promise<{ channels: Channel[] }> => ({ channels: [] })),
 }));
 vi.mock("@/lib/api", () => ({ api }));
@@ -272,5 +273,31 @@ describe("select", () => {
     expect(s.activeChannelId).toBe("sala");
     expect(s.voiceChannelId).toBe("sala");
     expect(conectar).toHaveBeenCalledWith(sala, undefined);
+  });
+});
+
+describe("markGuildRead", () => {
+  it("marca como lidos os canais do servidor ativo", async () => {
+    useChannels.setState({
+      guildId: "g1",
+      channels: [{ ...geral, mentionCount: 2, lastReadAt: null }],
+    });
+    await useChannels.getState().markGuildRead("g1");
+    const c = useChannels.getState().channels[0];
+    expect(c.mentionCount).toBe(0);
+    expect(c.lastReadAt).not.toBeNull();
+    expect(api.markGuildRead).toHaveBeenCalledWith("g1");
+  });
+
+  it("guildId diferente do ativo não mexe nos canais do ativo, mas chama a API", async () => {
+    useChannels.setState({
+      guildId: "g1",
+      channels: [{ ...geral, mentionCount: 2, lastReadAt: null }],
+    });
+    await useChannels.getState().markGuildRead("g2");
+    const c = useChannels.getState().channels[0];
+    expect(c.mentionCount).toBe(2);
+    expect(c.lastReadAt).toBeNull();
+    expect(api.markGuildRead).toHaveBeenCalledWith("g2");
   });
 });

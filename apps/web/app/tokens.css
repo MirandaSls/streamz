@@ -3,7 +3,7 @@
  * docs/referencias-discord/tokens/variaveis-resolvidas.json (Discord, 2026-09-11).
  * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.
  *
- * Só os tokens que o apps/web usa (250 de 617).
+ * Só os tokens que o apps/web usa (251 de 642).
  * Token novo no código (classe ou var()) não existe até rodar o gerador de novo.
  *
  * Cada cor sai em três variáveis: o hex, os canais (`-rgb`) e o alfa (`-a`).
@@ -521,6 +521,9 @@
   --opacity-black-40: #00000066;
   --opacity-black-40-rgb: 0 0 0;
   --opacity-black-40-a: 0.4;
+  --opacity-green-28: #00854447;
+  --opacity-green-28-rgb: 0 133 68;
+  --opacity-green-28-a: 0.2784;
   --opacity-white-8: #ffffff14;
   --opacity-white-8-rgb: 255 255 255;
   --opacity-white-8-a: 0.0784;

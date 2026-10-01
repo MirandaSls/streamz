@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState, type HTMLAttributes } from "react";
 import {
   Plus,
   MessageSquare,
@@ -9,10 +10,12 @@ import {
 import {
   ALL_PERMISSIONS,
   computePermissions,
+  guildFolderDisplayName,
   guildNotificationScope,
   isGroupChannel,
   type DMChannelView,
   type Guild,
+  type GuildFolder,
   type PermissionMember,
 } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
@@ -33,12 +36,20 @@ import { useCanaisOcultos } from "@/stores/canais-ocultos";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
+import { chaveDoItem, colorirPasta, renomearPasta } from "@/stores/guild-folder-logic";
+import { layoutResolvido, useGuildLayout } from "@/stores/guild-layout";
 import { useGuilds } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
 import { usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { useVoice } from "@/stores/voice";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
+import { ModalConfiguracoesDePasta } from "@/components/layout/ModalConfiguracoesDePasta";
+import PastaDoRail from "@/components/layout/PastaDoRail";
+import { linhaNaPasta, linhaNoTopo, useArrastarRail } from "@/components/layout/useArrastarRail";
+
+/** Menu da pasta no print 02 do Discord: x=60..236, 176px (o do servidor tem 220). */
+const LARGURA_MENU_PASTA = 176;
 
 /** Iniciais de cada palavra, como o Discord faz com servidores sem ícone. */
 function acronym(name: string): string {
@@ -161,6 +172,11 @@ function RailItem({
   lado = 40,
   redondo = false,
   dados,
+  alvo,
+  arrasto,
+  arrastando = false,
+  realce = false,
+  linha = null,
   onClick,
   onContextMenu,
   children,
@@ -199,13 +215,35 @@ function RailItem({
    * dentro.
    */
   dados?: Record<string, string>;
+  /**
+   * Marca lida pela delegação do arrasto (`useArrastarRail`): `guild:<id>`
+   * num servidor, `fim` no "+" (vão depois do último item) e `nada` no início
+   * e nas conversas, onde soltar não faz nada.
+   */
+  alvo?: string;
+  /**
+   * Atributos de arrastar (`draggable`, `onDragStart`, `onDragEnd`) da caixa
+   * de 40 — não do item inteiro, para o arrasto começar no ícone e não na
+   * faixa vazia ao lado dele, que é onde fica a pílula.
+   */
+  arrasto?: HTMLAttributes<HTMLDivElement>;
+  /** Este item está sendo arrastado: no lugar dele fica o quadrado tracejado. */
+  arrastando?: boolean;
+  /** Um servidor arrastado juntaria com este (criaria pasta, ou entraria na dela). */
+  realce?: boolean;
+  /** Classes de posição da linha de vão, quando soltar agora poria o item ali. */
+  linha?: string | null;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }) {
   const caixa = lado === 48 ? "h-[48px] w-[48px]" : "h-10 w-10";
   return (
-    <div className="group relative flex w-full justify-center" onContextMenu={onContextMenu}>
+    <div
+      className="group relative flex w-full justify-center"
+      onContextMenu={onContextMenu}
+      data-rail-alvo={alvo}
+    >
       <span
         aria-hidden="true"
         /* 4px de largura, medido. A **altura** de 40 no ativo já estava certa:
@@ -216,14 +254,44 @@ function RailItem({
           é marca (cartão 1b-rail, origem: `unreadPill__972a0` no CSS bruto e
           medir.py rail-tooltip.png×101733.png linha 182). */
         className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-interactive-text-active transition-all duration-200 ${
-          active ? (lado === 48 ? "h-[48px]" : "h-10") : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
+          arrastando
+            ? "h-0"
+            : active
+              ? lado === 48
+                ? "h-[48px]"
+                : "h-10"
+              : unread
+                ? "h-2 group-hover:h-5"
+                : "h-0 group-hover:h-5"
         }`}
       />
       {/* A caixa de 40 que **não** corta: é ela que ancora o badge. O selo de
           voz continua dentro do botão de propósito — ele é tangente às bordas
           de cima e da direita e não pode ultrapassar a caixa (ver `SeloDeVoz`);
-          o badge, sim, transborda o canto de baixo. */}
-      <div className={`relative shrink-0 ${caixa}`}>
+          o badge, sim, transborda o canto de baixo.
+
+          Arrastando, a caixa vira o `.dragInner` do Discord: um quadrado
+          tracejado do tamanho do ícone no lugar de onde ele saiu. É o
+          `::before` (não um filho) para o `[&>*]:invisible` esconder ícone,
+          badge e selo sem esconder o próprio marcador. */}
+      <div
+        {...arrasto}
+        className={`relative shrink-0 ${caixa} ${
+          arrastando
+            ? "before:absolute before:inset-0 before:z-10 before:rounded-xl before:border before:border-dashed before:border-border-subtle before:bg-background-mod-normal before:content-[''] [&>*]:invisible"
+            : ""
+        }`}
+      >
+        {/* Realce de soltar "sobre": `--opacity-green-28` com contorno
+            `--status-positive`, raio 12 (o `.dropHover` do CSS do Discord).
+            Fica atrás do botão e 4px maior que ele, então o que se vê é a
+            moldura verde em volta do ícone. */}
+        {realce && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1 rounded-xl bg-opacity-green-28 outline outline-1 outline-status-positive"
+          />
+        )}
         <Tooltip label={label} subtitle={subtitulo} side="right" rail>
           <button
             type="button"
@@ -279,9 +347,51 @@ function RailItem({
           </span>
         )}
       </div>
+      {linha && <LinhaDeSoltar posicao={linha} />}
     </div>
   );
 }
+
+/**
+ * A linha de vão: onde o item arrastado vai parar se soltar agora. 2px em
+ * `--brand-500`, a mesma do arrastar canais na coluna 2; `posicao` a põe no
+ * meio do vão de cima ou de baixo do item (ver `classeDaLinha`).
+ */
+function LinhaDeSoltar({ posicao }: { posicao: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none absolute left-1/2 z-10 h-0.5 w-10 -translate-x-1/2 rounded-full bg-brand-500 ${posicao}`}
+    />
+  );
+}
+
+/**
+ * Classes da linha de vão, centrada no espaço entre os itens.
+ *
+ * No topo o espaço é o `gap-2.5` do rail (10px): a linha de 2px fica 6px para
+ * fora. Dentro da pasta aberta o primeiro servidor está 6px abaixo do
+ * cabeçalho e o último a 4px da borda de baixo (`PastaDoRail`), por isso
+ * 4px antes do primeiro e 3px depois do último — e a linha não escapa do
+ * `overflow-hidden` da lista da pasta.
+ */
+function classeDaLinha(
+  linha: "antes" | "depois" | null,
+  { naPasta = false, primeiro = false }: { naPasta?: boolean; primeiro?: boolean } = {},
+): string | null {
+  if (linha === "antes") return naPasta && primeiro ? "-top-[4px]" : "-top-[6px]";
+  if (linha === "depois") return naPasta ? "-bottom-[3px]" : "-bottom-[6px]";
+  return null;
+}
+
+/**
+ * O cabeçalho da pasta arrastada vira o quadrado tracejado de 48 do Discord
+ * (`.dragInner` com `--guildbar-folder-size`), como a caixa do servidor
+ * arrastado em `RailItem`: `::before` para o `[&>*]:invisible` esconder pílula
+ * e botão sem esconder o marcador.
+ */
+const MARCADOR_DA_PASTA_ARRASTADA =
+  "before:absolute before:left-1/2 before:top-0 before:z-10 before:h-12 before:w-12 before:-translate-x-1/2 before:rounded-xl before:border before:border-dashed before:border-border-subtle before:bg-background-mod-normal before:content-[''] [&>*]:invisible";
 
 /**
  * Coluna 1: mensagens diretas, servidores e as duas formas de ganhar um novo.
@@ -319,6 +429,37 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   // home); aqui o rail só o fecha, porque todo clique dele é uma navegação para
   // outro lugar — servidor, conversa em destaque ou o logo.
   const fecharApps = useAplicativos((s) => s.fechar);
+
+  // ── pastas de servidores ──
+  const layoutSalvo = useGuildLayout((s) => s.layout);
+  const abertas = useGuildLayout((s) => s.abertas);
+  const alternarPasta = useGuildLayout((s) => s.alternarPasta);
+  const fecharTodas = useGuildLayout((s) => s.fecharTodas);
+  /**
+   * O layout gravado casado com os servidores de agora (id que saiu some,
+   * servidor novo entra solto no fim). Memorizado porque `resolveGuildLayout`
+   * cria um objeto novo a cada chamada, e o arrasto re-renderiza o rail a cada
+   * troca de alvo — sem memo, cada render refaria a reconciliação inteira.
+   */
+  const resolvido = useMemo(
+    () => layoutResolvido(layoutSalvo, guilds.map((g) => g.id)),
+    [layoutSalvo, guilds],
+  );
+  const porId = useMemo(() => new Map(guilds.map((g) => [g.id, g])), [guilds]);
+  // No celular o rail é de toque: drag-and-drop do HTML5 por toque é
+  // irregular entre navegadores, e lá o rail continua só navegando.
+  const arrasto = useArrastarRail({ layout: resolvido, abertas, ativo: !compacto });
+
+  /** Id da pasta com "Configurações de pasta" aberto. */
+  const [pastaEmEdicao, setPastaEmEdicao] = useState<string | null>(null);
+  let pastaEditada: GuildFolder | null = null;
+  for (const item of resolvido.items) {
+    if (item.kind === "folder" && item.folder.id === pastaEmEdicao) pastaEditada = item.folder;
+  }
+  // A pasta sumiu com o modal aberto (desfeita noutro aparelho, ou o último
+  // servidor dela saiu): o modal fecha, e não reabre sozinho se um id igual
+  // voltar depois.
+  if (pastaEmEdicao !== null && pastaEditada === null) setPastaEmEdicao(null);
 
   /**
    * O rail só destaca conversas com mensagem não lida. Como no Discord, a
@@ -447,6 +588,138 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
     ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH_WIDE);
   }
 
+  /**
+   * "Marcar pasta como lida": um servidor depois do outro, não em paralelo.
+   * `markGuildRead` guarda um retrato dos canais para desfazer se a API
+   * falhar; chamadas simultâneas tirariam retratos umas das outras no meio, e
+   * a reversão de uma desfaria o que outra já tinha marcado.
+   */
+  async function marcarPastaComoLida(guildIds: string[]) {
+    for (const id of guildIds) await markGuildRead(id);
+  }
+
+  /**
+   * Botão direito no cabeçalho de uma pasta. Mesmo mecanismo do menu do
+   * servidor (`ui.openContextMenu`), e por isso o mesmo acesso por teclado:
+   * a tecla de menu / Shift+F10 com o foco no botão da pasta dispara o
+   * `contextmenu` que chega aqui, e o menu se navega por setas.
+   */
+  function openFolderMenu(e: React.MouseEvent, servidores: Guild[], pastaId: string) {
+    e.preventDefault();
+    const naoLidos = servidores.filter((g) => g.unread || g.mentionCount > 0);
+    const items: MenuItem[] = [
+      {
+        label: "Marcar pasta como lida",
+        disabled: naoLidos.length === 0,
+        onSelect: () => void marcarPastaComoLida(naoLidos.map((g) => g.id)),
+      },
+      { separator: true },
+      { label: "Configurações de pasta", onSelect: () => setPastaEmEdicao(pastaId) },
+      { label: "Fechar todas as pastas", onSelect: () => fecharTodas() },
+    ];
+    ui.openContextMenu(e.clientX, e.clientY, items, LARGURA_MENU_PASTA);
+  }
+
+  /**
+   * Nome e cor num `aplicar` só — um PUT, não dois. Parte do layout **de
+   * agora** na store, não do render que abriu o modal: com ele aberto pode
+   * ter chegado um `guild.layout.update` de outro aparelho.
+   */
+  function salvarPasta(pastaId: string, { name, color }: { name: string | null; color: string | null }) {
+    const base = layoutResolvido(
+      useGuildLayout.getState().layout,
+      useGuilds.getState().guilds.map((g) => g.id),
+    );
+    const novo = colorirPasta(renomearPasta(base, pastaId, name), pastaId, color);
+    // as duas funções devolvem o mesmo objeto quando nada muda: Pronto sem
+    // mexer em nada não vira PUT
+    if (novo !== base) useGuildLayout.getState().aplicar(novo);
+  }
+
+  /** Um servidor no rail — solto no topo ou dentro de uma pasta aberta. */
+  function servidorNoRail(guild: Guild, linha: string | null) {
+    const chave = chaveDoItem({ kind: "guild", guildId: guild.id });
+    return (
+      <RailItem
+        key={chave}
+        lado={compacto ? 48 : 40}
+        label={guild.name}
+        active={view === "guild" && activeGuildId === guild.id}
+        unread={guild.unread}
+        mentions={guild.mentionCount}
+        emVoz={vozGuildId === guild.id}
+        alvo={chave}
+        arrasto={arrasto.arrastoDoServidor(guild.id)}
+        arrastando={arrasto.arrastado === chave}
+        realce={arrasto.alvo?.tipo === "servidor" && arrasto.alvo.guildId === guild.id}
+        linha={linha}
+        onClick={() => {
+          // o diretório cobre a coluna 3; entrar num servidor o fecha (F4)
+          fecharApps();
+          select(guild);
+        }}
+        onContextMenu={(e) => openGuildIconMenu(e, guild)}
+      >
+        {guild.iconUrl ? (
+          // o ícone é servido pelo proxy público da API; a sigla é o fallback.
+          // `draggable={false}`: senão o arrasto começaria na imagem (só ela
+          // como fantasma, levando a URL junto), e não na caixa do servidor
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={guild.iconUrl}
+            alt=""
+            draggable={false}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          acronym(guild.name)
+        )}
+      </RailItem>
+    );
+  }
+
+  /** Uma pasta no topo do rail, com os servidores dela dentro. */
+  function pastaNoRail(folder: GuildFolder, linha: string | null) {
+    const chave = chaveDoItem({ kind: "folder", folder });
+    const servidores = folder.guildIds
+      .map((id) => porId.get(id))
+      .filter((g): g is Guild => g !== undefined);
+    const dragProps = arrasto.arrastoDaPasta(folder.id);
+    return (
+      <div key={chave} className="relative w-full">
+        <PastaDoRail
+          folder={folder}
+          nome={guildFolderDisplayName(folder, (id) => porId.get(id)?.name)}
+          servidores={servidores}
+          aberta={abertas.includes(folder.id)}
+          // fechada, a pasta faz as vezes do servidor ativo que está nela:
+          // ganha a pílula alta (aberta, quem mostra é o próprio servidor)
+          ativa={view === "guild" && activeGuildId !== null && folder.guildIds.includes(activeGuildId)}
+          naoLido={servidores.some((g) => g.unread)}
+          mencoes={servidores.reduce((soma, g) => soma + g.mentionCount, 0)}
+          onToggle={() => alternarPasta(folder.id)}
+          onContextMenu={(e) => openFolderMenu(e, servidores, folder.id)}
+          dropAlvo={arrasto.alvo?.tipo === "pasta" && arrasto.alvo.pastaId === folder.id}
+          lado={compacto ? 48 : 40}
+          dragProps={
+            arrasto.arrastado === chave ? { ...dragProps, className: MARCADOR_DA_PASTA_ARRASTADA } : dragProps
+          }
+        >
+          {servidores.map((g, k) =>
+            servidorNoRail(
+              g,
+              classeDaLinha(linhaNaPasta(arrasto.alvo, folder.id, k, servidores.length), {
+                naPasta: true,
+                primeiro: k === 0,
+              }),
+            ),
+          )}
+        </PastaDoRail>
+        {linha && <LinhaDeSoltar posicao={linha} />}
+      </div>
+    );
+  }
+
   return (
     <nav
       aria-label="Servidores"
@@ -474,6 +747,8 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         // O compacto continua 72 — só o desktop mudou para 80 (ver acima).
         compacto ? "w-[72px] gap-2 pb-3" : "w-[80px] gap-2.5 pb-[78px]"
       }`}
+      // o arrasto de servidores e pastas, delegado (ver `useArrastarRail`)
+      {...arrasto.propsDaNav}
     >
       {/*
         Sem `mentions`: o botão de início **não** ganha badge vermelho.
@@ -493,6 +768,8 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         lado={compacto ? 48 : 40}
         redondo={compacto}
         active={view === "dm"}
+        // acima dos servidores soltar não faz nada
+        alvo="nada"
         onClick={irParaAmigos}
       >
         {/*
@@ -528,6 +805,7 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
             active={view === "dm" && activeDMId === dm.id}
             unread={naoLida}
             mentions={dm.unreadCount}
+            alvo="nada"
             onClick={() => {
               ui.setView("dm");
               // sair da página Amigos: sem isso a conversa é selecionada por
@@ -550,35 +828,13 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
           grupos */}
       <div aria-hidden="true" className="h-px w-8 shrink-0 bg-app-frame-border" />
 
-      {guilds.map((guild) => (
-        <RailItem
-          key={guild.id}
-          lado={compacto ? 48 : 40}
-          label={guild.name}
-          active={view === "guild" && activeGuildId === guild.id}
-          unread={guild.unread}
-          mentions={guild.mentionCount}
-          emVoz={vozGuildId === guild.id}
-          onClick={() => {
-            // o diretório cobre a coluna 3; entrar num servidor o fecha (F4)
-            fecharApps();
-            select(guild);
-          }}
-          onContextMenu={(e) => openGuildIconMenu(e, guild)}
-        >
-          {guild.iconUrl ? (
-            // o ícone é servido pelo proxy público da API; a sigla é o fallback
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={guild.iconUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            acronym(guild.name)
-          )}
-        </RailItem>
-      ))}
+      {/* Servidores soltos e pastas, na ordem do layout da conta. */}
+      {resolvido.items.map((item, i) => {
+        const linha = classeDaLinha(linhaNoTopo(arrasto.alvo, i, resolvido.items.length));
+        if (item.kind === "folder") return pastaNoRail(item.folder, linha);
+        const guild = porId.get(item.guildId);
+        return guild ? servidorNoRail(guild, linha) : null;
+      })}
 
       {/* O "+" do Discord abre "Crie seu servidor" direto — não um menu de
           duas opções. "Já tem um convite?" mora dentro desse modal
@@ -590,10 +846,24 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         label="Adicionar um servidor"
         lado={compacto ? 48 : 40}
         green
+        // soltar sobre o "+" é soltar depois do último item
+        alvo="fim"
         onClick={() => ui.openModal({ kind: "criarServidor" })}
       >
         <Plus size={compacto ? 24 : 20} />
       </RailItem>
+
+      <ModalConfiguracoesDePasta
+        aberto={pastaEditada !== null}
+        folderName={pastaEditada?.name ?? null}
+        folderColor={pastaEditada?.color ?? null}
+        // o print do Discord mostra o texto fixo, não o nome derivado
+        placeholderNome="Pasta do servidor"
+        onSalvar={(v) => {
+          if (pastaEmEdicao !== null) salvarPasta(pastaEmEdicao, v);
+        }}
+        onFechar={() => setPastaEmEdicao(null)}
+      />
 
       {/*
         ── j-bots · F4 ── "Descobrir aplicativos" **não fica mais aqui.**

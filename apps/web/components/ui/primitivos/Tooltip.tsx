@@ -20,7 +20,7 @@ export type LadoDaDica = "top" | "right" | "bottom" | "left";
 export type CorDaDica = "primaria" | "cinza" | "marca" | "perigo" | "positiva";
 
 export interface TooltipProps {
-  rotulo: string;
+  rotulo: ReactNode;
   lado?: LadoDaDica;
   /** ms antes de abrir no hover. Padrão 300. */
   atraso?: number;
