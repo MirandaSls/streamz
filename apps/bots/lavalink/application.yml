@@ -81,6 +81,13 @@ plugins:
     providers:
       - 'ytsearch:"%ISRC%"'
       - "ytsearch:%QUERY%"
+      # Fallbacks de áudio: o YouTube bloqueia o IP deste servidor ("Sign in to
+      # confirm you're not a bot"), então, quando os dois acima falham, o
+      # LavaSrc tenta o SoundCloud (source nativo do Lavalink, `scsearch`) e o
+      # JioSaavn (`jssearch`, prefixo do README do LavaSrc). A ordem importa:
+      # o primeiro provider que achar a faixa vence.
+      - "scsearch:%QUERY%"
+      - "jssearch:%QUERY%"
     sources:
       spotify: true
       applemusic: false
@@ -89,6 +96,9 @@ plugins:
       flowerytts: false
       youtube: false
       vkmusic: false
+      # Entrega áudio por conta própria (não depende do YouTube). Só funciona
+      # com `jiosaavn.decryption.secretKey` preenchido (abaixo).
+      jiosaavn: true
     spotify:
       # App gratuito em developer.spotify.com. Sem ele o LavaSrc tenta o token
       # anônimo, que o Spotify responde com 429 para o IP deste servidor.
@@ -98,6 +108,13 @@ plugins:
       playlistLoadLimit: 6
       albumLoadLimit: 6
       resolveArtistsInSearch: false
+    jiosaavn:
+      # O JioSaavn serve o áudio cifrado; a chave de decifragem é obrigatória
+      # segundo o README e não é distribuída com o plugin. Vem do ambiente
+      # (`JIOSAAVN_SECRET_KEY`) para não ficar no repositório; vazia, o source
+      # carrega mas não toca.
+      decryption:
+        secretKey: "${JIOSAAVN_SECRET_KEY:}"
 
 logging:
   level:
