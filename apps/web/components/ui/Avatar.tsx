@@ -5,6 +5,7 @@ import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import type { UserStatus } from "@streamz/shared";
 import Marca from "@/components/ui/Marca";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
+import { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/stores/presence";
 
 /**
@@ -125,6 +126,51 @@ const VOZ_NO_AVATAR: Record<VozNoAvatar, { rotulo: string; Icone: typeof MicOff;
 };
 
 /**
+ * `<img>` que pode ficar parada. Navegador não pausa GIF, então, com
+ * `animar=false`, o primeiro quadro é copiado para um canvas e é ele que se vê.
+ * Se a imagem não puder ser lida (CORS, formato), cai na `<img>` normal: GIF
+ * rodando é melhor que avatar quebrado.
+ */
+function FotoDoAvatar({ src, animar, className }: { src: string; animar: boolean; className: string }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [congelada, setCongelada] = useState(false);
+
+  useEffect(() => {
+    setCongelada(false);
+    if (animar) return;
+    let vivo = true;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = canvas.current;
+      if (!vivo || !c) return;
+      try {
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext("2d")?.drawImage(img, 0, 0);
+        // canvas "sujo" (sem CORS) lança aqui, não no desenho
+        c.getContext("2d")?.getImageData(0, 0, 1, 1);
+        setCongelada(true);
+      } catch {
+        /* mantém a <img> */
+      }
+    };
+    img.src = src;
+    return () => {
+      vivo = false;
+    };
+  }, [src, animar]);
+
+  return (
+    <>
+      {!animar && <canvas ref={canvas} aria-hidden="true" className={congelada ? className : "hidden"} />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className={animar || !congelada ? className : "hidden"} />
+    </>
+  );
+}
+
+/**
  * Avatar circular com a foto do usuário — ou, quando não há foto, o símbolo do
  * Streamz branco sobre a mesma cor de hash que antes ficava atrás das
  * iniciais — e, opcionalmente, a bolinha de status com a borda na cor da
@@ -154,6 +200,7 @@ export default function Avatar({
   status,
   voz,
   surface = "border-background-base-lowest",
+  animar = true,
   className = "",
 }: {
   user: { id: string; username: string; avatarUrl?: string | null };
@@ -173,6 +220,11 @@ export default function Avatar({
   voz?: VozNoAvatar | null;
   /** classe de cor da borda da bolinha = cor do fundo onde o avatar está. */
   surface?: string;
+  /**
+   * `false` congela foto animada (GIF) no primeiro quadro. O palco de chamada
+   * usa isso: como no Discord, o GIF só roda enquanto a pessoa fala.
+   */
+  animar?: boolean;
   className?: string;
 }) {
   const s = SIZE[size];
@@ -188,12 +240,7 @@ export default function Avatar({
   return (
     <span className={`relative inline-block shrink-0 ${className}`}>
       {avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={avatarUrl}
-          alt=""
-          className={`${s.box} rounded-full object-cover`}
-        />
+        <FotoDoAvatar src={avatarUrl} animar={animar} className={`${s.box} rounded-full object-cover`} />
       ) : (
         <span
           aria-hidden="true"
