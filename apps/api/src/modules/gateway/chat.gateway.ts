@@ -306,9 +306,17 @@ export class ChatGateway
     if (total === 1) {
       const u = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { manualStatus: true },
+        select: { manualStatus: true, manualStatusExpiresAt: true },
       });
-      await this.setStatus(userId, u?.manualStatus ?? "ONLINE");
+      // status manual vencido enquanto offline: ignora e limpa (o job por minuto
+      // não alcança quem estava desconectado)
+      const vencido = !!u?.manualStatusExpiresAt && u.manualStatusExpiresAt.getTime() <= Date.now();
+      if (vencido) {
+        await this.prisma.user
+          .update({ where: { id: userId }, data: { manualStatus: null, manualStatusExpiresAt: null } })
+          .catch(() => {});
+      }
+      await this.setStatus(userId, (vencido ? null : u?.manualStatus) ?? "ONLINE");
     }
   }
 
