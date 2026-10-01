@@ -302,6 +302,7 @@ export class VozDoGateway {
         canalId: alvo.id,
         canalSnowflake,
         nome: aplicacao.name,
+        botUserId: sessao.botUserId,
       });
     } catch (erro) {
       // Sem segredo da ponte ou sem LiveKit não há áudio possível — e o bot
