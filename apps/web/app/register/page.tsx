@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MAX_DISPLAY_NAME } from "@streamz/shared";
+import { MAX_DISPLAY_NAME, USERNAME_MAX, normalizarUsername } from "@streamz/shared";
 import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarRegistro } from "@/lib/auth-mensagens";
@@ -62,7 +62,7 @@ function RegisterForm() {
     if (loading) return;
     const dados = {
       email: email.trim(),
-      username: username.trim(),
+      username: normalizarUsername(username),
       password,
     };
     const invalido = validarRegistro(dados);
@@ -183,6 +183,7 @@ function RegisterForm() {
           obrigatorio
           erro={campo === "username" ? error : undefined}
           estiloDoErro="ajuda"
+          ajuda="Use letras minúsculas, números, _ e ."
           className="mb-5"
         >
           <TextInput
@@ -190,7 +191,10 @@ function RegisterForm() {
             name="username"
             autoComplete="username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) =>
+              setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
+            }
+            maxLength={USERNAME_MAX}
             disabled={loading}
             erro={campo === "username"}
           />
