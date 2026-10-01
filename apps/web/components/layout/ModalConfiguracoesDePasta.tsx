@@ -101,9 +101,11 @@ function Conteudo({
                 aria-checked={cor === null}
                 aria-label="Cor padrão"
                 onClick={() => setCor(null)}
-                className="flex h-[50px] w-[70px] items-center justify-center rounded-[3px] bg-background-brand text-control-primary-text-default outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-text-link"
+                className="flex h-[50px] w-[70px] items-center justify-center rounded-[3px] bg-background-brand outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-text-link"
               >
-                {cor === null && <Check width={24} height={24} aria-hidden />}
+                {cor === null && (
+                  <Check width={24} height={24} aria-hidden className="shrink-0 text-control-primary-text-default" />
+                )}
               </button>
               <label
                 aria-label="Cor personalizada"
