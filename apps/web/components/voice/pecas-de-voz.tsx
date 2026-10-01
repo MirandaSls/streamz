@@ -77,9 +77,12 @@ export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number
 export function MedidorSegmentado({
   nivel,
   segmentos = 24,
+  preencher = false,
 }: {
   nivel: number;
   segmentos?: number;
+  /** barrinhas dividem a largura do pai (flex-1) em vez de ter 4px fixos: o menu do microfone tem 40. */
+  preencher?: boolean;
 }) {
   const n = Math.max(1, segmentos);
   const valor = Math.min(1, Math.max(0, nivel));
@@ -91,7 +94,7 @@ export function MedidorSegmentado({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(valor * 100)}
-      className="flex h-4 items-center gap-[3px]"
+      className={`flex h-4 items-center ${preencher ? "w-full gap-[2px]" : "gap-[3px]"}`}
     >
       {Array.from({ length: n }, (_, i) => {
         const pos = i / n;
@@ -101,7 +104,7 @@ export function MedidorSegmentado({
           <span
             key={i}
             aria-hidden="true"
-            className={`h-4 w-1 shrink-0 rounded-full ${i < acesos ? cor : "bg-border-normal"}`}
+            className={`h-4 rounded-full ${preencher ? "min-w-0 flex-1" : "w-1 shrink-0"} ${i < acesos ? cor : "bg-border-normal"}`}
           />
         );
       })}

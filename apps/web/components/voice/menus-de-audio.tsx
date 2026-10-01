@@ -9,10 +9,11 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Check, ChevronRight, Settings } from "@/components/ui/icones";
+import { ChevronRight, Headphones, Mic, Monitor, Settings } from "@/components/ui/icones";
 import { SUBMENU_DELAY } from "@/components/ui/ContextMenu";
 import { Popout } from "@/components/ui/primitivos/Popout";
-import { SliderDeVolume } from "@/components/voice/pecas-de-voz";
+import { MedidorSegmentado, SliderDeVolume } from "@/components/voice/pecas-de-voz";
+import { useNivelDoMicrofone } from "@/components/voice/useNivelDoMicrofone";
 import { useSistemaDeAudio } from "@/lib/microfone";
 import { ui } from "@/stores/ui";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
@@ -65,9 +66,10 @@ import {
  * blocos, não dois. A divisória que faltava (entre o bloco dos dois itens com
  * submenu e o slider) foi a correção que este print trouxe: antes só havia a
  * de baixo (`AtalhoDeConfiguracoes`). "Perfil de entrada"/Isolamento de Voz é
- * Krisp e não é portado (o cartão pede "Krisp não; o nosso supressor com o
- * texto certo"): o lugar equivalente aqui é a "Redução de ruído" com os
- * níveis que o supressor próprio (RNNoise, `PopoverDeRuido`) realmente tem.
+ * Krisp e não é portado: o lugar equivalente aqui é o "Perfil de entrada" com
+ * os níveis que o supressor próprio (RNNoise, `PopoverDeRuido`) realmente tem.
+ * O valor mostrado segue o Discord: "Personalizado" quando o ajuste não é o
+ * padrão exato do app, e o nome do nível quando é (ver `valorDoPerfil`).
  */
 
 /**
@@ -94,6 +96,17 @@ const RUIDO: Record<NivelDeRuido, string> = {
   padrao: "Padrão",
   avancada: "Avançada",
 };
+
+/**
+ * O que o Discord mostra no "Perfil de entrada" é o perfil (Isolamento de Voz,
+ * Estúdio ou "Personalizado"). Aqui o submenu são os níveis do supressor: no
+ * "Padrão" (o ajuste de fábrica do app) o valor é o nome do nível; qualquer
+ * outro (Desligada, Avançada) é uma configuração feita pela pessoa, logo
+ * "Personalizado" — o nome exato fica na lista ao lado, com a marca.
+ */
+function valorDoPerfil(nivel: NivelDeRuido): string {
+  return nivel === "padrao" ? RUIDO.padrao : "Personalizado";
+}
 
 /* ------------------------------------------------------------------ */
 /* Submenu                                                             */
@@ -332,7 +345,7 @@ function LinhaComSubmenu({
   );
 }
 
-/** Uma escolha do submenu, com a marca na que vale. */
+/** Uma escolha simples do submenu (níveis de ruído): marca à esquerda, sem ícone. */
 function Escolha({
   rotulo,
   marcada,
@@ -348,14 +361,87 @@ function Escolha({
       role="menuitemradio"
       aria-checked={marcada}
       onClick={onSelect}
-      className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition ${
-        marcada ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
+      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition hover:bg-interactive-background-hover"
+    >
+      <span className={`min-w-0 flex-1 truncate ${marcada ? "font-semibold text-text-strong" : "text-text-default"}`}>
+        {rotulo}
+      </span>
+      <Radio marcado={marcada} />
+    </button>
+  );
+}
+
+/**
+ * O rádio do Discord, à direita: círculo vazio com borda de 2px; o escolhido
+ * ganha o anel na cor do accent do app e um ponto dentro.
+ */
+function Radio({ marcado }: { marcado: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${
+        marcado ? "border-brand-500" : "border-text-muted"
       }`}
     >
-      <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
-        {marcada && <Check size={16} />}
+      {marcado && <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />}
+    </span>
+  );
+}
+
+/**
+ * Separa "Nome (Detalhe)" em título e subtítulo. O navegador entrega um label
+ * só; quando ele vem no formato do Windows ("Alto-falantes (Realtek Audio)") o
+ * detalhe é o aparelho físico e vai para a linha de baixo, como no Discord.
+ * Sem parênteses finais, só título.
+ */
+export function dividirNome(nome: string): { titulo: string; subtitulo: string | null } {
+  const m = /^(.*?)\s*\((.+)\)\s*$/.exec(nome);
+  if (!m || !m[1]) return { titulo: nome, subtitulo: null };
+  return { titulo: m[1], subtitulo: m[2] ?? null };
+}
+
+/** Monitor para saída de vídeo (HDMI, DisplayPort, TV); senão o ícone do tipo. */
+const SAIDA_DE_VIDEO = /hdmi|display ?port|monitor|\btv\b|nvidia|amd high|intel\(r\) display/i;
+type IconeDeAparelho = typeof Mic;
+function iconeDoAparelho(nome: string, tipo: "entrada" | "saida"): IconeDeAparelho {
+  if (tipo === "saida" && SAIDA_DE_VIDEO.test(nome)) return Monitor;
+  return tipo === "entrada" ? Mic : Headphones;
+}
+
+/** Uma escolha de aparelho: ícone, título/subtítulo e o rádio à direita. */
+function EscolhaDeAparelho({
+  nome,
+  tipo,
+  marcada,
+  onSelect,
+  icone,
+}: {
+  nome: string;
+  tipo: "entrada" | "saida";
+  marcada: boolean;
+  onSelect: () => void;
+  icone?: IconeDeAparelho;
+}) {
+  const { titulo, subtitulo } = dividirNome(nome);
+  const Icone = icone ?? iconeDoAparelho(nome, tipo);
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={marcada}
+      onClick={onSelect}
+      className="flex w-full items-center gap-3 rounded-[3px] px-2 py-2 text-left transition hover:bg-interactive-background-hover"
+    >
+      <Icone size={20} className="shrink-0 text-text-muted" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block truncate text-sm ${marcada ? "font-semibold text-text-strong" : "text-text-default"}`}
+        >
+          {titulo}
+        </span>
+        {subtitulo && <span className="block truncate text-xs text-text-muted">{subtitulo}</span>}
       </span>
-      <span className="min-w-0 flex-1 truncate">{rotulo}</span>
+      <Radio marcado={marcada} />
     </button>
   );
 }
@@ -397,11 +483,13 @@ function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
 
 /** A lista "Padrão do sistema + aparelhos", que é igual nos dois menus. */
 function ListaDeAparelhos({
+  tipo,
   opcoes,
   atual,
   onEscolher,
   aviso,
 }: {
+  tipo: "entrada" | "saida";
   opcoes: { id: string; nome: string }[];
   atual: string | null;
   onEscolher: (id: string | null) => void;
@@ -409,15 +497,19 @@ function ListaDeAparelhos({
 }) {
   return (
     <>
-      <Escolha
-        rotulo="Padrão do sistema"
+      <EscolhaDeAparelho
+        nome="Padrão do sistema"
+        tipo={tipo}
+        // o "Padrão" é o aparelho que o sistema escolhe: monitor na saída, como no Discord
+        icone={tipo === "saida" ? Monitor : Mic}
         marcada={atual === null}
         onSelect={() => onEscolher(null)}
       />
       {opcoes.map((o) => (
-        <Escolha
+        <EscolhaDeAparelho
           key={o.id}
-          rotulo={o.nome}
+          nome={o.nome}
+          tipo={tipo}
           marcada={atual === o.id}
           onSelect={() => onEscolher(o.id)}
         />
@@ -454,6 +546,8 @@ export function MenuDeEntrada() {
   const entrada = useVoice((s) => s.audio.entrada);
   const setAudioPref = useVoice((s) => s.setAudioPref);
   const aviso = explicarMidia(devices.motivo);
+  // o menu só existe aberto: montado = medindo, desmontado = captura devolvida
+  const nivel = useNivelDoMicrofone(true);
 
   return (
     <>
@@ -464,6 +558,7 @@ export function MenuDeEntrada() {
         ctrl={ctrl}
       >
         <ListaDeAparelhos
+          tipo="entrada"
           opcoes={opcoesDe(devices.inputs, "Microfone")}
           atual={devices.inputId}
           onEscolher={devices.setInput}
@@ -473,8 +568,8 @@ export function MenuDeEntrada() {
 
       <LinhaComSubmenu
         chave="ruido"
-        titulo="Redução de ruído"
-        valor={RUIDO[processamento.ruido]}
+        titulo="Perfil de entrada"
+        valor={valorDoPerfil(processamento.ruido)}
         ctrl={ctrl}
       >
         {(["off", "padrao", "avancada"] as NivelDeRuido[]).map((nivel) => (
@@ -494,6 +589,10 @@ export function MenuDeEntrada() {
           valor={entrada}
           onChange={(v) => setAudioPref({ entrada: v })}
         />
+      </div>
+      <div className="space-y-2 px-2 pb-2" onPointerEnter={() => ctrl.agendar(null)}>
+        <p className="text-xs font-semibold text-text-strong">Nível de entrada</p>
+        <MedidorSegmentado nivel={nivel} segmentos={40} preencher />
       </div>
 
       <AtalhoDeConfiguracoes ctrl={ctrl} />
@@ -524,6 +623,7 @@ export function MenuDeSaida() {
         ctrl={ctrl}
       >
         <ListaDeAparelhos
+          tipo="saida"
           opcoes={escolha.opcoes}
           atual={escolha.escolhido}
           onEscolher={devices.setOutput}
