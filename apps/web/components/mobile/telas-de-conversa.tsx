@@ -327,7 +327,7 @@ export function TelaDeDM() {
           outro ? (
             <Avatar user={outro} size="sm" status={resolveStatus(statuses, outro)} surface="border-background-base-lowest" />
           ) : (
-            <GroupAvatar iconUrl={dm.iconUrl} size="sm" />
+            <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="sm" />
           )
         }
         titulo={titulo}

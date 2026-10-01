@@ -16,6 +16,7 @@ import {
   type PermissionMember,
 } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
+import { GroupAvatar } from "@/components/ui/Avatar";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/primitivos";
@@ -88,7 +89,12 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
     return <img src={url} alt="" className="h-full w-full object-cover" />;
   }
   const outro = dm.others[0];
-  if (isGroupChannel(dm) || !outro) {
+  if (isGroupChannel(dm)) {
+    return (
+      <GroupAvatar iconUrl={null} members={dm.others} seed={dm.id} size="lg" className="!h-full !w-full" />
+    );
+  }
+  if (!outro) {
     return <Users size={20} aria-hidden="true" />;
   }
   // o mesmo fallback do `Avatar`: o símbolo do Streamz (~60% da casa de 40)

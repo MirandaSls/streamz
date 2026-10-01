@@ -13,9 +13,9 @@ describe("datas no formato do Discord", () => {
   });
 
   it("rótulo do divisor", () => {
-    expect(rotuloDoDia(iso(2026, 8, 25), agora)).toBe("Hoje");
-    expect(rotuloDoDia(iso(2026, 8, 24), agora)).toBe("Ontem");
-    expect(rotuloDoDia(iso(2026, 8, 12), agora)).toMatch(/12 de agosto de 2026/);
+    expect(rotuloDoDia(iso(2026, 8, 25))).toBe("25 de agosto de 2026");
+    expect(rotuloDoDia(iso(2026, 8, 24))).toBe("24 de agosto de 2026");
+    expect(rotuloDoDia(iso(2026, 8, 12))).toMatch(/12 de agosto de 2026/);
   });
 
   it("dias atrás conta por dia civil, não por 24h", () => {

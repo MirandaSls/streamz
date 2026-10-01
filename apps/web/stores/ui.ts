@@ -130,6 +130,8 @@ export type Modal =
   /** perfil completo de alguém; `guildId` é o servidor de onde o cartão abriu. */
   | { kind: "userProfile"; userId: string; guildId?: string; aba?: "sobre" | "servidores" | "amigos" }
   | { kind: "groupSettings"; channelId: string }
+  /** caixa pequena "Editar grupo" (nome + ícone); a tela cheia é `groupSettings`. */
+  | { kind: "editGroup"; channelId: string }
   | { kind: "addGroupMembers"; channelId: string }
   // ── h-moderacao ──
   | { kind: "timeout"; guildId: string; user: PublicUser }

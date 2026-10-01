@@ -11,7 +11,7 @@
  *
  * - **Conversa direta (DM e grupo): faixa em cima.** O palco é uma tira no topo
  *   e a conversa continua embaixo, na largura toda, com o composer no lugar de
- *   sempre. É o que os prints de chamada em DM mostram (ver `ALTURA_PADRAO`).
+ *   sempre. É o que os prints de chamada em DM mostram (ver `PROPORCAO_PADRAO`).
  *   Faz sentido: numa DM o que se olha é a conversa, e a chamada é um adereço
  *   dela — espremer a timeline numa coluna de 450 refluiria todo anexo.
  * - **Canal de voz de servidor: coluna à direita.** Ali o palco é a tela, e a
@@ -40,19 +40,16 @@ export const RESERVA_CHAT_MIN = 180;
 /** Fatia da coluna reservada à conversa quando há altura de sobra. */
 export const RESERVA_CHAT_PROPORCAO = 0.28;
 /**
- * Altura inicial do palco — em **pixel**, não em proporção.
+ * Piso da faixa do palco, em **pixel**: 199px.
  *
- * Medido por `getpixel` em **quatro** prints de chamada em DM, em janelas de
- * alturas bem diferentes: `2026-08-31 123800` (714), `160122` (718), `160106`
- * (788) e `103419` (914). Nos quatro a faixa preta do palco vai do filete do
- * cabeçalho até onde começa o fundo da conversa (`(26,26,30)`) e mede
- * **exatamente 199px**. Ou seja: a faixa é **fixa**, e quem cresce com a tela é
- * a conversa.
- *
- * O PR #72 já tinha visto o fixo, mas leu 220/207 nesses mesmos prints e
- * arredondou para 215; a releitura, feita coluna a coluna, dá 199 nas quatro.
- * Fica 199 — a proporção de 0,5 que existia antes do #72 fazia o oposto do
- * Discord (o palco dobrava junto com a janela).
+ * A medida vem de **quatro** prints de chamada em DM, em janelas pequenas:
+ * `2026-08-31 123800` (714), `160122` (718), `160106` (788) e `103419` (914).
+ * Nos quatro a faixa preta do palco mede **exatamente 199px**. Isso serviu de
+ * altura inicial **fixa** por um tempo, mas era leitura de janela menor: o print
+ * de 2026-10-01 (Discord numa coluna de 810px) mostra o palco com ~410px, ou
+ * seja ~50% da coluna, avatares no centro e controles embaixo. Por isso o
+ * padrão voltou a ser proporcional (`PROPORCAO_PADRAO`) e os 199px ficaram só
+ * como o piso (`ALTURA_MIN`), que é onde a conta da grade ainda fecha.
  *
  * O redimensionamento pelo usuário continua guardado como **proporção** — o que
  * muda é só de onde ele parte quando não há preferência salva.
@@ -79,12 +76,19 @@ export const ALTURA_PADRAO = 199;
  */
 export const ALTURA_MIN = ALTURA_PADRAO;
 
-/** Fatia inicial do palco, quando não se sabe a altura da coluna. */
+/**
+ * Fatia inicial do palco: metade da coluna (410 de 810px no print de
+ * 2026-10-01). O piso `ALTURA_MIN` e o teto `tetoDoPalco` continuam valendo.
+ */
 export const PROPORCAO_PADRAO = 0.5;
 
-/** A proporção que equivale à altura inicial fixa, nesta coluna. */
-export function proporcaoPadrao(disponivel: number): number {
-  return disponivel > 0 ? ALTURA_PADRAO / disponivel : PROPORCAO_PADRAO;
+/**
+ * A proporção inicial do palco nesta coluna. Hoje não depende da altura — o
+ * parâmetro fica para não mexer nos chamadores, e porque o piso/teto é aplicado
+ * em `alturaDoPalco`.
+ */
+export function proporcaoPadrao(_disponivel: number): number {
+  return PROPORCAO_PADRAO;
 }
 /** Com transmissão o palco começa maior: 16:9 numa faixa baixa vira miniatura. */
 export const PROPORCAO_TRANSMISSAO = 0.68;

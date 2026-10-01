@@ -569,7 +569,8 @@ export default function CallStage({
         {chamando && !transmitindoNoToque ? (
           <Chamando
             nome={destinatario ? displayNameOf(destinatario) : titulo}
-            usuario={destinatario}
+            outros={grupo && conversa ? conversa.others : destinatario ? [destinatario] : []}
+            jaEntraram={grupo ? estados.map((e) => e.user.id) : []}
             eu={meUser}
           />
         ) : conectadoAqui && emJanela ? (
@@ -762,34 +763,48 @@ function BotaoDeExpandir({
  */
 function Chamando({
   nome,
-  usuario,
+  outros,
+  jaEntraram,
   eu,
 }: {
   nome: string;
-  usuario: PublicUser | null;
+  /** Quem estou chamando: 1 em DM, todos os outros participantes em grupo. */
+  outros: PublicUser[];
+  /** Ids de quem já está na sala (só em grupo): esses não ganham o anel. */
+  jaEntraram: string[];
   eu: PublicUser | null;
 }) {
   return (
     <div className="grid h-full min-h-0 place-items-center overflow-hidden">
       <div className="flex flex-col items-center gap-4">
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-6">
           {eu && (
             // na chamada não se mostra status de presença, como no Discord
             <Avatar user={eu} size="xl" surface="border-black" />
           )}
-          <span className="relative grid place-items-center">
-            <span
-              aria-hidden="true"
-              className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
-            />
-            {usuario ? (
-              <Avatar user={usuario} size="xl" surface="border-black" />
-            ) : (
+          {outros.length > 0 ? (
+            outros.map((u) => (
+              <span key={u.id} className="relative grid place-items-center">
+                {!jaEntraram.includes(u.id) && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
+                  />
+                )}
+                <Avatar user={u} size="xl" surface="border-black" />
+              </span>
+            ))
+          ) : (
+            <span className="relative grid place-items-center">
+              <span
+                aria-hidden="true"
+                className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
+              />
               <span className="grid h-20 w-20 place-items-center rounded-full bg-background-base-lowest">
                 <Phone size={30} className="text-text-muted" aria-hidden="true" />
               </span>
-            )}
-          </span>
+            </span>
+          )}
         </div>
         <p className="sr-only">{nome}</p>
         <p className="sr-only">Chamando…</p>

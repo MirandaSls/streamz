@@ -172,7 +172,7 @@ export default function EncaminharModal({
               >
                 {dm ? (
                   isGroupChannel(dm) ? (
-                    <GroupAvatar iconUrl={dm.iconUrl} size="sm" />
+                    <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="sm" />
                   ) : (
                     <Avatar user={dm.others[0]} size="sm" />
                   )
