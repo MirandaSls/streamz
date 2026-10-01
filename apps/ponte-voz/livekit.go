@@ -109,7 +109,24 @@ func Conectar(rei Reivindicacao, log *slog.Logger) (*Publicador, error) {
 
 // Escrever entrega um quadro Opus de 20 ms (`DuracaoDoQuadro`).
 func (p *Publicador) Escrever(opus []byte) error {
-	return p.faixa.WriteSample(media.Sample{Data: opus, Duration: DuracaoDoQuadro}, nil)
+	// Sem a extensão RTP ssrc-audio-level (RFC 6464) o LiveKit nunca marca o
+	// participante como ActiveSpeaker: ele não decodifica Opus, só lê esse
+	// nível do cabeçalho. O SDK só grava a extensão se AudioLevel != nil.
+	nivel := nivelDeAudio(opus)
+	return p.faixa.WriteSample(media.Sample{Data: opus, Duration: DuracaoDoQuadro},
+		&lksdk.SampleWriteOptions{AudioLevel: &nivel})
+}
+
+// nivelDeAudio devolve o nível RFC 6464 (-dBov, 0-127; 127 = silêncio) sem
+// decodificar o Opus, para o repasse continuar bit a bit. Quadro de até 3
+// bytes é o silêncio (F8 FF FE) que o Lavalink manda entre faixas; qualquer
+// outro conta como áudio, com nível fixo alto o bastante para acender o
+// círculo de "falando".
+func nivelDeAudio(opus []byte) uint8 {
+	if len(opus) <= 3 {
+		return 127
+	}
+	return 20
 }
 
 // Desconectar sai da sala. Idempotente.

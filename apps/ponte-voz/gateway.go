@@ -33,7 +33,7 @@ import (
 //	← 2 READY {ssrc, ip, port, modes, heartbeat_interval}
 //	→ 3 HEARTBEAT
 //	← 4 SESSION_DESCRIPTION {mode, secret_key:[32], dave_protocol_version:0}
-//	→ 5 SPEAKING (aceita e ignora — o LiveKit calcula por nível de áudio)
+//	→ 5 SPEAKING (aceita e ignora — a ponte informa o nível de áudio em livekit.go)
 //	← 6 HEARTBEAT_ACK (no formato que recebeu)
 //	→ 7 RESUME
 //	← 8 HELLO {heartbeat_interval: 13750}
@@ -413,8 +413,8 @@ func (c *conexao) despachar(m mensagem) bool {
 	case opHeartbeat:
 		return c.aoHeartbeat(m.D)
 	case opSpeaking:
-		// Aceita e ignora: quem calcula quem está falando é o LiveKit, por
-		// nível de áudio (§D5.2).
+		// Aceita e ignora: quem informa o nível de áudio ao LiveKit (que
+		// decide quem fala) é a ponte, em livekit.go (§D5.2).
 		return false
 	case opResume:
 		return c.aoResume(m.D)
