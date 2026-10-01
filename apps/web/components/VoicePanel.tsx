@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
 import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
+import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
+import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
@@ -95,6 +98,7 @@ export default function VoicePanel({
 
   const conectado = aqui && status === "connected";
   const nome = channel.name ?? "voz";
+  const emJanela = useChamadaEmJanela();
   // O `useOcultarInativo` existe para tirar a moldura da frente do VÍDEO. Na
   // vista do canal não há vídeo nenhum — sumir com o nome do canal depois de 3s
   // parado seria esconder a única coisa que a tela tem a dizer, e a print
@@ -235,7 +239,11 @@ export default function VoicePanel({
                 das entradas e de três segundos em 12%. Quem está conectando
                 aparece na barra "Conectando…" (`VoiceConnectedBar`), como no
                 Discord. */}
-            <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
+            {emJanela ? (
+              <AvisoChamadaEmJanela />
+            ) : (
+              <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
+            )}
           </div>
         ) : (
           // sem `p-4`: o degradê vai de borda a borda do palco, como na print
@@ -294,6 +302,12 @@ export default function VoicePanel({
                 onTelaCheia={alternar}
                 visivel={visivel}
                 moldura={daMoldura}
+                emJanela={emJanela}
+                onAbrirEmJanela={() =>
+                  emJanela
+                    ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
+                    : abrirJanelaDaChamada(nome)
+                }
               />
             }
           />

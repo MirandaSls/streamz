@@ -30,7 +30,9 @@ import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voic
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useZoomDaTransmissao } from "@/components/voice/useZoomDaTransmissao";
+import { prenderVideoEmOutraJanela } from "@/components/voice/video-em-outra-janela";
 import { useCorDominante } from "@/lib/cor-dominante";
+import { janelaDe } from "@/lib/outra-janela";
 import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
@@ -360,9 +362,11 @@ export function VoiceTile({
         e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
       if (!dentro) setPairando(false);
     };
-    // na captura: overlay que pare a propagação não pode deixar a fileira acesa
-    window.addEventListener("pointermove", aoMover, true);
-    return () => window.removeEventListener("pointermove", aoMover, true);
+    // na captura: overlay que pare a propagação não pode deixar a fileira acesa.
+    // Na janela do tile: na janela solta da chamada o ponteiro anda lá
+    const win = janelaDe(caixa.current);
+    win.addEventListener("pointermove", aoMover, true);
+    return () => win.removeEventListener("pointermove", aoMover, true);
   }, [pairando]);
   /** clique simples segurado à espera do segundo (ver `ESPERA_DO_DUPLO_CLIQUE`). */
   const cliquePendente = useRef<number | undefined>(undefined);
@@ -405,20 +409,21 @@ export function VoiceTile({
   useEffect(() => {
     const el = caixa.current;
     if (!el || semAcoes || !tela) return;
-    const doc = document as Document & { webkitFullscreenElement?: Element | null };
+    // o documento do tile, que na janela solta da chamada não é o principal
+    const doc = el.ownerDocument as Document & { webkitFullscreenElement?: Element | null };
     const conferir = () =>
       setEmTelaCheia(
         (doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null) === el ||
           el.hasAttribute(ATRIBUTO_DE_TELA_CHEIA),
       );
     conferir();
-    document.addEventListener("fullscreenchange", conferir);
-    document.addEventListener("webkitfullscreenchange", conferir);
-    const observador = new MutationObserver(conferir);
+    doc.addEventListener("fullscreenchange", conferir);
+    doc.addEventListener("webkitfullscreenchange", conferir);
+    const observador = new (janelaDe(el).MutationObserver)(conferir);
     observador.observe(el, { attributes: true, attributeFilter: [ATRIBUTO_DE_TELA_CHEIA] });
     return () => {
-      document.removeEventListener("fullscreenchange", conferir);
-      document.removeEventListener("webkitfullscreenchange", conferir);
+      doc.removeEventListener("fullscreenchange", conferir);
+      doc.removeEventListener("webkitfullscreenchange", conferir);
       observador.disconnect();
       setEmTelaCheia(false);
     };
@@ -514,11 +519,14 @@ export function VoiceTile({
               // `dblclick` — e mover a imagem não pode abrir/fechar a tela cheia
               if (arrastoNaSequencia.current) return;
               window.clearTimeout(cliquePendente.current);
+              // o documento do tile: na janela solta é o dela que tem tela cheia
+              const doc = e.currentTarget.ownerDocument as Document & {
+                webkitFullscreenElement?: Element | null;
+              };
               const algoEmTelaCheia =
-                document.fullscreenElement ||
-                (document as Document & { webkitFullscreenElement?: Element | null })
-                  .webkitFullscreenElement ||
-                document.querySelector(`[${ATRIBUTO_DE_TELA_CHEIA}]`);
+                doc.fullscreenElement ||
+                doc.webkitFullscreenElement ||
+                doc.querySelector(`[${ATRIBUTO_DE_TELA_CHEIA}]`);
               if (onExpandir && !algoEmTelaCheia) {
                 onExpandir(tile.key);
                 return;
@@ -959,9 +967,15 @@ export function VideoDaFaixa({
 
   useEffect(() => {
     const el = ref.current;
-    if (el && track) track.attach(el);
+    if (!el || !track) return;
+    track.attach(el);
+    // tile desenhado na janela solta da chamada: o `attach` sozinho mede a
+    // visibilidade na janela principal e o adaptiveStream pausaria a faixa
+    const soltar =
+      el.ownerDocument !== document ? prenderVideoEmOutraJanela(track, el) : null;
     return () => {
-      if (el && track) track.detach(el);
+      soltar?.();
+      track.detach(el);
     };
   }, [track]);
 

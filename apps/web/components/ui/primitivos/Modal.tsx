@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, X } from "@/components/ui/icones";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
+import { janelaDe, useDocumentoDoPortal } from "@/lib/outra-janela";
 
 /**
  * Modal do Discord — a base de todos os modais do app (o `Dialog` de
@@ -238,9 +239,11 @@ function usePosicaoDaRolagem(ligado: boolean) {
     };
     medir();
     el.addEventListener("scroll", medir, { passive: true });
-    const tamanho = new ResizeObserver(medir);
+    // observadores da janela do painel, que pode ser a solta da chamada
+    const win = janelaDe(el);
+    const tamanho = new win.ResizeObserver(medir);
     tamanho.observe(el);
-    const conteudo = new MutationObserver(medir);
+    const conteudo = new win.MutationObserver(medir);
     conteudo.observe(el, { childList: true, subtree: true, characterData: true });
     return () => {
       el.removeEventListener("scroll", medir);
@@ -278,6 +281,8 @@ export function Modal({
   // `document` não existe na pré-renderização; o portal só pode ser criado
   // depois de montar no cliente (a web é exportada estática para o desktop).
   const [montado, setMontado] = useState(false);
+  // dentro da janela solta da chamada o modal abre no `document` dela
+  const doc = useDocumentoDoPortal();
 
   useEffect(() => setMontado(true), []);
 
@@ -291,16 +296,16 @@ export function Modal({
   useVoltarNoCelular(ehMobile && montado, aoFechar);
 
   useEffect(() => {
-    if (!montado) return;
-    const anterior = document.activeElement as HTMLElement | null;
+    if (!montado || !doc) return;
+    const anterior = doc.activeElement as HTMLElement | null;
     const painel = painelRef.current;
     // `data-autofocus` deixa o modal escolher o alvo (ex.: um confirm
     // destrutivo abre com o foco em "Cancelar", não no botão que apaga). Sem
     // ele, um `autoFocus` do conteúdo já focou o campo durante a montagem, e
     // roubar esse foco para o × desfaria a escolha de quem escreveu o modal.
     const jaDentro =
-      painel && document.activeElement && painel.contains(document.activeElement)
-        ? (document.activeElement as HTMLElement)
+      painel && doc.activeElement && painel.contains(doc.activeElement)
+        ? (doc.activeElement as HTMLElement)
         : null;
     const alvo =
       painel?.querySelector<HTMLElement>("[data-autofocus]") ??
@@ -311,7 +316,7 @@ export function Modal({
     // devolve o foco para o botão que abriu o modal
     return () => anterior?.focus?.();
     // depende de `montado` porque na primeira passada o painel ainda não existe
-  }, [montado]);
+  }, [montado, doc]);
 
   // sem corpo (um confirm sem prévia) o subtítulo encosta direto no rodapé;
   // `toArray` descarta `false`/`null` que um `{cond && ...}` deixa para trás
@@ -334,16 +339,17 @@ export function Modal({
     if (nos.length === 0) return;
     const primeiro = nos[0];
     const ultimo = nos[nos.length - 1];
-    if (event.shiftKey && document.activeElement === primeiro) {
+    const ativo = event.currentTarget.ownerDocument.activeElement;
+    if (event.shiftKey && ativo === primeiro) {
       event.preventDefault();
       ultimo.focus();
-    } else if (!event.shiftKey && document.activeElement === ultimo) {
+    } else if (!event.shiftKey && ativo === ultimo) {
       event.preventDefault();
       primeiro.focus();
     }
   }
 
-  if (!montado) return null;
+  if (!montado || !doc) return null;
 
   return createPortal(
     <div
@@ -532,6 +538,6 @@ export function Modal({
         ) : null}
       </div>
     </div>,
-    document.body,
+    doc.body,
   );
 }

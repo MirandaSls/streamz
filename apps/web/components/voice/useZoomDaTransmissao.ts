@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as PointerEventReact, RefObject } from "react";
+import { janelaDe } from "@/lib/outra-janela";
 import {
   AJUSTE_INICIAL,
   comBotao,
@@ -93,7 +94,7 @@ export function useZoomDaTransmissao(
   useEffect(() => {
     const el = caixa.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => {
+    const observer = new (janelaDe(el).ResizeObserver)(() => {
       const r = el.getBoundingClientRect();
       setAjuste((a) => limitar(a, { largura: r.width, altura: r.height }));
     });
@@ -217,9 +218,9 @@ export function useZoomDaTransmissao(
       };
 
       function limpar() {
-        window.removeEventListener("pointermove", aoMover);
-        window.removeEventListener("pointerup", encerrar);
-        window.removeEventListener("pointercancel", encerrar);
+        win.removeEventListener("pointermove", aoMover);
+        win.removeEventListener("pointerup", encerrar);
+        win.removeEventListener("pointercancel", encerrar);
         pararArrasto.current = null;
         setEmArrasto(false);
         // só marca "acabou de arrastar" se de fato passou do limiar — um
@@ -228,9 +229,11 @@ export function useZoomDaTransmissao(
         if (passouDoLimiar) acabouDeArrastarRef.current = true;
       }
 
-      window.addEventListener("pointermove", aoMover);
-      window.addEventListener("pointerup", encerrar);
-      window.addEventListener("pointercancel", encerrar);
+      // a janela do tile: na janela solta da chamada o arrasto acontece lá
+      const win = janelaDe(alvoDoArrasto);
+      win.addEventListener("pointermove", aoMover);
+      win.addEventListener("pointerup", encerrar);
+      win.addEventListener("pointercancel", encerrar);
       pararArrasto.current = limpar;
     },
     [ativo, ajuste, viewportAtual],

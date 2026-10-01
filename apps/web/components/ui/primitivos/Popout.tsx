@@ -16,6 +16,7 @@ import {
 import { createPortal } from "react-dom";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
+import { ehElementoHtml, ehNo, janelaDe, useDocumentoDoPortal } from "@/lib/outra-janela";
 
 /**
  * O popout ÚNICO do app (plano, onda 0.4): substitui as sete mecânicas de
@@ -367,9 +368,11 @@ const SELETOR_DE_CAMADA =
  * porque os nós com papel de camada do app são todos `fixed`.
  */
 function zIndexEfetivo(el: Element): number {
+  // o estilo computado pela janela do nó: a caixa pode morar na janela solta
+  const win = janelaDe(el);
   let no: Element | null = el;
-  while (no && no !== document.body) {
-    const z = Number.parseInt(getComputedStyle(no).zIndex, 10);
+  while (no && no !== win.document.body) {
+    const z = Number.parseInt(win.getComputedStyle(no).zIndex, 10);
     if (Number.isFinite(z)) return z;
     no = no.parentElement;
   }
@@ -383,7 +386,9 @@ function zIndexEfetivo(el: Element): number {
  */
 function existeCamadaAcima(z: number, caixa: HTMLElement | null): boolean {
   if (typeof document === "undefined") return false;
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>(SELETOR_DE_CAMADA))) {
+  // camadas do mesmo documento da caixa: uma de outra janela não fica "acima"
+  const doc = caixa?.ownerDocument ?? document;
+  for (const el of Array.from(doc.querySelectorAll<HTMLElement>(SELETOR_DE_CAMADA))) {
     if (el === caixa || caixa?.contains(el)) continue;
     // `display:none` não tem retângulo; `visibility:hidden` tem, e isso é o que
     // queremos — o menu de contexto recém-aberto fica `invisible` até medir, e
@@ -642,7 +647,8 @@ export function usePosicaoFlutuante(
     const nova = calcularPosicaoFlutuante(
       alvo,
       { width: el.offsetWidth, height: el.offsetHeight },
-      { width: window.innerWidth, height: window.innerHeight },
+      // o viewport da janela da caixa, que pode ser a solta da chamada
+      { width: janelaDe(el).innerWidth, height: janelaDe(el).innerHeight },
       lado,
       distancia,
       { alinhamento, deslocamento, margem },
@@ -665,26 +671,30 @@ export function usePosicaoFlutuante(
     }
     calcular();
 
+    // ouvintes, quadros e observador da janela da caixa: o `rAF` da principal
+    // para de bater quando ela fica oculta, e é justo assim que se usa a solta
+    const win = janelaDe(caixa.current);
+
     // um quadro por vez: scroll e resize disparam dezenas de vezes por quadro
     let quadro = 0;
     const agendar = () => {
       if (quadro) return;
-      quadro = requestAnimationFrame(() => {
+      quadro = win.requestAnimationFrame(() => {
         quadro = 0;
         calcular();
       });
     };
     // a lista de dentro da caixa rolando não move nada; o resto, sim
     const aoRolar = (e: Event) => {
-      if (e.target instanceof Node && caixa.current?.contains(e.target)) return;
+      if (ehNo(e.target) && caixa.current?.contains(e.target)) return;
       agendar();
     };
-    window.addEventListener("resize", agendar);
-    window.addEventListener("scroll", aoRolar, true);
+    win.addEventListener("resize", agendar);
+    win.addEventListener("scroll", aoRolar, true);
 
     let observador: ResizeObserver | undefined;
-    if (typeof ResizeObserver !== "undefined") {
-      observador = new ResizeObserver(agendar);
+    if (typeof win.ResizeObserver !== "undefined") {
+      observador = new win.ResizeObserver(agendar);
       if (caixa.current) observador.observe(caixa.current);
       const ancoraEl = ehRef(ancoraAtual.current) ? ancoraAtual.current.current : null;
       if (ancoraEl) observador.observe(ancoraEl);
@@ -709,16 +719,16 @@ export function usePosicaoFlutuante(
           if (ultimo !== null && chave !== ultimo) calcular();
           ultimo = chave;
         }
-        laco = requestAnimationFrame(acompanhar);
+        laco = win.requestAnimationFrame(acompanhar);
       };
-      laco = requestAnimationFrame(acompanhar);
+      laco = win.requestAnimationFrame(acompanhar);
     }
 
     return () => {
-      cancelAnimationFrame(quadro);
-      cancelAnimationFrame(laco);
-      window.removeEventListener("resize", agendar);
-      window.removeEventListener("scroll", aoRolar, true);
+      win.cancelAnimationFrame(quadro);
+      win.cancelAnimationFrame(laco);
+      win.removeEventListener("resize", agendar);
+      win.removeEventListener("scroll", aoRolar, true);
       observador?.disconnect();
     };
   }, [aberto, chaveDaAncora, calcular, caixa, seguirAncora]);
@@ -866,6 +876,9 @@ export function Popout({
   ancoraAtual.current = ancora;
   const dentro = useRef(ehDeDentro);
   dentro.current = ehDeDentro;
+  // dentro da janela solta da chamada a caixa nasce no `document` dela, e é
+  // nela que se ouve Esc, clique fora e rolagem
+  const doc = useDocumentoDoPortal();
 
   /*
     O "voltar" do Android desfaz a folha, como desfaz qualquer camada do
@@ -923,7 +936,7 @@ export function Popout({
     const aoApertar = (e: MouseEvent) => {
       if (!fecharAoClicarFora) return;
       const alvo = e.target;
-      if (!(alvo instanceof Node)) return;
+      if (!ehNo(alvo)) return;
       if (caixa.current?.contains(alvo)) return;
       const a = ancoraAtual.current;
       // o botão que abriu alterna o popout no próprio `click`; se o
@@ -932,11 +945,12 @@ export function Popout({
       if (dentroDeCamadaAcima(daPilha, alvo)) return;
       // o véu da folha fecha pelo próprio `onMouseDown` (ver abaixo)
       if (alvo === veu.current) return;
-      if (alvo instanceof Element) {
+      if (alvo.nodeType === 1) {
         // submenu em portal não é descendente da caixa. `data-submenu-de-popover`
         // é o nome antigo, ainda usado pelo `Submenu` de `menus-de-audio`
-        if (alvo.closest("[data-submenu-de-popout],[data-submenu-de-popover]")) return;
-        if (dentro.current?.(alvo)) return;
+        const el = alvo as Element;
+        if (el.closest("[data-submenu-de-popout],[data-submenu-de-popover]")) return;
+        if (dentro.current?.(el)) return;
       }
       fechar.current();
     };
@@ -944,44 +958,45 @@ export function Popout({
     const aoRolar = (e: Event) => {
       const alvo = e.target;
       // a lista de dentro da caixa rolando não é a âncora saindo do lugar
-      if (alvo instanceof Node && (caixa.current?.contains(alvo) || dentroDeCamadaAcima(daPilha, alvo))) return;
+      if (ehNo(alvo) && (caixa.current?.contains(alvo) || dentroDeCamadaAcima(daPilha, alvo))) return;
       fechar.current();
     };
     const aoRedimensionar = () => fechar.current();
 
-    window.addEventListener("keydown", aoTeclarNaJanela, true);
-    window.addEventListener("mousedown", aoApertar, true);
+    const win = janelaDe(doc);
+    win.addEventListener("keydown", aoTeclarNaJanela, true);
+    win.addEventListener("mousedown", aoApertar, true);
     // na folha o que rola é a própria folha: fechar não faz sentido lá
     const rolagem = fecharAoRolar && !comoFolha;
     if (rolagem) {
-      window.addEventListener("scroll", aoRolar, true);
-      window.addEventListener("resize", aoRedimensionar);
+      win.addEventListener("scroll", aoRolar, true);
+      win.addEventListener("resize", aoRedimensionar);
     }
     return () => {
-      window.removeEventListener("keydown", aoTeclarNaJanela, true);
-      window.removeEventListener("mousedown", aoApertar, true);
+      win.removeEventListener("keydown", aoTeclarNaJanela, true);
+      win.removeEventListener("mousedown", aoApertar, true);
       if (rolagem) {
-        window.removeEventListener("scroll", aoRolar, true);
-        window.removeEventListener("resize", aoRedimensionar);
+        win.removeEventListener("scroll", aoRolar, true);
+        win.removeEventListener("resize", aoRedimensionar);
       }
     };
-  }, [aberto, daPilha, fecharAoClicarFora, fecharAoRolar, comoFolha, zIndex]);
+  }, [aberto, daPilha, fecharAoClicarFora, fecharAoRolar, comoFolha, zIndex, doc]);
 
   // ── foco ─────────────────────────────────────────────────────────────
   // quem tinha o foco ao abrir recebe de volta ao fechar — mas só se o foco
   // ainda estiver na caixa (ou tiver caído no `body` com ela desmontada): se o
   // clique fora foi num campo, o foco é dele
   useEffect(() => {
-    if (!aberto) return;
-    const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!aberto || !doc) return;
+    const anterior = ehElementoHtml(doc.activeElement) ? doc.activeElement : null;
     const caixaEl = caixa.current;
     return () => {
       if (!devolverFoco || !anterior || !anterior.isConnected) return;
-      const agora = document.activeElement;
-      const perdido = !agora || agora === document.body || (caixaEl?.contains(agora) ?? false);
+      const agora = doc.activeElement;
+      const perdido = !agora || agora === doc.body || (caixaEl?.contains(agora) ?? false);
       if (perdido) anterior.focus({ preventScroll: true });
     };
-  }, [aberto, devolverFoco]);
+  }, [aberto, devolverFoco, doc]);
 
   // só depois de posicionada: enquanto `visibility: hidden`, `focus()` não pega
   const focou = useRef(false);
@@ -1025,7 +1040,7 @@ export function Popout({
     if (e.defaultPrevented || !prenderFoco || e.key !== "Tab") return;
     // tecla de um popout filho em portal borbulha pela árvore do React até
     // aqui; a armadilha é só de quem está no DOM desta caixa
-    if (!(e.target instanceof Node) || !caixa.current?.contains(e.target)) return;
+    if (!ehNo(e.target) || !caixa.current?.contains(e.target)) return;
     const nos = focaveis(caixa.current);
     if (nos.length === 0) {
       e.preventDefault();
@@ -1033,7 +1048,7 @@ export function Popout({
     }
     const primeiro = nos[0];
     const ultimo = nos[nos.length - 1];
-    const ativo = document.activeElement;
+    const ativo = caixa.current.ownerDocument.activeElement;
     if (e.shiftKey && (ativo === primeiro || ativo === caixa.current)) {
       e.preventDefault();
       ultimo.focus();
@@ -1058,10 +1073,12 @@ export function Popout({
       }
       // dois quadros: o estado inicial precisa ter sido calculado pelo
       // navegador, senão não há de onde transicionar e a caixa surge de estalo
-      let quadro = requestAnimationFrame(() => {
-        quadro = requestAnimationFrame(() => setFase("entrando"));
+      // quadros da janela onde a caixa mora (a principal oculta não anima)
+      const win = janelaDe(doc);
+      let quadro = win.requestAnimationFrame(() => {
+        quadro = win.requestAnimationFrame(() => setFase("entrando"));
       });
-      return () => cancelAnimationFrame(quadro);
+      return () => win.cancelAnimationFrame(quadro);
     }
     if (fase === "entrando") {
       // rede de segurança: o `transitionend` não chega se a transição for
@@ -1070,9 +1087,9 @@ export function Popout({
       const t = window.setTimeout(() => setFase("parado"), DURACAO_DO_DESLIZE + 50);
       return () => window.clearTimeout(t);
     }
-  }, [aberto, comoFolha, animar, pos.pronto, fase]);
+  }, [aberto, comoFolha, animar, pos.pronto, fase, doc]);
 
-  if (!aberto || typeof document === "undefined") return null;
+  if (!aberto || !doc) return null;
 
   const comum = {
     role: papel,
@@ -1131,7 +1148,7 @@ export function Popout({
           <div className={`${semRespiro ? "" : "px-4 pb-4"} ${classeNaFolha ?? className}`}>{children}</div>
         </div>
       </div>,
-      document.body,
+      doc.body,
     );
   }
 
@@ -1173,6 +1190,6 @@ export function Popout({
     >
       {children}
     </div>,
-    document.body,
+    doc.body,
   );
 }
