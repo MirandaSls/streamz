@@ -314,8 +314,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   // outro lugar — servidor, conversa em destaque ou o logo.
   const fecharApps = useAplicativos((s) => s.fechar);
 
-  const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
-
   /**
    * O rail só destaca conversas com mensagem não lida. Como no Discord, a
    * conversa aberta não aparece ali só por estar aberta: ao ser lida, sai.
@@ -481,17 +479,14 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         aparece em quem mandou (o item da conversa) e nos servidores com
         menção, nunca somado no início.
 
-        A pílula branca de não lido continua: é o que diz "há conversa nova"
-        sem inventar um número. Nos prints o início aparece ativo em todos os
-        casos com DM não lida, então o ponto no início **inativo** não deu para
-        confirmar; ficou como estava.
+        O início não mostra pílula de não lido, como no Discord: só a pílula de
+        ativo. O número fica no item da conversa.
       */}
       <RailItem
         label="Mensagens diretas"
         lado={compacto ? 48 : 40}
         redondo={compacto}
         active={view === "dm"}
-        unread={dmUnread}
         onClick={irParaAmigos}
       >
         {/*
