@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS } from "@streamz/shared";
+import { ModuleRef } from "@nestjs/core";
+import { WS_EVENTS, normalizarUsername } from "@streamz/shared";
 import type {
   ApelidoDeAmigoEvent,
   FriendLists,
@@ -35,9 +37,15 @@ import { RealtimeService } from "../realtime/realtime.service";
  */
 @Injectable()
 export class FriendsService {
+  private readonly logger = new Logger(FriendsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    // só para postar a mensagem do pedido na conversa (ver
+    // `servicosDaConversa`). Opcional porque os testes montam o service com
+    // `new` e dois argumentos; no Nest ele sempre vem.
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   /** Chave canônica do par: a mesma para (a,b) e (b,a). */
@@ -157,9 +165,13 @@ export class FriendsService {
 
   // ── pedidos ────────────────────────────────────────────────
 
-  /** Manda um pedido de amizade por nome de usuário (como o Discord). */
-  async request(meId: string, username: string): Promise<FriendRequest> {
-    const alvo = await this.prisma.user.findUnique({ where: { username: username.trim() } });
+  /**
+   * Manda um pedido de amizade por nome de usuário (como o Discord), com uma
+   * mensagem de apresentação opcional — que só aparece na conversa direta
+   * quando o pedido vira amizade (`postarApresentacao`).
+   */
+  async request(meId: string, username: string, mensagem?: string): Promise<FriendRequest> {
+    const alvo = await this.prisma.user.findUnique({ where: { username: normalizarUsername(username) } });
     if (!alvo) throw new NotFoundException("Não encontramos ninguém com esse nome de usuário");
     if (alvo.id === meId) throw new BadRequestException("Você não pode adicionar a si mesmo");
     await this.assertNotBlocked(meId, alvo.id);
@@ -173,13 +185,22 @@ export class FriendsService {
       if (existente.status === "ACCEPTED") {
         throw new BadRequestException("Vocês já são amigos");
       }
-      // pedido cruzado: ele já tinha pedido, então isto é um "aceitar"
+      // pedido cruzado: ele já tinha pedido, então isto é um "aceitar". A
+      // mensagem que vai para a conversa é a do pedido original, que
+      // `acceptRow` posta em nome de quem pediu primeiro
       if (existente.addresseeId === meId) return this.acceptRow(meId, existente.id);
       throw new BadRequestException("Pedido já enviado");
     }
 
     const row = await this.prisma.friendship.create({
-      data: { requesterId: meId, addresseeId: alvo.id, pairKey },
+      data: {
+        requesterId: meId,
+        addresseeId: alvo.id,
+        pairKey,
+        // só espaço conta como "sem mensagem": uma string vazia gravada viraria
+        // um balão em branco na conversa quando o pedido fosse aceito
+        mensagem: mensagem?.trim() || null,
+      },
       include: { requester: true, addressee: true },
     });
     // quem recebe vê o pedido na hora; quem enviou atualiza a aba "Enviados" em
@@ -210,19 +231,105 @@ export class FriendsService {
     if (row.addresseeId !== meId) throw new ForbiddenException("Este pedido não é seu");
     await this.assertNotBlocked(row.requesterId, row.addresseeId);
 
-    const atualizado = await this.prisma.friendship.update({
-      where: { id: row.id },
+    // condicional ao `PENDING`: dois aceites ao mesmo tempo (duplo clique, ou o
+    // aceite cruzando com o pedido cruzado de `request`) leem a mesma linha
+    // pendente, mas só um a vira — e só ele posta a mensagem do pedido. Sem a
+    // condição, a apresentação apareceria duas vezes na conversa.
+    const { count } = await this.prisma.friendship.updateMany({
+      where: { id: row.id, status: "PENDING" },
       data: { status: "ACCEPTED", acceptedAt: new Date() },
-      include: { requester: true, addressee: true },
     });
+    if (count === 0) throw new NotFoundException("Pedido não encontrado");
+
     // cada lado recebe o *outro* como amigo novo
-    this.realtime.emitToUser(atualizado.requesterId, WS_EVENTS.FRIEND_ACCEPTED, {
-      user: toPublicUser(atualizado.addressee),
+    this.realtime.emitToUser(row.requesterId, WS_EVENTS.FRIEND_ACCEPTED, {
+      user: toPublicUser(row.addressee),
     });
-    this.realtime.emitToUser(atualizado.addresseeId, WS_EVENTS.FRIEND_ACCEPTED, {
-      user: toPublicUser(atualizado.requester),
+    this.realtime.emitToUser(row.addresseeId, WS_EVENTS.FRIEND_ACCEPTED, {
+      user: toPublicUser(row.requester),
     });
-    return this.toRequest(atualizado, atualizado.requester);
+    await this.postarApresentacao(row);
+    return this.toRequest(row, row.requester);
+  }
+
+  /**
+   * A mensagem que acompanhou o pedido, postada na conversa direta quando os
+   * dois viram amigos — em nome de quem pediu, como se ele a tivesse escrito
+   * ali. Vale para o aceite e para o pedido cruzado (os dois passam por
+   * `acceptRow`).
+   *
+   * Nada aqui é caminho próprio: a conversa abre pelo `DMsService.openWith`
+   * (bloqueio e privacidade continuam valendo) e a mensagem é gravada pelo
+   * `MessagesService.create` (acesso ao canal, bloqueio na DM, "escrever é
+   * ler"); a entrega ao vivo é a do painel do administrador.
+   *
+   * Nunca lança: a amizade já foi gravada e avisada aos dois lados, e
+   * desfazê-la porque a conversa não abriu seria pior do que ficar sem a
+   * apresentação — o mesmo raciocínio do aviso de banimento da moderação.
+   */
+  private async postarApresentacao(row: {
+    requesterId: string;
+    addresseeId: string;
+    mensagem?: string | null;
+    requester: { username: string };
+  }): Promise<void> {
+    const texto = row.mensagem?.trim();
+    if (!texto) return;
+    try {
+      const servicos = await this.servicosDaConversa();
+      if (!servicos) return;
+      const { dms, messages } = servicos;
+      // `username` de quem pediu: a conversa volta à coluna dele já com o
+      // estado de leitura (ver `DMsService.openWith`)
+      const conversa = await dms.openWith(row.requesterId, row.addresseeId, {
+        username: row.requester.username,
+      });
+      const mensagem = await messages.create(conversa.id, row.requesterId, texto);
+      this.realtime.emitToChannel(conversa.id, WS_EVENTS.MESSAGE_NEW, mensagem);
+      // a conversa pode estar nascendo agora: sem este aviso ela só apareceria
+      // na coluna de quem aceitou depois de recarregar a página
+      this.realtime.emitToUser(
+        row.addresseeId,
+        WS_EVENTS.CHANNEL_CREATED,
+        await dms.get(row.addresseeId, conversa.id),
+      );
+    } catch (e) {
+      // o texto não vai ao log: é conversa entre os dois, não diagnóstico
+      this.logger.warn(
+        `Amizade aceita, mas a mensagem do pedido não chegou à conversa entre ${row.requesterId} e ${row.addresseeId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  /**
+   * `DMsService` e `MessagesService`, resolvidos na hora do uso.
+   *
+   * Não são injetados porque as setas entre os módulos já apontam para cá:
+   * `MessagesModule` e `DMsModule` importam o `FriendsModule` (a barreira do
+   * bloqueio). Importá-los de volta fecharia o ciclo, e a saída seria um
+   * `forwardRef` — que funciona e esconde a dependência de verdade (o
+   * raciocínio de `GuildsService.registrarDesligamentoDeVoz`).
+   *
+   * O `import()` também é tardio de propósito: um `import` no topo deste
+   * arquivo fecharia o ciclo entre os **arquivos** (`dms.service` e
+   * `messages.service` importam este), e, conforme a ordem de carga, o
+   * `design:paramtypes` deles leria `FriendsService` ainda indefinido — o Nest
+   * morreria no bootstrap sem resolver a dependência. Na hora do aceite os
+   * dois já estão carregados e o `require` só lê o cache.
+   *
+   * Sem `ModuleRef` (os testes que montam o service com `new`) volta `null` e
+   * a apresentação fica de fora — o aceite não depende dela.
+   */
+  private async servicosDaConversa() {
+    if (!this.moduleRef) return null;
+    const [{ DMsService }, { MessagesService }] = await Promise.all([
+      import("../dms/dms.service"),
+      import("../messages/messages.service"),
+    ]);
+    return {
+      dms: this.moduleRef.get(DMsService, { strict: false }),
+      messages: this.moduleRef.get(MessagesService, { strict: false }),
+    };
   }
 
   /**
@@ -438,7 +545,13 @@ export class FriendsService {
   }
 
   private toRequest(
-    row: { id: string; requesterId: string; addresseeId: string; createdAt: Date },
+    row: {
+      id: string;
+      requesterId: string;
+      addresseeId: string;
+      createdAt: Date;
+      mensagem?: string | null;
+    },
     outro: PublicUserRow,
   ): FriendRequest {
     return {
@@ -447,6 +560,7 @@ export class FriendsService {
       addresseeId: row.addresseeId,
       user: toPublicUser(outro),
       createdAt: row.createdAt.toISOString(),
+      mensagem: row.mensagem ?? null,
     };
   }
 }
