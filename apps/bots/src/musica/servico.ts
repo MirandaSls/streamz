@@ -7,6 +7,8 @@ import {
   consultasAlternativas,
   ehFonteAlternativa,
 } from "./fontes-alternativas";
+import { idDePlaylistDoSpotify, buscarPlaylistPeloEmbed } from "./spotify-embed";
+import { resolverEmOrdem } from "./playlist-spotify";
 import { embedDeInatividade } from "./embeds";
 import { ArmazemDeConfiguracao } from "./configuracao";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
@@ -490,6 +492,40 @@ export class ServicoDeMusica {
    * `comandos.ts` e uma busca pelo texto que digitou.
    */
   async buscar(jogador: Player, consulta: string, quemPediu: unknown): Promise<SearchResult> {
+    const resultado = await this.buscarSimples(jogador, consulta, quemPediu);
+    const idSpotify = idDePlaylistDoSpotify(consulta);
+    if (!idSpotify) return resultado;
+    if (resultado.loadType !== "error" && resultado.loadType !== "empty" && resultado.tracks?.length) {
+      return resultado;
+    }
+
+    // O LavaSrc usa credencial de app, que o Spotify barra (401) ao ler itens
+    // de playlist. O embed público lista as faixas; cada uma vira busca por texto.
+    const embed = await buscarPlaylistPeloEmbed(idSpotify);
+    if (!embed || embed.faixas.length === 0) return resultado;
+
+    const { achadas, puladas } = await resolverEmOrdem(embed.faixas, async (f) => {
+      const r = await this.buscarSimples(jogador, `${f.titulo} ${f.artista}`, quemPediu);
+      return r.tracks?.[0] ?? null;
+    });
+    this.ctx.log.info("playlist do spotify resolvida pelo embed", {
+      faixasNoEmbed: embed.faixas.length,
+      resolvidas: achadas.length,
+      puladas,
+    });
+    if (achadas.length === 0) return resultado;
+
+    return {
+      ...resultado,
+      loadType: "playlist",
+      tracks: achadas,
+      playlist: { ...(resultado.playlist ?? {}), name: embed.nome },
+      exception: null,
+    } as unknown as SearchResult;
+  }
+
+  /** Busca de uma consulta só: link direto, ou texto na fonte que está viva. */
+  private async buscarSimples(jogador: Player, consulta: string, quemPediu: unknown): Promise<SearchResult> {
     // Com o YouTube barrando o IP, a busca por texto no YouTube acha faixas que
     // depois não tocam; o SoundCloud acha e toca. Link segue direto, sem prefixo.
     if (!/^https?:\/\//i.test(consulta.trim()) && this.youtubeBloqueado.ativo()) {
