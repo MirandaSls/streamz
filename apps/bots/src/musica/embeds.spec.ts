@@ -128,5 +128,6 @@ describe("botaoDoSite", () => {
 describe("MENSAGEM_PLAYLIST_GERADA_SPOTIFY", () => {
   it("explica a restrição", () => {
     expect(MENSAGEM_PLAYLIST_GERADA_SPOTIFY).toContain("Daily Mix");
+    expect(MENSAGEM_PLAYLIST_GERADA_SPOTIFY).toContain("pública");
   });
 });
