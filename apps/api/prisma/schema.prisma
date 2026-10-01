@@ -786,6 +786,10 @@ model Friendship {
   pairKey     String           @unique
   createdAt   DateTime         @default(now())
   acceptedAt  DateTime?
+  // Texto de apresentação que acompanha o pedido ("sou o fulano do servidor X").
+  // O teto de 120 caracteres mora no contrato (`friendRequestSchema`), não
+  // aqui: a coluna é TEXT para a regra poder mudar sem migration.
+  mensagem    String?
 
   requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
   addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
