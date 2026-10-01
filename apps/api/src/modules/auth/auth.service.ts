@@ -9,7 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import { createHash, randomBytes } from "crypto";
-import { HEADER_CLIENTE, WS_EVENTS, normalizarEmail, pareceEmail } from "@streamz/shared";
+import { HEADER_CLIENTE, WS_EVENTS, normalizarEmail, normalizarUsername, pareceEmail } from "@streamz/shared";
 import type {
   AuthSession,
   AuthTokens,
@@ -91,7 +91,7 @@ export class AuthService {
     try {
       user = await this.prisma.user.create({
         data: {
-          username: dto.username,
+          username: normalizarUsername(dto.username),
           email,
           passwordHash,
           status: "ONLINE",
@@ -119,7 +119,7 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: pareceEmail(identificador)
         ? { email: normalizarEmail(identificador) }
-        : { username: identificador },
+        : { username: normalizarUsername(identificador) },
     });
     // conta excluída não volta: o hash já é lixo aleatório, mas cortamos antes
     if (!user || user.deletedAt) throw new UnauthorizedException(CREDENCIAIS_INVALIDAS);

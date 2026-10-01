@@ -33,6 +33,7 @@ import {
   WS_EVENTS,
   hasPermission,
   isEmptySearch,
+  normalizarUsername,
   parseCustomEmoji,
   replySnippet,
 } from "@streamz/shared";
@@ -583,7 +584,7 @@ export class MessagesService {
 
     if (filters.from) {
       const autor = await this.prisma.user.findUnique({
-        where: { username: filters.from },
+        where: { username: normalizarUsername(filters.from) },
         select: { id: true },
       });
       if (!autor) return null;
@@ -592,7 +593,7 @@ export class MessagesService {
 
     if (filters.mentions) {
       const alvo = await this.prisma.user.findUnique({
-        where: { username: filters.mentions },
+        where: { username: normalizarUsername(filters.mentions) },
         select: { id: true, username: true },
       });
       if (!alvo) return null;
