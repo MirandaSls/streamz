@@ -2,7 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import { WS_EVENTS } from "@streamz/shared";
 import { WS_URL } from "./config";
 import { getAccessToken, renovarTokens } from "./session";
-import { identificacaoDoCliente, ouvirSaidaDoApp } from "@/lib/desktop";
+import { identificacaoDoCliente, ouvirSaidaDoApp, versaoDoAppPronta } from "@/lib/desktop";
 import { reportarDiagnostico } from "@/lib/diagnostico";
 import { lerClientOutdated, useVersaoCliente } from "@/stores/versao-cliente";
 
@@ -73,9 +73,17 @@ export function getSocket(): Socket {
   const s = io(WS_URL, {
     // função, não objeto: o Socket.IO chama a cada (re)conexão
     auth: (cb: (dados: Record<string, unknown>) => void) => {
+      // a API só aplica o piso de versão a `desktop/<v>`: sem esperar a versão,
+      // o primeiro connect sairia como "desktop" e escaparia do aviso/bloqueio
       getAccessToken()
-        .then((token) => cb({ token: token ?? "", cliente: identificacaoDoCliente() ?? undefined }))
-        .catch(() => cb({ token: "", cliente: identificacaoDoCliente() ?? undefined }));
+        .then(async (token) => {
+          await versaoDoAppPronta();
+          cb({ token: token ?? "", cliente: identificacaoDoCliente() ?? undefined });
+        })
+        .catch(async () => {
+          await versaoDoAppPronta();
+          cb({ token: "", cliente: identificacaoDoCliente() ?? undefined });
+        });
     },
     autoConnect: true,
     transports: ["websocket"],
