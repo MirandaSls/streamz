@@ -4,6 +4,7 @@ import { WS_URL } from "./config";
 import { getAccessToken, renovarTokens } from "./session";
 import { identificacaoDoCliente, ouvirSaidaDoApp } from "@/lib/desktop";
 import { reportarDiagnostico } from "@/lib/diagnostico";
+import { lerClientOutdated, useVersaoCliente } from "@/stores/versao-cliente";
 
 /**
  * Conexão única com o gateway, resiliente a queda de rede e a token expirado.
@@ -38,6 +39,13 @@ let reportouFalha = false;
 /** Quantas falhas seguidas até valer um relato ao servidor (1-2 são ruído de rede). */
 const FALHAS_PARA_REPORTAR = 3;
 
+/**
+ * O servidor barrou esta versão do app. Vale até a página recarregar (o que
+ * acontece ao atualizar): sem a trava, `observarVisibilidade` e a renovação de
+ * token reconectariam um socket que o servidor derruba de novo, em laço.
+ */
+let versaoBloqueada = false;
+
 /** O ouvinte de visibilidade é global e registrado uma vez só. */
 let ouvindoVisibilidade = false;
 
@@ -53,7 +61,7 @@ function observarVisibilidade() {
   if (ouvindoVisibilidade || typeof document === "undefined") return;
   ouvindoVisibilidade = true;
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && socket && !socket.connected) {
+    if (document.visibilityState === "visible" && socket && !socket.connected && !versaoBloqueada) {
       socket.connect();
     }
   });
@@ -112,11 +120,24 @@ export function getSocket(): Socket {
     void renovarEReconectar(s);
   });
 
+  s.on(WS_EVENTS.CLIENT_OUTDATED, (bruto: unknown) => {
+    const p = lerClientOutdated(bruto);
+    if (!p) return;
+    useVersaoCliente.getState().definir(p);
+    if (p.nivel === "bloqueado") {
+      versaoBloqueada = true;
+      // `io.reconnection(false)` impede o backoff do Socket.IO; o disconnect
+      // manual sozinho já não reconecta, mas o servidor pode fechar antes.
+      s.io.opts.reconnection = false;
+      s.disconnect();
+    }
+  });
+
   s.on("disconnect", (motivo) => {
     console.info("[voz] socket caiu", { motivo });
     // o gateway derruba a conexão quando o token não valida; nesse caso o
     // Socket.IO não reconecta sozinho — quem fechou foi o servidor
-    if (motivo === "io server disconnect") void renovarEReconectar(s);
+    if (motivo === "io server disconnect" && !versaoBloqueada) void renovarEReconectar(s);
   });
 
   socket = s;
@@ -143,7 +164,7 @@ export function getSocket(): Socket {
 }
 
 async function renovarEReconectar(s: Socket): Promise<void> {
-  if (tentouRenovar) return;
+  if (tentouRenovar || versaoBloqueada) return;
   tentouRenovar = true;
   try {
     await renovarTokens();

@@ -24,6 +24,8 @@ export const WS_EVENTS = {
   CHANNEL_LEAVE: "channel.leave",
   // servidor → cliente
   ERROR: "ws.error",
+  /** Cliente desktop abaixo da versão exigida pela instância (aviso ou bloqueio). */
+  CLIENT_OUTDATED: "client.outdated",
   MESSAGE_NEW: "message.new",
   MESSAGE_UPDATED: "message.updated",
   MESSAGE_DELETED: "message.deleted",
@@ -424,3 +426,58 @@ export type PollVotePayload = z.infer<typeof pollVoteSchema>;
 
 export const pollCloseSchema = z.object({ messageId: idSchema });
 export type PollClosePayload = z.infer<typeof pollCloseSchema>;
+
+// ── versão do cliente desktop ──
+// O desktop embrulha uma web empacotada que não se atualiza sozinha; o navegador
+// recarrega e por isso nunca é avaliado aqui.
+
+export const clientOutdatedSchema = z.object({
+  nivel: z.enum(["aviso", "bloqueado"]),
+  versaoAtual: z.string(),
+  versaoMinima: z.string(),
+});
+export type ClientOutdatedPayload = z.infer<typeof clientOutdatedSchema>;
+
+export type PoliticaVersaoCliente = { minima?: string; aviso?: string };
+export type AvaliacaoVersaoCliente = {
+  nivel: "ok" | "aviso" | "bloqueado";
+  versaoAtual: string | null;
+  versaoMinima: string | null;
+};
+
+/** Extrai `[X, Y, Z]` de um semver; o sufixo pré-release ("-beta") é ignorado. */
+function lerSemver(texto: string | undefined | null): [number, number, number] | null {
+  const m = /^\s*v?(\d+)\.(\d+)\.(\d+)/.exec(texto ?? "");
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function compararSemver(a: [number, number, number], b: [number, number, number]): number {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1;
+  return 0;
+}
+
+/**
+ * Avalia o `auth.cliente` do handshake ("desktop/1.3.16") contra a política da
+ * instância. Só o desktop é avaliado; qualquer outra coisa é "ok". Política
+ * ausente ou malformada também resulta em "ok": config errada nunca bloqueia
+ * ninguém.
+ */
+export function avaliarVersaoCliente(
+  cliente: string | undefined | null,
+  politica: PoliticaVersaoCliente,
+): AvaliacaoVersaoCliente {
+  const ok: AvaliacaoVersaoCliente = { nivel: "ok", versaoAtual: null, versaoMinima: null };
+  if (typeof cliente !== "string" || !cliente.startsWith("desktop/")) return ok;
+  const versaoTexto = cliente.slice("desktop/".length);
+  const versao = lerSemver(versaoTexto);
+  if (!versao) return ok;
+  const minima = lerSemver(politica?.minima);
+  if (minima && compararSemver(versao, minima) < 0) {
+    return { nivel: "bloqueado", versaoAtual: versaoTexto, versaoMinima: politica.minima!.trim() };
+  }
+  const aviso = lerSemver(politica?.aviso);
+  if (aviso && compararSemver(versao, aviso) < 0) {
+    return { nivel: "aviso", versaoAtual: versaoTexto, versaoMinima: politica.aviso!.trim() };
+  }
+  return ok;
+}
