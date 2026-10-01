@@ -7,6 +7,7 @@ import {
   consultasAlternativas,
   ehFonteAlternativa,
 } from "./fontes-alternativas";
+import { ArmazemDeConfiguracao } from "./configuracao";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
 
 /**
@@ -85,6 +86,9 @@ export function plataformaDeBusca(): string {
   return process.env.LAVALINK_BUSCA?.trim() || "ytsearch";
 }
 
+/** Teto de faixas de autoplay seguidas sem ninguém mexer: evita tocar para sempre numa call vazia. */
+export const LIMITE_DE_AUTOPLAY_SEGUIDO = 20;
+
 export class ServicoDeMusica {
   readonly manager: LavalinkManager;
   /** Servidores para os quais um `VOICE_SERVER_UPDATE` já chegou nesta sessão. */
@@ -96,6 +100,12 @@ export class ServicoDeMusica {
   private readonly jaTentouDeNovo = new Map<string, string>();
   /** Lembra por um tempo que o YouTube barrou o IP, para buscar em outra fonte. */
   private readonly youtubeBloqueado = new MemoriaDeBloqueio();
+  /** Autoplay e 24/7, por servidor (ver `configuracao.ts`). */
+  readonly configuracao = new ArmazemDeConfiguracao();
+  /** Quantas faixas de autoplay seguidas cada servidor já tocou. */
+  private readonly autoplaySeguidas = new Map<string, number>();
+  /** A faixa (`encoded`) que o autoplay acabou de enfileirar; qualquer outra no `trackStart` é pedido manual. */
+  private readonly autoplayPendente = new Map<string, string>();
 
   constructor(private readonly ctx: ContextoDoBot) {
     const cliente = ctx.cliente as Client<true>;
@@ -154,9 +164,25 @@ export class ServicoDeMusica {
       this.ctx.log.erro("lavalink com erro", { no: no.id, erro }),
     );
 
-    this.manager.on("trackStart", () => {
+    this.manager.on("trackStart", (jogador, faixa) => {
+      // Faixa que não é a do autoplay = alguém tocou algo: o contador recomeça.
+      if (faixa?.encoded && this.autoplayPendente.get(jogador.guildId) !== faixa.encoded) {
+        this.autoplaySeguidas.delete(jogador.guildId);
+      }
       const novo = this.contasDoYoutube.registrarFaixa();
       if (novo) void this.enviarTokenDoYoutube(novo, "rodízio");
+    });
+    // `onEmptyQueue.destroyAfterMs` é do Manager inteiro; a lib agenda o destroy
+    // num timer (`internal_queueempty`) **antes** de emitir `queueEnd`. Por
+    // servidor, então, cancelamos esse timer aqui quando o 24/7 está ligado e
+    // deixamos o autoplay tentar continuar. A lib não sai por canal vazio
+    // (`onAllNeighboursLeave` não é usado), então só o timer precisa cair.
+    this.manager.on("queueEnd", (jogador, faixa) => {
+      void this.aoAcabarAFila(jogador, faixa as Track | null);
+    });
+    this.manager.on("playerDestroy", (jogador) => {
+      this.autoplaySeguidas.delete(jogador.guildId);
+      this.autoplayPendente.delete(jogador.guildId);
     });
     this.manager.on("trackError", (jogador, faixa, evento) => {
       void this.aoFalharFaixa(jogador, faixa as Track | null, evento.exception);
@@ -181,6 +207,64 @@ export class ServicoDeMusica {
       no: configuracaoDoAmbiente().host,
       busca: plataformaDeBusca(),
     });
+  }
+
+  private async aoAcabarAFila(jogador: Player, ultima: Track | null) {
+    try {
+      const config = await this.configuracao.ler(jogador.guildId);
+      if (config.vinte4Sete) {
+        const timer = jogador.getData("internal_queueempty") as
+          | ReturnType<typeof setTimeout>
+          | undefined;
+        if (timer) clearTimeout(timer);
+        jogador.setData("internal_queueempty", undefined);
+      }
+      if (config.autoplay) await this.tocarParecida(jogador, ultima);
+    } catch (erro) {
+      this.ctx.log.erro("falha ao tratar o fim da fila", { servidor: jogador.guildId, erro });
+    }
+  }
+
+  /**
+   * Autoplay: uma faixa parecida com a última, uma por vez. Falha na busca
+   * encerra em silêncio — o destroy da lib (ou o 24/7) segue o seu curso.
+   */
+  private async tocarParecida(jogador: Player, ultima: Track | null) {
+    const guildId = jogador.guildId;
+    const base = ultima ?? jogador.queue.previous[0] ?? null;
+    if (!base) return;
+    const seguidas = this.autoplaySeguidas.get(guildId) ?? 0;
+    if (seguidas >= LIMITE_DE_AUTOPLAY_SEGUIDO) return;
+
+    const jaTocadas = new Set(
+      [base, ...jogador.queue.previous].map((t) => `${t.info.author}|${t.info.title}`.toLowerCase()),
+    );
+    const consultas = [`${base.info.author} ${base.info.title}`, `mix ${base.info.author}`];
+    for (const consulta of consultas) {
+      let achada: Track | undefined;
+      try {
+        const resultado = await this.buscar(jogador, consulta, base.requester);
+        achada = resultado.tracks.find(
+          (t) =>
+            !t.info.isStream &&
+            t.encoded !== base.encoded &&
+            t.info.uri !== base.info.uri &&
+            !jaTocadas.has(`${t.info.author}|${t.info.title}`.toLowerCase()),
+        );
+      } catch (erro) {
+        this.ctx.log.aviso("autoplay: a busca falhou", { servidor: guildId, erro });
+        return;
+      }
+      if (!achada) continue;
+      // O jogador pode ter sido destruído durante a busca.
+      if (this.manager.getPlayer(guildId) !== jogador || jogador.queue.current) return;
+      this.autoplaySeguidas.set(guildId, seguidas + 1);
+      if (achada.encoded) this.autoplayPendente.set(guildId, achada.encoded);
+      await jogador.queue.add(achada);
+      await jogador.play();
+      this.ctx.log.info("autoplay", { servidor: guildId, faixa: achada.info.title });
+      return;
+    }
   }
 
   /**

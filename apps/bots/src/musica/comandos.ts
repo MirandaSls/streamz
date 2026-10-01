@@ -6,6 +6,8 @@ import {
   type Comando,
   type Contexto,
 } from "../runtime/tipos";
+import { COMANDOS_DE_CONFIG } from "./comandos-config";
+import { COMANDOS_EXTRA } from "./comandos-extra";
 import {
   barraDeProgresso,
   ehLinkDoSpotify,
@@ -33,7 +35,7 @@ const FAIXAS_LISTADAS = 10;
 // ── Ajudantes ───────────────────────────────────────────────────────────────
 
 /** Comando de música exige servidor: em DM não há canal de voz para entrar. */
-async function servidorDe(ctx: Contexto): Promise<Guild | null> {
+export async function servidorDe(ctx: Contexto): Promise<Guild | null> {
   if (!ctx.guildId) {
     await ctx.responder({ conteudo: "Só funciona dentro de um servidor.", efemera: true });
     return null;
@@ -54,7 +56,7 @@ async function servidorDe(ctx: Contexto): Promise<Guild | null> {
  * (o bot acabou de subir, ou o intent de membros não está ligado); o estado de
  * voz em si vem do `voice_states` do `GUILD_CREATE` e do `VOICE_STATE_UPDATE`.
  */
-async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<string | null> {
+export async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<string | null> {
   const membro =
     servidor.members.cache.get(ctx.usuarioId) ??
     (await servidor.members.fetch(ctx.usuarioId).catch(() => null));
@@ -62,7 +64,7 @@ async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<st
 }
 
 /** O jogador daquele servidor, ou uma resposta dizendo que não há nada tocando. */
-async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
+export async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
   if (!ctx.guildId) {
     await ctx.responder({ conteudo: "Só funciona dentro de um servidor.", efemera: true });
     return null;
@@ -82,7 +84,7 @@ async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
  * está — é a regra que todo bot de música tem e a primeira reclamação de quem
  * não a tem.
  */
-async function podeMandar(ctx: Contexto, jogador: Player, servidor: Guild): Promise<boolean> {
+export async function podeMandar(ctx: Contexto, jogador: Player, servidor: Guild): Promise<boolean> {
   const meuCanal = await canalDeVozDeQuemPediu(ctx, servidor);
   if (meuCanal && meuCanal === jogador.voiceChannelId) return true;
   await ctx.responder({
@@ -127,11 +129,23 @@ const tocar: Comando = {
       obrigatoria: true,
       restoDaLinha: true,
     },
+    // O contexto só expõe texto/número (não há leitor de booleano nem `-f` no
+    // parser do prefixo), então a opção é inteira 0/1 e só vale no `/`.
+    {
+      nome: "inserir-primeiro",
+      descricao: "1 = coloca no topo da fila em vez do fim",
+      tipo: TIPO_INTEIRO,
+      escolhas: [
+        { nome: "sim", valor: 1 },
+        { nome: "não", valor: 0 },
+      ],
+    },
   ],
   async executar(ctx) {
     const servidor = await servidorDe(ctx);
     if (!servidor) return;
 
+    const noTopo = ctx.numero("inserir-primeiro") === 1;
     const consulta = ctx.texto("busca")?.trim();
     if (!consulta) {
       await ctx.responder({ conteudo: "Diz o que eu procuro: `/tocar <busca ou link>`.", efemera: true });
@@ -201,7 +215,8 @@ const tocar: Comando = {
     // Playlist inteira ou uma faixa só.
     if (resultado.loadType === "playlist") {
       // `add` com o array mantém a ordem da playlist; nada de embaralhar aqui.
-      jogador.queue.add(resultado.tracks);
+      if (noTopo) await jogador.queue.splice(0, 0, ...resultado.tracks);
+      else jogador.queue.add(resultado.tracks);
       const total = resultado.tracks.length;
       const duracaoTotalMs = resultado.tracks.reduce((soma, t) => soma + (t.info.duration || 0), 0);
       const primeira = resultado.tracks[0]!;
@@ -217,7 +232,9 @@ const tocar: Comando = {
             total,
             duracaoTotalMs,
             pediuPor: ctx.usuarioId,
-            ...(avisoDoSpotify ? { nota: avisoDoSpotify } : {}),
+            ...(avisoDoSpotify || noTopo
+              ? { nota: [noTopo ? "Entrou no topo da fila." : "", avisoDoSpotify ?? ""].filter(Boolean).join(" ") }
+              : {}),
           }),
         ],
       });
@@ -226,10 +243,11 @@ const tocar: Comando = {
 
     const faixa = resultado.tracks[0]!;
     const jaTocando = Boolean(jogador.queue.current);
-    jogador.queue.add(faixa);
+    if (noTopo) await jogador.queue.splice(0, 0, faixa);
+    else jogador.queue.add(faixa);
     if (!jogador.playing) await jogador.play();
 
-    const posicao = jogador.queue.tracks.length;
+    const posicao = noTopo ? 1 : jogador.queue.tracks.length;
     await ctx.responder({
       embeds: [
         embedDeFaixa(jaTocando ? "fila" : "tocando", {
@@ -242,7 +260,13 @@ const tocar: Comando = {
           fonte: nomeDaFonte(faixa.info.sourceName, faixa.info.uri),
           pediuPor: ctx.usuarioId,
           ...(jaTocando ? { posicaoNaFila: posicao } : {}),
-          ...(avisoDoSpotify ? { nota: avisoDoSpotify } : {}),
+          ...(avisoDoSpotify || (noTopo && jaTocando)
+            ? {
+                nota: [noTopo && jaTocando ? "No topo da fila." : "", avisoDoSpotify ?? ""]
+                  .filter(Boolean)
+                  .join(" "),
+              }
+            : {}),
         }),
       ],
     });
@@ -379,7 +403,7 @@ const pausar: Comando = {
 const continuar: Comando = {
   nome: "continuar",
   descricao: "Continua de onde parou",
-  apelidos: ["resume", "despausar"],
+  apelidos: ["resume", "unpause", "despausar"],
   async executar(ctx) {
     const servidor = await servidorDe(ctx);
     if (!servidor) return;
@@ -488,7 +512,7 @@ const remover: Comando = {
 const repetir: Comando = {
   nome: "repetir",
   descricao: "Repetição: desligada, na faixa ou na fila",
-  apelidos: ["loop"],
+  apelidos: ["loop", "repeat"],
   opcoes: [
     {
       nome: "modo",
@@ -544,4 +568,6 @@ export const COMANDOS: Comando[] = [
   embaralhar,
   remover,
   repetir,
+  ...COMANDOS_EXTRA,
+  ...COMANDOS_DE_CONFIG,
 ];
