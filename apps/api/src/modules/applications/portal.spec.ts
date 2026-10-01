@@ -42,7 +42,7 @@ const BOT_USER = {
 };
 
 /** Um Prisma de mentira com uma `Application` e nada mais. */
-function bancada(linha: typeof LINHA | null = LINHA) {
+function bancada(linha: typeof LINHA | null = LINHA, avatarAnterior: string | null = null) {
   const findUnique = vi.fn(async () => linha);
   const update = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
     ...(linha ?? LINHA),
@@ -64,9 +64,11 @@ function bancada(linha: typeof LINHA | null = LINHA) {
     },
   ];
   const instalacoesFindMany = vi.fn(async (_args: { where: { applicationId: string } }) => instalacoesNoBanco);
+  const usuarioFindUnique = vi.fn(async () => ({ avatarKey: avatarAnterior }));
+  const usuarioUpdate = vi.fn(async () => BOT_USER);
   const prisma = {
     application: { findUnique, update },
-    user: { delete: apagarUsuario },
+    user: { delete: apagarUsuario, findUnique: usuarioFindUnique, update: usuarioUpdate },
     guildApplication: { findMany: instalacoesFindMany },
   } as unknown as PrismaService;
 
@@ -98,6 +100,7 @@ function bancada(linha: typeof LINHA | null = LINHA) {
     findUnique,
     update,
     apagarUsuario,
+    usuarioUpdate,
     apagarObjeto,
     desinstalar,
     instalacoesFindMany,
@@ -162,7 +165,9 @@ describe("editar", () => {
     const outra = bancada({ ...LINHA, description: "Toca música" });
     await outra.apps.editar("u_dono", "app_1", { name: "Outro" });
     expect(outra.update.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ data: { name: "Outro" } }),
+      expect.objectContaining({
+        data: { name: "Outro", botUser: { update: { displayName: "Outro" } } },
+      }),
     );
   });
 
@@ -171,13 +176,21 @@ describe("editar", () => {
     expect(appEditarSchema.safeParse({ publico: true }).success).toBe(true);
   });
 
-  it("não renomeia o usuário-bot: quem está na lista de membros continua igual", async () => {
+  it("renomear o aplicativo renomeia o usuário-bot na mesma escrita", async () => {
     const { apps, update } = bancada();
     await apps.editar("u_dono", "app_1", { name: "Outro nome" });
-    // o `include: { botUser }` é leitura; o que não pode é escrita no bot
     const { data } = update.mock.calls[0]?.[0] as { data: Record<string, unknown> };
-    expect(data).toEqual({ name: "Outro nome" });
-    expect(JSON.stringify(data)).not.toContain("displayName");
+    expect(data).toEqual({
+      name: "Outro nome",
+      botUser: { update: { displayName: "Outro nome" } },
+    });
+  });
+
+  it("sem `name` no patch, o usuário-bot não é tocado", async () => {
+    const { apps, update } = bancada();
+    await apps.editar("u_dono", "app_1", { publico: true });
+    const { data } = update.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(data).not.toHaveProperty("botUser");
   });
 });
 
@@ -293,6 +306,28 @@ describe("ícone", () => {
 
     expect(apagarObjeto).toHaveBeenCalledWith("app-icons/app_1/velho.png");
     expect(update.mock.invocationCallOrder[0]).toBeLessThan(
+      apagarObjeto.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("o avatar do bot vira um objeto próprio e o antigo sai depois do banco", async () => {
+    const { apps, usuarioUpdate, update, apagarObjeto } = bancada(
+      { ...LINHA, iconKey: "app-icons/app_1/velho.png" },
+      "avatars/u_bot/velho.png",
+    );
+    const png = pngDeUmPixel();
+    await apps.atualizarIcone("u_dono", "app_1", { buffer: png, size: png.length });
+
+    const { where, data } = (usuarioUpdate.mock.calls as unknown as [{ where: { id: string }; data: { avatarKey: string; avatarUrl: string } }][])[0]![0];
+    expect(where).toEqual({ id: "u_bot" });
+    expect(data.avatarKey).toMatch(/^avatars\/u_bot\/[0-9a-f-]{36}\.png$/);
+    expect(data.avatarUrl).toContain(`/api/users/u_bot/avatar?v=${data.avatarKey.split("/").pop()}`);
+    // chave própria: apagar o ícone não pode quebrar o avatar
+    const iconKey = (update.mock.calls[0]?.[0] as { data: { iconKey: string } }).data.iconKey;
+    expect(data.avatarKey).not.toBe(iconKey);
+
+    expect(apagarObjeto).toHaveBeenCalledWith("avatars/u_bot/velho.png");
+    expect(usuarioUpdate.mock.invocationCallOrder[0]).toBeLessThan(
       apagarObjeto.mock.invocationCallOrder[0]!,
     );
   });

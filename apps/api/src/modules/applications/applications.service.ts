@@ -136,10 +136,11 @@ export class ApplicationsService {
    * descrição) é o que permite o interruptor "Publicar no diretório" salvar
    * sozinho sem carregar o formulário inteiro junto.
    *
-   * O nome **não** propaga para o `displayName` do usuário-bot de propósito: o
-   * bot já está em servidores com aquele nome na lista de membros, e renomear
-   * o aplicativo no portal não é renomear o membro. Quem quiser os dois iguais
-   * troca os dois — é o que o Discord faz.
+   * O nome **propaga** para o `displayName` do usuário-bot, na mesma escrita.
+   * A decisão antiga (não propagar) foi revertida: o nome do aplicativo é o que
+   * o usuário vê ao adicionar o bot, e o bot entrando no servidor com outro nome
+   * ("Streamz Música" depois de renomear) parecia um defeito. O `username` não
+   * muda: é identificador, não rótulo.
    */
   async editar(donoId: string, appId: string, patch: AppEditarInput): Promise<AppDetalhe> {
     await this.doMeuApp(donoId, appId);
@@ -147,7 +148,9 @@ export class ApplicationsService {
     const app = await this.prisma.application.update({
       where: { id: appId },
       data: {
-        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.name !== undefined
+          ? { name: patch.name, botUser: { update: { displayName: patch.name } } }
+          : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.publico !== undefined ? { publico: patch.publico } : {}),
         ...(patch.permissoesPadrao !== undefined
@@ -212,6 +215,11 @@ export class ApplicationsService {
    * troca do ícone não precisa reescrever URL nenhuma — mas quer dizer também
    * que existe uma rota pública de leitura, `GET /applications/:id/icone`,
    * pelo mesmo motivo de `GET /guilds/:id/icon`: `<img src>` não manda token.
+   *
+   * O avatar do usuário-bot acompanha o ícone, como o `displayName` acompanha o
+   * nome. É um **segundo objeto** no bucket (`avatars/<botUserId>/…`), não a
+   * mesma chave: cada lado apaga o seu na troca, e compartilhar a chave faria
+   * trocar o ícone quebrar o avatar (ou o contrário).
    */
   async atualizarIcone(
     donoId: string,
@@ -235,14 +243,28 @@ export class ApplicationsService {
 
     const key = `app-icons/${appId}/${randomUUID()}.${EXTENSAO_POR_MIME[image.mime] ?? "bin"}`;
     await this.storage.put(key, file.buffer, image.mime);
+
+    // a extensão na chave é de onde o proxy de avatar tira o content-type
+    const avatarKey = `avatars/${antes.botUserId}/${randomUUID()}.${EXTENSAO_POR_MIME[image.mime] ?? "bin"}`;
+    await this.storage.put(avatarKey, file.buffer, image.mime);
+    const botAntes = await this.prisma.user.findUnique({
+      where: { id: antes.botUserId },
+      select: { avatarKey: true },
+    });
+    await this.prisma.user.update({
+      where: { id: antes.botUserId },
+      data: { avatarKey, avatarUrl: avatarDoBot(antes.botUserId, avatarKey) },
+    });
+    // depois do `user.update`, para o `botUser` devolvido já ter o avatar novo
     const app = await this.prisma.application.update({
       where: { id: appId },
       data: { iconKey: key },
       include: { botUser: true, ...INCLUI_TOKEN_EM_VIGOR },
     });
-    // o arquivo antigo sai depois de o banco já apontar para o novo: se apagar
-    // falhar sobra um objeto órfão, não um ícone quebrado
+    // os arquivos antigos saem depois de o banco já apontar para os novos: se
+    // apagar falhar sobra um objeto órfão, não um ícone ou avatar quebrado
     if (antes.iconKey) await this.storage.delete(antes.iconKey);
+    if (botAntes?.avatarKey) await this.storage.delete(botAntes.avatarKey);
 
     return this.detalheDaLinha(app);
   }
@@ -469,6 +491,17 @@ export function iconeDoApp(appId: string, iconKey: string | null): string | null
   // o nome do arquivo é o UUID+extensão; basta ele para a versão
   const v = iconKey.split("/").pop() ?? "";
   return `${api}/api/applications/${appId}/icone?v=${v}`;
+}
+
+/**
+ * Chave do avatar → URL do proxy `GET /users/:id/avatar`. Mesma forma que o
+ * `UsersService` grava (ele a mantém privada); aqui o bot ganha o avatar sem
+ * passar pelo fluxo de perfil, que exige o próprio usuário logado.
+ */
+function avatarDoBot(userId: string, key: string): string {
+  const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
+  const v = key.split("/").pop() ?? "";
+  return `${api}/api/users/${userId}/avatar?v=${v}`;
 }
 
 /**
