@@ -504,16 +504,16 @@ export default function VoiceGrid({
   // prints que as sustentam, estão em `palcoUsaFoco`; aqui só se descarta o
   // candidato, e aí ele volta a ser um tile da grade como qualquer outro —
   // **sem sair de `resto`**, que é o que impedia a transmissão de sumir.
-  // Com um tile só não há o que destacar: clicar no próprio card, sozinho na
-  // call, não pode trocar a tela sem foco (tile + convite) por um tile único
-  // grande sem convite — o `focado` fica guardado, mas é ignorado aqui.
   const principal =
     candidato &&
-    tiles.length > 1 &&
     palcoUsaFoco(tiles.length - 1, tamanho.largura, tamanho.altura, faixa)
       ? candidato
       : null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
+  // Sozinho na call, clicar no próprio card também foca (como no Discord): o
+  // destaque é o tile e a tira guarda o mesmo tile em miniatura, que é onde
+  // se clica para voltar à grade. Com 2+ a tira não repete o destaque.
+  const daTira = principal && resto.length === 0 ? tiles : resto;
   // O teto do Element Call: acima dele o reflow volta a ser seco, porque
   // `top/left/width/height` custam layout e pintura a cada quadro e isso soma
   // ao custo de decodificar os vídeos (ver `TETO_DE_TILES_ANIMADOS`).
@@ -525,11 +525,11 @@ export default function VoiceGrid({
     // dependa do leiaute escolhido, ou os dois modos se mediriam um ao outro.
     //
     // Memo manual (ver o comentário de `memoDoFoco` lá em cima): o destaque só
-    // muda de tamanho quando `resto.length` ou o palco medido mudam — mute de
+    // muda de tamanho quando `daTira.length` ou o palco medido mudam — mute de
     // quem está na tira não é nenhum dos dois.
     // Com a tira oculta o destaque toma o palco inteiro (`naTira` 0), e isso
-    // entra na assinatura: alternar não muda `resto.length`.
-    const naTira = membrosOcultos ? 0 : resto.length;
+    // entra na assinatura: alternar não muda `daTira.length`.
+    const naTira = membrosOcultos ? 0 : daTira.length;
     const assinaturaDoFoco = `${naTira}@${tamanho.largura}x${tamanho.altura}`;
     let foco: Arranjo;
     if (memoDoFoco.current?.assinatura === assinaturaDoFoco) {
@@ -560,7 +560,7 @@ export default function VoiceGrid({
           </div>
         </div>
 
-        {resto.length > 0 && !membrosOcultos && (
+        {daTira.length > 0 && !membrosOcultos && (
           /* A tira também posiciona cada miniatura de forma absoluta: sem isso
              quem entra empurra as outras num corte seco. O invólucro de largura
              explícita é o que mantém o comportamento de antes — centralizada
@@ -574,8 +574,8 @@ export default function VoiceGrid({
             className="flex shrink-0 justify-center overflow-x-auto"
             style={{ height: FAIXA_ALTURA }}
           >
-            <div className="relative shrink-0" style={estiloDaTira(resto.length, animar)}>
-              {resto.map((t, i) => (
+            <div className="relative shrink-0" style={estiloDaTira(daTira.length, animar)}>
+              {daTira.map((t, i) => (
                 <div
                   key={t.key}
                   ref={refDaMiniatura(t.key)}
@@ -602,11 +602,11 @@ export default function VoiceGrid({
           </div>
         )}
 
-        {/* Sem miniaturas não há o que ocultar: o botão só existe com `resto`.
+        {/* Sem miniaturas não há o que ocultar: o botão só existe com a tira.
             Com a tira oculta `faixaEl` volta a null e o observer se desfaz
             sozinho (o efeito depende dele); `foraDeVista` fica velho mas é
             inofensivo, porque a tira nasce de novo e o observer reconfirma. */}
-        {resto.length > 0 && (
+        {daTira.length > 0 && (
           <div
             className="absolute left-1/2 z-10 -translate-x-1/2"
             style={{ bottom: membrosOcultos ? 8 : FAIXA_ALTURA - 12 }}
