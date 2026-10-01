@@ -227,6 +227,8 @@ export default function VoiceConnectedBar() {
           aberto={ruidoAberto}
           onFechar={() => setRuidoAberto(false)}
           rotulo="Supressão de ruído"
+          largura={320}
+          respiroGrande
         >
           <PopoverDeRuido />
         </PopoverFlutuante>
