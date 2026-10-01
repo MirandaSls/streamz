@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { AtSign, Crown, MessageSquare, User, UserMinus, UserPlus, UserX } from "@/components/ui/icones";
+import { AtSign, Crown, MessageSquare, Phone, User, UserMinus, UserPlus, UserX } from "@/components/ui/icones";
 import {
   displayNameOf,
   isGroupChannel,
@@ -13,7 +13,7 @@ import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
-import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mencionar } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
@@ -21,6 +21,7 @@ import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
+import { useVoice } from "@/stores/voice";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 /**
@@ -48,17 +49,14 @@ import { anchorOf, ui, type MenuItem } from "@/stores/ui";
  *   tínhamos (linha `opacity-30`, `Crown size={14}`), com uma exceção: a coroa
  *   é `color: var(--text-feedback-warning)` lá, não `--status-warning` (os
  *   dois têm valor diferente — `#ea9800` × `#fdb833`).
- * - **Cabeçalho "MEMBROS — N"**: não há print do grupo aberto nem classe de
- *   texto no CSS capturado (só o contêiner `.membersGroupHeader_c8ffbb`/
- *   `.membersGroupName_c8ffbb`, sem tipografia). O rótulo e o "— N" vêm do
- *   cartão; o tamanho/peso seguem a legenda medida do Discord
- *   (`.eyebrow_…{font-size:12px;font-weight:700;letter-spacing:.02em;
- *   line-height:1.333;text-transform:uppercase}`, `css-bruto/121046…css`) —
- *   é o mesmo padrão de caixa-alta que o resto do app usa para cabeçalho de
- *   lista (`text-xs font-bold uppercase tracking-[0.02em]`). O `pt-5` (20px)
- *   vem de `--space-lg` em `.membersGroup_c8ffbb{padding-block:var(--space-lg) …}`.
- *   **Não medido**: se o Discord real usa "Membros" aqui ou nenhum cabeçalho
- *   nesta tela específica (grupo pequeno, sem seção por cargo) — ver "faltando".
+ * - **Cabeçalho "Membros—N"**: conferido contra o print do Discord com o grupo
+ *   aberto — sem espaços ao redor do travessão, sem caixa alta, `text-xs
+ *   font-medium text-text-muted`. O `pt-5` (20px) vem de `--space-lg` em
+ *   `.membersGroup_c8ffbb{padding-block:var(--space-lg) …}`.
+ * - **Botão "Convidar para grupo privado"**: vive dentro da área rolável, logo
+ *   após a última linha (ou o estado vazio), com `mt-4` (16px) de respiro e
+ *   `mx-4` de margem lateral, como no Discord. Não é fixo no rodapé da coluna —
+ *   assim não sobrepõe a faixa do composer.
  */
 export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   const me = useAuth((s) => s.user);
@@ -78,6 +76,10 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   const friends = useFriends((s) => s.friends);
   const send = useFriends((s) => s.send);
   const developerMode = useSettings((s) => s.developerMode);
+
+  // quem está na chamada deste canal (estado efêmero da voz, `voice.state`)
+  const estadosDeVoz = useVoice((s) => s.states[dm.id]);
+  const emChamada = new Set((estadosDeVoz ?? []).map((e) => e.user.id));
 
   const grupo = isGroupChannel(dm);
   const souDono = grupo && dm.ownerId === me?.id;
@@ -181,23 +183,9 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   return (
     <aside aria-label="Membros da conversa" className="flex w-[264px] shrink-0 flex-col bg-background-base-lower">
       <div className="flex-1 overflow-y-auto pb-4">
-        <div className="flex items-center justify-between px-4 pb-1 pt-5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
-            Membros — {members.length}
-          </h3>
-          {grupo && (
-            <BotaoDeIcone
-              rotulo="Adicionar pessoas ao grupo"
-              icone={<UserPlus size={16} />}
-              tamanho="sm"
-              desabilitado={grupoCheio}
-              motivoDesabilitado={
-                grupoCheio ? `O grupo já está no limite de ${capacidadeTotal} pessoas.` : undefined
-              }
-              onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
-              className="celular:-mr-2 celular:h-[44px] celular:w-[44px]"
-            />
-          )}
+        {/* "Membros—3": sem espaços, sem caixa alta, como no Discord real */}
+        <div className="px-4 pb-1 pt-5">
+          <h3 className="text-xs font-medium text-text-muted">Membros—{members.length}</h3>
         </div>
 
         {/* Carregando: três linhas de esqueleto na forma da linha real (avatar
@@ -268,6 +256,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                   className="flex min-w-0 flex-1 items-center gap-3 text-left celular:h-full"
                 >
                   <Avatar user={user} size="md" status={status} surface="border-background-base-lower" />
+                  <span className="flex min-w-0 flex-col">
                   <span className="flex min-w-0 items-center gap-1">
                     {/* no celular não existe `:hover` que dure — o nome ficava
                         preso no cinza `channels-default` (#81828a) para
@@ -293,6 +282,13 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                       </Tooltip>
                     )}
                   </span>
+                  {emChamada.has(user.id) && (
+                    <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
+                      <Phone size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
+                      <span className="truncate">Em uma chamada</span>
+                    </span>
+                  )}
+                  </span>
                 </button>
 
                 {souDono && user.id !== me?.id && (
@@ -317,6 +313,25 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
             );
           })}
         </div>
+        )}
+
+        {/* Dentro da área rolável, logo abaixo da última linha (ou do estado
+            vazio), com 16px de respiro acima e margem lateral de 16px — como no
+            Discord. Fixo no rodapé da coluna ele invadia a faixa do composer. */}
+        {grupo && (
+          <div className="mx-4 mt-4">
+            <Button
+              variante="secundario"
+              tamanho="sm"
+              larguraTotal
+              icone={<UserPlus size={16} />}
+              disabled={grupoCheio}
+              motivoDesabilitado={grupoCheio ? `O grupo já está no limite de ${capacidadeTotal} pessoas.` : undefined}
+              onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
+            >
+              Convidar para grupo privado
+            </Button>
+          </div>
         )}
       </div>
     </aside>

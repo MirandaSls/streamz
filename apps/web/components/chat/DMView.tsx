@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Clock, PhoneCall, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
-import { isGroupChannel, type Message } from "@streamz/shared";
+import { Clock, PhoneCall, Pencil, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
+import { isGroupChannel, MAX_DM_GROUP_INVITEES, type Message } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
 import DMProfilePanel from "@/components/chat/DMProfilePanel";
@@ -303,9 +303,52 @@ export default function DMView({
                 ),
               }
             : {
-                icon: <GroupAvatar iconUrl={active.iconUrl} size="lg" />,
+                // sem ícone, o Discord mostra duas caras sobrepostas na diagonal
+                // (menor atrás, em cima à esquerda; maior à frente, embaixo à
+                // direita) dentro de uma caixa de 80px
+                icon:
+                  active.iconUrl || active.others.length < 2 ? (
+                    <GroupAvatar iconUrl={active.iconUrl} size="lg" />
+                  ) : (
+                    <span className="relative block h-20 w-20" aria-hidden="true">
+                      <span className="absolute left-0 top-0 rounded-full">
+                        <Avatar user={active.others[0]} size="lg" />
+                      </span>
+                      <span className="absolute bottom-0 right-0 rounded-full border-4 border-background-base-lower">
+                        <Avatar user={active.others[1]} size="lg48" />
+                      </span>
+                    </span>
+                  ),
                 title,
-                description: `Bem-vindo(a) ao começo do grupo ${title}.`,
+                description: (
+                  <>
+                    Bem-vindo (ou vinda) ao começo do grupo{" "}
+                    <strong className="font-semibold text-text-strong">{title}</strong>.
+                  </>
+                ),
+                actions: (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      variante="primario"
+                      tamanho="sm"
+                      disabled={active.others.length + 1 >= MAX_DM_GROUP_INVITEES + 1}
+                      icone={<UserPlus size={16} aria-hidden="true" />}
+                      onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: active.id })}
+                      className="celular:h-[44px] celular:px-4"
+                    >
+                      Convidar para grupo privado
+                    </Button>
+                    <Button
+                      variante="secundario"
+                      tamanho="sm"
+                      icone={<Pencil size={16} aria-hidden="true" />}
+                      onClick={() => ui.openModal({ kind: "editGroup", channelId: active.id })}
+                      className="celular:h-[44px] celular:px-4"
+                    >
+                      Editar grupo
+                    </Button>
+                  </div>
+                ),
               }
         }
       />
@@ -413,7 +456,7 @@ export default function DMView({
                 </HeaderIcon>
                 <HeaderIcon
                   label="Configurações do grupo"
-                  onClick={() => ui.openModal({ kind: "groupSettings", channelId: active.id })}
+                  onClick={() => ui.openModal({ kind: "editGroup", channelId: active.id })}
                 >
                   <Settings size={20} />
                 </HeaderIcon>

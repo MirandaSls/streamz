@@ -687,7 +687,7 @@ function LinhaDeConversa({
       });
       items.push({
         label: "Alterar ícone",
-        onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
+        onSelect: () => ui.openModal({ kind: "editGroup", channelId: dm.id }),
       });
       items.push({ label: "Fechar mensagem direta", onSelect: () => void hide(dm.id) });
       items.push({ separator: true });
