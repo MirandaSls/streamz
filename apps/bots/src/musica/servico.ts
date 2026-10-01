@@ -2,6 +2,11 @@ import { Events, type Client } from "discord.js";
 import { LavalinkManager, type Player, type SearchResult, type Track } from "lavalink-client";
 import type { ContextoDoBot } from "../runtime/tipos";
 import { escaparMarkdown, truncar } from "./formatar";
+import {
+  MemoriaDeBloqueio,
+  consultasAlternativas,
+  ehFonteAlternativa,
+} from "./fontes-alternativas";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
 
 /**
@@ -89,6 +94,8 @@ export class ServicoDeMusica {
   readonly contasDoYoutube = new RodizioDeTokens(tokensDoAmbiente());
   /** Por servidor, a última faixa que já ganhou uma segunda tentativa. */
   private readonly jaTentouDeNovo = new Map<string, string>();
+  /** Lembra por um tempo que o YouTube barrou o IP, para buscar em outra fonte. */
+  private readonly youtubeBloqueado = new MemoriaDeBloqueio();
 
   constructor(private readonly ctx: ContextoDoBot) {
     const cliente = ctx.cliente as Client<true>;
@@ -209,6 +216,21 @@ export class ServicoDeMusica {
           return;
         }
       }
+      // Sem conta (ou contas esgotadas) o YouTube só vai falhar de novo: marca o
+      // bloqueio para as próximas buscas já irem a outra fonte e tenta tocar esta
+      // faixa por ela. Faixa que já veio de fonte alternativa não entra aqui, senão
+      // uma falha dela dispararia outro fallback em laço.
+      if (!ehFonteAlternativa(faixa.info.sourceName)) {
+        this.youtubeBloqueado.marcar();
+        const alternativa = await this.tocarPorFonteAlternativa(jogador, faixa);
+        if (alternativa) {
+          await this.avisarNoCanal(
+            jogador,
+            `O YouTube recusou **${nomeDaFaixa(faixa)}**; toquei pelo ${nomeDaFonte(alternativa.info.sourceName)}.`,
+          );
+          return;
+        }
+      }
       await this.avisarNoCanal(
         jogador,
         this.contasDoYoutube.quantidade
@@ -245,6 +267,52 @@ export class ServicoDeMusica {
     } catch (erro) {
       this.ctx.log.erro("a segunda tentativa falhou", { servidor: jogador.guildId, erro });
     }
+  }
+
+  /**
+   * Procura a faixa que o YouTube recusou em outra fonte (SoundCloud, JioSaavn)
+   * e toca a primeira que servir. Nunca lança: o chamador só quer saber se deu.
+   */
+  private async tocarPorFonteAlternativa(jogador: Player, faixa: Track): Promise<Track | null> {
+    try {
+      const original = faixa.info.duration ?? 0;
+      for (const consulta of consultasAlternativas(faixa.info)) {
+        // A lib monta "<source>:<query>" sozinha; separamos o prefixo para não
+        // duplicá-lo.
+        const corte = consulta.indexOf(":");
+        const origem = corte > 0 ? consulta.slice(0, corte) : undefined;
+        const termo = corte > 0 ? consulta.slice(corte + 1) : consulta;
+        const resultado = (await jogador.search(
+          origem ? { query: termo, source: origem as never } : { query: termo },
+          faixa.requester,
+        )) as SearchResult;
+        const achada = resultado.tracks.find((t) => {
+          if (!ehFonteAlternativa(t.info.sourceName)) return false;
+          // Versão de outra duração costuma ser remix, cover ou trecho: melhor
+          // tentar a próxima consulta do que tocar a errada.
+          const duracao = t.info.duration ?? 0;
+          if (original > 0 && duracao > 0 && Math.abs(duracao - original) / original > 0.4) {
+            return false;
+          }
+          return true;
+        });
+        if (!achada) continue;
+
+        const atual = jogador.queue.current;
+        if (atual && atual.encoded !== faixa.encoded) await jogador.queue.add(atual, 0);
+        await jogador.play({ clientTrack: achada, noReplace: false });
+        this.ctx.log.info("fonte alternativa", {
+          servidor: jogador.guildId,
+          de: faixa.info.sourceName,
+          para: achada.info.sourceName,
+          faixa: faixa.info.title,
+        });
+        return achada;
+      }
+    } catch (erro) {
+      this.ctx.log.erro("a fonte alternativa falhou", { servidor: jogador.guildId, erro });
+    }
+    return null;
   }
 
   /** `POST /youtube` do youtube-plugin: troca a conta que o Lavalink usa. */
@@ -338,6 +406,14 @@ export class ServicoDeMusica {
    * `comandos.ts` e uma busca pelo texto que digitou.
    */
   async buscar(jogador: Player, consulta: string, quemPediu: unknown): Promise<SearchResult> {
+    // Com o YouTube barrando o IP, a busca por texto no YouTube acha faixas que
+    // depois não tocam; o SoundCloud acha e toca. Link segue direto, sem prefixo.
+    if (!/^https?:\/\//i.test(consulta.trim()) && this.youtubeBloqueado.ativo()) {
+      return (await jogador.search(
+        { query: consulta, source: "scsearch" as never },
+        quemPediu,
+      )) as SearchResult;
+    }
     return (await jogador.search({ query: consulta }, quemPediu)) as SearchResult;
   }
 
@@ -346,6 +422,11 @@ export class ServicoDeMusica {
       await jogador.destroy("o bot está desligando").catch(() => undefined);
     }
   }
+}
+
+function nomeDaFonte(sourceName: string | undefined): string {
+  const nomes: Record<string, string> = { soundcloud: "SoundCloud", jiosaavn: "JioSaavn" };
+  return nomes[(sourceName ?? "").toLowerCase()] ?? sourceName ?? "outra fonte";
 }
 
 function nomeDaFaixa(faixa: Track | null | undefined): string {
