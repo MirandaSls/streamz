@@ -28,7 +28,7 @@ import {
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { abrirMenuDaMinhaTela, abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
-import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
+import { AnelDeFala } from "@/components/voice/pecas-de-voz";
 import { useZoomDaTransmissao } from "@/components/voice/useZoomDaTransmissao";
 import { prenderVideoEmOutraJanela } from "@/components/voice/video-em-outra-janela";
 import { useCorDominante } from "@/lib/cor-dominante";
@@ -211,11 +211,10 @@ export function AvatarDeChamada({
                     ? "mudo"
                     : null
           }
-          className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""}`}
+          animar={ativo}
         />
-        {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
-            Desenhado por fora, o avatar crescia quando a pessoa falava e a
-            fileira inteira parecia pular a cada sílaba. */}
+        {/* O anel fica DENTRO do Ø80, por cima da foto. O avatar não muda de
+            tamanho ao falar (o Discord só acende o anel e anima o GIF). */}
         {ativo && <AnelDeFala />}
       </span>
     </Tooltip>
@@ -588,9 +587,8 @@ export function VoiceTile({
         <span className="grid h-full w-full place-items-center">
           {/* o anel acompanha o avatar, e não a caixa: num tile grande a borda
               externa fica longe demais do rosto para ler como "falando". E ele
-              é desenhado por DENTRO do avatar — a foto encolhe 2px e o anel
-              ocupa a folga —, senão o avatar cresce quando a pessoa fala e o
-              tile inteiro parece pular.
+              é desenhado por DENTRO do avatar, por cima da foto, que não
+              encolhe nem cresce ao falar.
 
               80px no tile do palco (medido na print `2026-08-31 101857`, 1:1:
               avatar de 80 num tile de 760×428) e 64 na faixa de miniaturas
@@ -605,7 +603,8 @@ export function VoiceTile({
               surface="border-chat-background-default"
               // sem bolinha de presença aqui também — ver o comentário em
               // `AvatarDeChamada` acima.
-              className={`transition ${ativo ? ENCOLHE_AO_FALAR : ""} ${
+              animar={ativo}
+              className={`${
                 compacto && rotuloPequeno
                   ? // tira do celular (116×78, só ela passa `rotuloPequeno`): os
                     // 64 da tira do desktop ocupavam 82% da altura e eram
