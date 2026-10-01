@@ -11,7 +11,7 @@ import {
   marcarExpirada,
   type Cofre,
 } from "../contas";
-import { planoDeTroca } from "../troca-de-contas";
+import { assumirSessao, planoDeTroca } from "../troca-de-contas";
 
 function usuario(id: string): PublicUser {
   return {
@@ -205,5 +205,20 @@ describe("esquecerConta", () => {
     expect(esquecerConta("a")).toBe("b");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(localStorage.getItem(CHAVE_COFRE)).not.toContain('"ua"');
+  });
+});
+
+describe("assumirSessao", () => {
+  it("entrar na conta B com A ativa não troca o refresh guardado da A", () => {
+    // regressão: `salvarTokens` grava o refresh em `cofre.ativa`; rodando antes
+    // de `guardarConta`, a entrada da A recebia o refresh da B e a A expirava
+    escreverCofre(cofreCom("a"));
+    assumirSessao(usuario("b"), { accessToken: "acc-b", refreshToken: "novo-b" });
+
+    const cofre = lerCofreDoDisco();
+    expect(cofre.ativa).toBe("b");
+    expect(cofre.contas.find((c) => c.user.id === "a")?.refreshToken).toBe("r-a");
+    expect(cofre.contas.find((c) => c.user.id === "b")?.refreshToken).toBe("novo-b");
+    expect(navegacao.destino).toBe("/app");
   });
 });
