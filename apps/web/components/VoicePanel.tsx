@@ -5,6 +5,7 @@ import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from
 import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
 import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
 import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { levarAbaParaTextoEnquantoJanelaAberta } from "@/lib/chamada-em-janela-navegacao";
 import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
@@ -306,7 +307,7 @@ export default function VoicePanel({
                 onAbrirEmJanela={() =>
                   emJanela
                     ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
-                    : abrirJanelaDaChamada(nome)
+                    : abrirEmJanelaEIrParaTexto(nome, channel.id)
                 }
               />
             }
@@ -355,4 +356,10 @@ function abrirMenuDeNotificacoes(
     })),
   ];
   ui.openContextMenu(r.left, r.bottom + 4, itens);
+}
+
+/** Abre a janela primeiro (gesto transitório) e só depois leva a aba ao texto. */
+function abrirEmJanelaEIrParaTexto(titulo: string, canalId: string): void {
+  abrirJanelaDaChamada(titulo);
+  levarAbaParaTextoEnquantoJanelaAberta(canalId);
 }

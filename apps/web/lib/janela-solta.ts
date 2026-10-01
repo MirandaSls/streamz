@@ -353,15 +353,85 @@ function clonarEstilo(original: HTMLLinkElement | HTMLStyleElement, doc: Documen
 }
 
 /**
+ * CSS de uma folha `<link>` já carregada como texto, ou `null` se ela ainda não
+ * carregou ou o navegador não deixa ler as regras (`SecurityError` em folha de
+ * outra origem sem CORS).
+ */
+function textoDaFolha(link: HTMLLinkElement): string | null {
+  try {
+    const folha = link.sheet;
+    if (!folha) return null;
+    return Array.from(folha.cssRules, (r) => r.cssText).join("\n");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Copia todas as folhas de estilo do `<head>` principal e acompanha o que
  * mudar depois: CSS de chunk carregado sob demanda (um `<link>` novo quando um
  * componente com CSS próprio monta) e o HMR do dev, que troca `<style>`.
+ *
+ * `<link rel=stylesheet>` é copiado **como texto** num `<style>`, e não clonado:
+ * no WebView2 do app desktop o `<link>` clonado no popup `about:blank` não
+ * aplicava (origem/CSP do `about:blank` ou carga tardia) e a janela nascia sem
+ * Tailwind, tudo empilhado. O `style-src` do app tem `'unsafe-inline'`, então
+ * o `<style>` vale. Se a folha ainda não carregou, esperamos o `load` do link
+ * original; se as regras não são legíveis ou a carga falha, voltamos ao clone
+ * do `<link>`, que é o que sempre funcionou nos navegadores.
+ *
+ * O `<base href>` da janela principal vai no `<head>` do popup para que
+ * `url(...)` relativo (fontes, imagens) dentro do CSS copiado resolva contra a
+ * mesma base — o `about:blank` não tem base útil por conta própria.
  */
 function espelharEstilos(doc: Document, antesDe: Element): () => void {
   const copias = new Map<Node, Element>();
+  let parado = false;
+  const ouvintes: Array<() => void> = [];
+
+  const base = doc.createElement("base");
+  base.href = document.baseURI;
+  doc.head.insertBefore(base, doc.head.firstChild);
+
+  const trocar = (original: Node, antiga: Element, nova: Element) => {
+    // o original pode ter saído do `<head>` enquanto esperávamos
+    if (parado || copias.get(original) !== antiga) return;
+    antiga.replaceWith(nova);
+    copias.set(original, nova);
+  };
 
   const adicionar = (original: Node) => {
     if (!ehFolhaDeEstilo(original) || copias.has(original)) return;
+    if (original instanceof HTMLLinkElement) {
+      const texto = textoDaFolha(original);
+      const estilo = doc.createElement("style");
+      if (original.media) estilo.media = original.media;
+      if (texto !== null) estilo.textContent = texto;
+      copias.set(original, estilo);
+      doc.head.insertBefore(estilo, antesDe);
+      if (texto === null) {
+        // ainda carregando (ou ilegível): o `<style>` vazio guarda o lugar para
+        // preservar a ordem da cascata
+        const aoCarregar = () => {
+          const t = textoDaFolha(original);
+          if (t !== null) estilo.textContent = t;
+          else trocar(original, estilo, clonarEstilo(original, doc));
+        };
+        const aoFalhar = () => trocar(original, estilo, clonarEstilo(original, doc));
+        if (original.sheet) {
+          // carregou mas as regras não abriram: clone direto
+          aoCarregar();
+        } else {
+          original.addEventListener("load", aoCarregar, { once: true });
+          original.addEventListener("error", aoFalhar, { once: true });
+          ouvintes.push(() => {
+            original.removeEventListener("load", aoCarregar);
+            original.removeEventListener("error", aoFalhar);
+          });
+        }
+      }
+      return;
+    }
     const copia = clonarEstilo(original, doc);
     copias.set(original, copia);
     doc.head.insertBefore(copia, antesDe);
@@ -390,7 +460,11 @@ function espelharEstilos(doc: Document, antesDe: Element): () => void {
     }
   });
   observador.observe(document.head, { childList: true, subtree: true, characterData: true });
-  return () => observador.disconnect();
+  return () => {
+    parado = true;
+    observador.disconnect();
+    ouvintes.forEach((f) => f());
+  };
 }
 
 function copiarAtributos(de: Element, para: Element): void {
