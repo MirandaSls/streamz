@@ -54,7 +54,7 @@ alguma coisa — abra a conversa em vez de acrescentar um caso especial.
 import type { Bot } from "../runtime/tipos";
 
 const bot: Bot = {
-  nome: "Streamz Boas-vindas",          // vira o `Application.name` no diretório
+  nome: "Porteiro",          // vira o `Application.name` no diretório
   descricao: "Recebe quem chega…",      // vira a descrição do diretório
   comandos: [],                          // pode ser vazio: nem todo bot tem `/`
   async aoIniciar(ctx) { /* ligue o que é seu */ },

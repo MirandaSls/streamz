@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Porteiro">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06223f"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
+  <!-- coração flutuando acima do arco -->
+  <path d="M256 150 C190 108 198 62 232 62 C246 62 256 74 256 74 C256 74 266 62 280 62 C314 62 322 108 256 150 Z" fill="#fff"/>
+  <!-- vão da porta com luz ciano -->
+  <path d="M176 440 V300 A80 80 0 0 1 336 300 V440 Z" fill="#a5f3fc"/>
+  <!-- folha da porta aberta em perspectiva -->
+  <path d="M176 440 V300 A80 80 0 0 1 256 220 L296 240 V420 Z" fill="#fff"/>
+  <!-- batente em traço grosso -->
+  <path d="M160 440 V300 A96 96 0 0 1 352 300 V440" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

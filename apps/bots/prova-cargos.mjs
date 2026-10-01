@@ -1,4 +1,4 @@
-// A prova do **Streamz Cargos** contra a bancada descartável.
+// A prova do **CrachÃ¡** contra a bancada descartável.
 //
 // Entrada (variáveis de ambiente):
 //   SEMENTE    JSON de `apps/api/test/discord-compat/semear.mjs`

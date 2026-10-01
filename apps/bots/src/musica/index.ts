@@ -5,7 +5,7 @@ import { COMANDOS } from "./comandos";
 import { ServicoDeMusica, definirServico, obterServico } from "./servico";
 
 /**
- * **Streamz Música** — o bot oficial de música da instância.
+ * **Fone** — o bot oficial de música da instância.
  *
  * O nome é próprio de propósito. Os bots que fazem isto no Discord (e todo
  * mundo sabe quais são) são serviços de terceiros, de código fechado, que só
@@ -24,7 +24,8 @@ import { ServicoDeMusica, definirServico, obterServico } from "./servico";
  */
 
 const bot: Bot = {
-  nome: "Streamz Música",
+  nome: "Fone",
+  nomesAnteriores: ["Streamz Música"],
 
   // A descrição vai para o diretório e é contrato com quem instala: ela diz o
   // que o bot **não** faz (Spotify) antes de alguém descobrir sozinho.

@@ -245,7 +245,7 @@ fases inteiras (`Content-Type` sem charset, `DEFAULT_GATEWAY`, `with_response`)
 só apareceram com a lib de verdade do outro lado. **Custo real: uma prova nova
 no molde da F1, antes de qualquer cartão de vendorização.**
 
-Enquanto isso, o nosso `Streamz Cargos` faz o trabalho, tem prova na bancada
+Enquanto isso, o nosso `Crachá` faz o trabalho, tem prova na bancada
 (`apps/bots/prova-cargos.sh`) e quatro modos de painel.
 
 ### 3.5 Boas-vindas
@@ -594,7 +594,7 @@ do `docker-compose.yml` (e o código, do repositório) **depois** que o
 vendorizado passar na prova da bancada e ficar uma semana no ar. Até lá, os dois
 convivem em perfis diferentes — o que também dá o caminho de volta.
 
-### 7.1 Streamz Música → **Vocard** (trocar)
+### 7.1 Fone → **Vocard** (trocar)
 
 - **O que se perde:** os onze comandos em **pt-BR** com apelidos de prefixo
   (`!tocar`, `!fila`, `!agora`…); os textos de erro que explicam a nossa
@@ -613,7 +613,7 @@ convivem em perfis diferentes — o que também dá o caminho de volta.
   oficial do Streamz em inglês é regressão visível. Por isso o cartão B4 existe,
   e por isso ele deve virar PR para o upstream.
 
-### 7.2 Streamz Moderação → **ModBot** (só na segunda leva)
+### 7.2 Guarda → **ModBot** (só na segunda leva)
 
 - **O que se perde:** dez comandos em pt-BR; a hierarquia explicada em português
   (`hierarquia.ts`, `formatar.ts`); o canal de registro configurável por
@@ -629,7 +629,7 @@ convivem em perfis diferentes — o que também dá o caminho de volta.
   custa onda A + 3 cartões de API + MySQL. **Recomendo esperar** e reavaliar
   depois da onda A.
 
-### 7.3 Streamz Níveis → **fica o nosso** (não trocar)
+### 7.3 Degrau → **fica o nosso** (não trocar)
 
 - Não há candidato (§3.3). O nosso tem curva testada
   (`xpDoNivel(n)=5n²+50n+100`, a mesma família da curva do MEE6), carência de 1
@@ -642,7 +642,7 @@ convivem em perfis diferentes — o que também dá o caminho de volta.
   `PUT /guilds/:id/members/:uid/roles/:rid` **existe** hoje. Cargo por nível
   provavelmente já funciona e ninguém percebeu (cartão D1).
 
-### 7.4 Streamz Cargos → **fica o nosso por ora**
+### 7.4 Crachá → **fica o nosso por ora**
 
 - Candidato MIT (`reaction-light`) usa **disnake**, lib que a casca nunca
   exercitou; candidato bem feito (`ReactionRoleBot`) é **AGPL** e está parado
@@ -658,7 +658,7 @@ convivem em perfis diferentes — o que também dá o caminho de volta.
 - **Recomendação:** manter; reavaliar se e quando o `reaction-light` ganhar uma
   prova de disnake no molde da F1.
 
-### 7.5 Streamz Boas-vindas → **fica o nosso** (recomendação, não imposição)
+### 7.5 Porteiro → **fica o nosso** (recomendação, não imposição)
 
 - O candidato Apache-2.0 é o único que roda hoje sem casca nova, **e ainda assim
   é troca para menos**: só prefixo, só inglês, sem DM de boas-vindas, sem

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A prova dos **bots oficiais** (`apps/bots`) — o Streamz Música ponta a ponta,
+# A prova dos **bots oficiais** (`apps/bots`) — o Fone ponta a ponta,
 # na bancada descartável.
 #
 #   ./prova-botmus.sh [sufixo] [porta]       # padrão: botmus 3420
@@ -110,7 +110,7 @@ APP="$(docker run --rm --network "$REDE" -e T="$TOKEN_DO_ADMIN" node:22 node -e 
   })
     .then((r) => r.json())
     .then((p) => {
-      const a = (p.itens || []).find((x) => x.name === 'Streamz Música');
+      const a = (p.itens || []).find((x) => x.name === 'Fone');
       if (!a) throw new Error('o aplicativo não está no diretório');
       process.stdout.write(JSON.stringify({ id: a.id, snowflake: a.snowflake, name: a.name, botUserId: a.botUser.id }));
     });

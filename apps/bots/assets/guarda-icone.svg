@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Guarda">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b0a12"/>
+      <stop offset="0.5" stop-color="#dc2626"/>
+      <stop offset="1" stop-color="#fb7185"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
+  <!-- escudo -->
+  <path d="M256 78 L394 128 V244 C394 328 336 394 256 436 C176 394 118 328 118 244 V128 Z" fill="#fff" stroke="#fff" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M256 112 L360 150 V244 C360 308 316 360 256 394 C196 360 152 308 152 244 V150 Z" fill="#fecdd3"/>
+  <!-- marca de verificação -->
+  <path d="M196 252 L240 296 L322 200" fill="none" stroke="#b91c1c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,5 +1,5 @@
 /**
- * A curva de nível do **Streamz Níveis** — a única parte deste bot que
+ * A curva de nível do **Degrau** — a única parte deste bot que
  * qualquer pessoa vai querer conferir na mão, e por isso a mais isolada.
  *
  * Tudo aqui é função pura de `number` para `number`: sem relógio, sem estado,

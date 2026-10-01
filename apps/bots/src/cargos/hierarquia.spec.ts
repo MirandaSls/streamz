@@ -31,9 +31,9 @@ describe("podeMexerNoCargo", () => {
 
 describe("explicarHierarquia", () => {
   it("diz o que fazer, e não só o que deu errado", () => {
-    const frase = explicarHierarquia("Streamer", "Streamz Cargos");
+    const frase = explicarHierarquia("Streamer", "Crachá");
     expect(frase).toContain("Streamer");
-    expect(frase).toContain("Streamz Cargos");
+    expect(frase).toContain("Crachá");
     expect(frase).toMatch(/arraste/i);
   });
 

@@ -1,4 +1,4 @@
-// Semeia os **outros dois membros** que a prova do Streamz Moderação precisa,
+// Semeia os **outros dois membros** que a prova do Guarda precisa,
 // no servidor que o `semear.mjs` acabou de criar.
 //
 // Roda dentro do contêiner da API (precisa do Prisma):

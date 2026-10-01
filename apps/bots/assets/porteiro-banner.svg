@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Porteiro, boas-vindas ao servidor">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06223f"/>
+      <stop offset="0.5" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#bg)"/>
+  <!-- arcos de portas translúcidos -->
+  <g fill="#fff" fill-opacity="0.14">
+    <path d="M640 400 V230 A60 60 0 0 1 760 230 V400 Z"/>
+    <path d="M800 400 V150 A80 80 0 0 1 960 150 V400 Z"/>
+    <path d="M1000 400 V210 A60 60 0 0 1 1120 210 V400 Z"/>
+  </g>
+  <g fill="#a5f3fc" fill-opacity="0.2">
+    <path d="M668 400 V240 A32 32 0 0 1 732 240 V400 Z"/>
+    <path d="M840 400 V160 A40 40 0 0 1 920 160 V400 Z"/>
+    <path d="M1028 400 V220 A32 32 0 0 1 1092 220 V400 Z"/>
+  </g>
+  <!-- balões translúcidos -->
+  <g fill="#fff" fill-opacity="0.2">
+    <path d="M690 60 H770 A24 24 0 0 1 794 84 V110 A24 24 0 0 1 770 134 H730 L706 158 V134 H690 A24 24 0 0 1 666 110 V84 A24 24 0 0 1 690 60 Z"/>
+    <path d="M980 40 H1050 A22 22 0 0 1 1072 62 V84 A22 22 0 0 1 1050 106 H1020 L1000 126 V106 H980 A22 22 0 0 1 958 84 V62 A22 22 0 0 1 980 40 Z"/>
+  </g>
+  <path d="M730 112 C708 98 712 82 723 82 C728 82 730 86 730 86 C730 86 733 82 738 82 C749 82 752 98 730 112 Z" fill="#fff" fill-opacity="0.35"/>
+  <text x="70" y="230" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="150" font-weight="700" fill="#fff">Porteiro</text>
+  <text x="76" y="290" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="36" fill="#e0f7ff" fill-opacity="0.92">boas-vindas ao servidor</text>
+</svg>

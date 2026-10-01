@@ -58,6 +58,7 @@ export function contextoDaInteracao(
       const corpo = {
         ...(resposta.conteudo !== undefined ? { content: resposta.conteudo } : {}),
         ...(resposta.embeds ? { embeds: resposta.embeds } : {}),
+        ...(resposta.components ? { components: resposta.components } : {}),
       };
 
       if (adiada) {
@@ -123,6 +124,7 @@ export function contextoDaMensagem(
       await mensagem.reply({
         ...(resposta.conteudo !== undefined ? { content: resposta.conteudo } : {}),
         ...(resposta.embeds ? { embeds: resposta.embeds } : {}),
+        ...(resposta.components ? { components: resposta.components } : {}),
       });
     },
   };

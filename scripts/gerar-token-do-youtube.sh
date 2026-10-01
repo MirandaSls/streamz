@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Gera um refresh token OAuth do YouTube para o Streamz Música.
+# Gera um refresh token OAuth do YouTube para o Fone.
 #
 # Por que existe: o YouTube recusa tocar para o IP deste servidor sem uma conta
 # logada ("This video requires login" em todos os clientes, medido em
