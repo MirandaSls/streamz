@@ -160,6 +160,8 @@ export async function notify(
 let versaoDoApp: string | null = null;
 /** Evita disparar a leitura da versão a cada requisição. */
 let versaoPedida = false;
+/** A leitura em andamento, guardada para `versaoDoAppPronta` esperar a mesma. */
+let leituraDaVersao: Promise<void> | null = null;
 
 /**
  * Como este cliente se apresenta no cabeçalho `X-Streamz-Client` — ou `null`
@@ -173,15 +175,45 @@ let versaoPedida = false;
  * A primeira chamada devolve `"desktop"` sem versão e dispara a leitura em
  * segundo plano (o login não pode esperar por ela); as seguintes já saem
  * `"desktop/0.0.14"`. A classificação só depende do que vem antes da barra, e
- * por isso a corrida não muda o resultado.
+ * por isso a corrida não muda o resultado **para o HTTP**.
+ *
+ * Para o socket a corrida muda: a API só avalia o piso de versão quando o
+ * `auth.cliente` começa com `desktop/`, e um connect que saísse como `"desktop"`
+ * escaparia do aviso/bloqueio até a próxima reconexão. Por isso o handshake
+ * (cuja callback `auth` já é assíncrona) espera `versaoDoAppPronta()` antes de
+ * chamar esta função.
  */
 export function identificacaoDoCliente(): string | null {
   if (!isTauri()) return null;
   if (!versaoPedida) {
     versaoPedida = true;
-    void lerVersaoDoApp();
+    leituraDaVersao = lerVersaoDoApp();
   }
   return versaoDoApp ? `desktop/${versaoDoApp}` : "desktop";
+}
+
+/**
+ * Resolve quando a versão do app carregou **ou** quando `limiteMs` estoura, o
+ * que vier primeiro. Nunca rejeita e nunca trava além do limite: o handshake do
+ * socket prefere sair sem versão a ficar sem conexão. Fora do Tauri não há o que
+ * esperar. Só o socket deve usar — o login/HTTP não espera por isso.
+ */
+export async function versaoDoAppPronta(limiteMs = 1500): Promise<void> {
+  if (!isTauri()) return;
+  // garante que a leitura foi disparada (mesma flag da identificação)
+  identificacaoDoCliente();
+  if (versaoDoApp || !leituraDaVersao) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, limiteMs);
+  });
+  try {
+    await Promise.race([leituraDaVersao, limite]);
+  } catch {
+    // a leitura já engole o próprio erro; aqui é só garantia de nunca rejeitar
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function lerVersaoDoApp(): Promise<void> {

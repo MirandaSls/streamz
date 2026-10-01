@@ -40,6 +40,7 @@ import {
   type BucketState,
 } from "./rate-limit";
 import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
+import { avisoDeVersao, politicaDoAmbiente } from "./politica-versao-cliente";
 import { conexoesAExpulsar } from "./voz-em-um-lugar-so";
 import { saidaFoiIntencional } from "./saida-de-voz";
 import { anunciarReacao } from "../messages/eventos-de-reacao";
@@ -242,6 +243,27 @@ export class ChatGateway
       this.logger.log(
         `ws: connect user=${payload.sub} socket=${client.id} cliente=${cliente} ua="${ua}"`,
       );
+      // Versão do app desktop: a web empacotada não se atualiza sozinha, então a
+      // instância pode avisar (`WARN_CLIENT_VERSION`) ou barrar
+      // (`MIN_CLIENT_VERSION`). Vem ANTES de qualquer `join` e do `markOnline`:
+      // quem é barrado não pode receber mensagem nem aparecer online.
+      const defasagem = avisoDeVersao(client.handshake.auth?.cliente, politicaDoAmbiente());
+      if (defasagem) {
+        client.emit(WS_EVENTS.CLIENT_OUTDATED, defasagem);
+        if (defasagem.nivel === "bloqueado") {
+          this.logger.warn(
+            `ws: connect recusado user=${payload.sub} socket=${client.id} motivo=cliente-desatualizado cliente=${cliente} minima=${defasagem.versaoMinima}`,
+          );
+          // Sem `data.user`, o `handleDisconnect` sai cedo: este socket nunca foi
+          // marcado online e não pode derrubar a presença de outra aba do usuário.
+          client.data.user = undefined;
+          // Adiado de propósito: `disconnect(true)` fecha o transporte na hora e
+          // o evento recém-emitido pode ainda estar no buffer de escrita. 250 ms
+          // é folgado para o flush e curto o bastante para não importar.
+          setTimeout(() => client.disconnect(true), 250);
+          return;
+        }
+      }
       // O motivo da desconexão só existe no evento `disconnecting`, que o
       // Socket.IO dispara **antes** do `disconnect` — e é o `disconnect` que
       // chama o nosso `handleDisconnect`. Guardar aqui é o que permite lá
