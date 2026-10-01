@@ -758,7 +758,7 @@ function LinhaDeConversa({
             surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"}
           />
         ) : (
-          <GroupAvatar iconUrl={dm.iconUrl} size="md" />
+          <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="md" />
         )}
         <span className="min-w-0">
           <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>

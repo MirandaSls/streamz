@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Users } from "@/components/ui/icones";
+import { Pencil } from "@/components/ui/icones";
 import { MAX_DM_GROUP_NAME } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { TextInput } from "@/components/ui/primitivos";
@@ -94,17 +94,7 @@ export default function EditarGrupoModal({ channelId }: { channelId: string }) {
       />
       <div className="flex flex-col items-center gap-6">
         <div className="relative h-[110px] w-[110px]">
-          {/* sem ícone o Discord mostra o círculo cinza neutro com a silhueta, não o mosaico nem a cor da marca */}
-          {previa ?? dm.iconUrl ? (
-            <GroupAvatar iconUrl={previa ?? dm.iconUrl} members={[]} className="!h-[110px] !w-[110px]" />
-          ) : (
-            <span
-              aria-hidden="true"
-              className="grid h-[110px] w-[110px] place-items-center rounded-full bg-background-surface-highest text-text-muted"
-            >
-              <Users size={52} />
-            </span>
-          )}
+          <GroupAvatar iconUrl={previa ?? dm.iconUrl} members={dm.others} seed={dm.id} className="!h-[110px] !w-[110px]" />
           <button
             type="button"
             aria-label="Escolher ícone do grupo"

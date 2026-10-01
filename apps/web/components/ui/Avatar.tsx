@@ -253,21 +253,60 @@ const GROUP_SIZE = {
 
 const GROUP_ICON = { xs: 10, sm: 14, md: 18, lg: 22, xl: 36, xxl: 56 } as const;
 
+type MembroDoGrupo = { id: string; username: string; avatarUrl?: string | null };
+
+/** FNV-1a de 32 bits: simples, estável entre execuções e sem dependência. */
+function hashFnv(texto: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
 /**
- * Avatar de um grupo de DM: o ícone enviado, o mosaico dos participantes ou —
- * sem nenhum dos dois — o círculo com as silhuetas. O mosaico existe porque é
- * assim que o Discord identifica um grupo sem ícone: pelas caras de quem está
- * nele, não por um símbolo genérico.
+ * As (no máximo) 2 caras do ícone padrão de um grupo. Pseudo-aleatório porém
+ * estável: ordena por hash de `${seed}:${id}`, então a escolha não depende da
+ * ordem em que os membros chegam e não muda entre renders nem recargas.
+ */
+export function escolherCarasDoGrupo<T extends { id: string }>(seed: string, members: T[]): T[] {
+  return members
+    .map((m) => ({ m, h: hashFnv(`${seed}:${m.id}`) }))
+    .sort((x, y) => x.h - y.h || (x.m.id < y.m.id ? -1 : x.m.id > y.m.id ? 1 : 0))
+    .slice(0, 2)
+    .map((x) => x.m);
+}
+
+function CaraDoGrupo({ m, className }: { m: MembroDoGrupo; className: string }) {
+  const base = `absolute rounded-full object-cover ring-2 ring-background-surface-high ${className}`;
+  return m.avatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={m.avatarUrl} alt="" className={base} />
+  ) : (
+    <span style={{ backgroundColor: hashColor(m.id) }} className={base} />
+  );
+}
+
+/**
+ * Avatar de um grupo de DM: o ícone enviado, as caras dos participantes ou —
+ * sem ninguém — o círculo com as silhuetas. Sem ícone, o Discord mostra no
+ * máximo 2 avatares dos OUTROS participantes (o usuário atual nunca aparece;
+ * `members` já vem sem ele), sobrepostos na diagonal, e a escolha é estável por
+ * conversa (`seed`) para o ícone não "piscar" entre renders.
  */
 export function GroupAvatar({
   iconUrl,
   members = [],
+  seed = "",
   size = "md",
   className = "",
 }: {
   iconUrl: string | null;
-  /** participantes para o mosaico quando não há ícone. */
-  members?: { id: string; username: string; avatarUrl?: string | null }[];
+  /** outros participantes (sem o usuário atual) para as caras quando não há ícone. */
+  members?: MembroDoGrupo[];
+  /** id da conversa: fixa quais caras aparecem. */
+  seed?: string;
   size?: keyof typeof GROUP_SIZE;
   className?: string;
 }) {
@@ -278,27 +317,20 @@ export function GroupAvatar({
       <img src={iconUrl} alt="" className={`${box} shrink-0 rounded-full object-cover ${className}`} />
     );
   }
-  // até 4 caras num quadrante cada; com menos, elas dividem o círculo
-  const mosaico = members.slice(0, 4);
-  if (mosaico.length >= 2) {
+  if (members.length >= 1) {
+    const caras = escolherCarasDoGrupo(seed, members);
     return (
       <span
         aria-hidden="true"
-        className={`${box} grid shrink-0 grid-cols-2 overflow-hidden rounded-full ${
-          mosaico.length === 2 ? "grid-rows-1" : "grid-rows-2"
-        } ${className}`}
+        className={`${box} relative shrink-0 overflow-hidden rounded-full bg-background-surface-high ${className}`}
       >
-        {mosaico.map((m) =>
-          m.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={m.id} src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <span
-              key={m.id}
-              style={{ backgroundColor: hashColor(m.id) }}
-              className="h-full w-full"
-            />
-          ),
+        {caras.length === 1 ? (
+          <CaraDoGrupo m={caras[0]} className="left-[18%] top-[18%] h-[64%] w-[64%]" />
+        ) : (
+          <>
+            <CaraDoGrupo m={caras[0]} className="left-[4%] top-[4%] h-[58%] w-[58%]" />
+            <CaraDoGrupo m={caras[1]} className="bottom-[4%] right-[4%] h-[58%] w-[58%]" />
+          </>
         )}
       </span>
     );

@@ -166,7 +166,7 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
                 }}
               />
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} size="xl" />
+                <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="xl" />
                 <div className="flex items-center gap-2">
                   <Button
                     variante="primario"

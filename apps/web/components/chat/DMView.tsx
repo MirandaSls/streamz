@@ -303,22 +303,8 @@ export default function DMView({
                 ),
               }
             : {
-                // sem ícone, o Discord mostra duas caras sobrepostas na diagonal
-                // (menor atrás, em cima à esquerda; maior à frente, embaixo à
-                // direita) dentro de uma caixa de 80px
-                icon:
-                  active.iconUrl || active.others.length < 2 ? (
-                    <GroupAvatar iconUrl={active.iconUrl} size="lg" />
-                  ) : (
-                    <span className="relative block h-20 w-20" aria-hidden="true">
-                      <span className="absolute left-0 top-0 rounded-full">
-                        <Avatar user={active.others[0]} size="lg" />
-                      </span>
-                      <span className="absolute bottom-0 right-0 rounded-full border-4 border-background-base-lower">
-                        <Avatar user={active.others[1]} size="lg48" />
-                      </span>
-                    </span>
-                  ),
+                // sem ícone, GroupAvatar mostra o mosaico/ícone padrão do grupo
+                icon: <GroupAvatar iconUrl={active.iconUrl} members={active.others} seed={active.id} size="xl" />,
                 title,
                 description: (
                   <>
@@ -400,7 +386,7 @@ export default function DMView({
           other ? (
             <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-background-base-lower" />
           ) : (
-            <GroupAvatar iconUrl={active.iconUrl} size="sm" />
+            <GroupAvatar iconUrl={active.iconUrl} members={active.others} seed={active.id} size="sm" />
           )
         }
         title={title}
