@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { janelaDe, useDocumentoDoPortal } from "@/lib/outra-janela";
 
 export type LadoDaDica = "top" | "right" | "bottom" | "left";
 export type CorDaDica = "primaria" | "cinza" | "marca" | "perigo" | "positiva";
@@ -121,6 +122,9 @@ export function Tooltip({
    * ponteiro nenhum) e o desktop inteiro.
    */
   const ultimoPonteiro = useRef<string>("");
+  // dentro da janela solta da chamada a caixa nasce no `document` dela: no da
+  // principal ela apareceria na outra janela, longe do alvo
+  const doc = useDocumentoDoPortal();
 
   const abrir = useCallback(
     (imediato: boolean) => {
@@ -147,18 +151,20 @@ export function Tooltip({
     const alvo = alvoRef.current?.getBoundingClientRect();
     const caixa = caixaRef.current?.getBoundingClientRect();
     if (!alvo || !caixa) return;
-    setPos(posicionar(alvo, caixa, lado, distancia));
+    setPos(posicionar(alvo, caixa, lado, distancia, janelaDe(alvoRef.current)));
     // a segunda linha muda a altura da caixa, então também reposiciona
   }, [aberto, lado, rotulo, subtitulo, distancia]);
 
   // rolar ou redimensionar deixaria a caixa parada longe do alvo
   useEffect(() => {
     if (!aberto) return;
-    window.addEventListener("scroll", fechar, true);
-    window.addEventListener("resize", fechar);
+    // a janela do alvo: rolar a principal não move um alvo que mora na solta
+    const win = janelaDe(alvoRef.current);
+    win.addEventListener("scroll", fechar, true);
+    win.addEventListener("resize", fechar);
     return () => {
-      window.removeEventListener("scroll", fechar, true);
-      window.removeEventListener("resize", fechar);
+      win.removeEventListener("scroll", fechar, true);
+      win.removeEventListener("resize", fechar);
     };
   }, [aberto, fechar]);
 
@@ -203,7 +209,7 @@ export function Tooltip({
         {descrito}
       </span>
       {aberto &&
-        typeof document !== "undefined" &&
+        doc &&
         createPortal(
           <div
             ref={caixaRef}
@@ -233,7 +239,7 @@ export function Tooltip({
             ) : null}
             {pos && <span aria-hidden="true" style={estiloSeta(pos, variante.seta)} />}
           </div>,
-          document.body,
+          doc.body,
         )}
     </>
   );
@@ -265,12 +271,19 @@ interface Posicao {
  * quando não couber. Sem isso o tooltip vaza pela borda da janela — o `top` dos
  * ícones da primeira linha e o `right` dos ícones do rail são os casos reais.
  */
-function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica, gap: number): Posicao {
+function posicionar(
+  alvo: DOMRect,
+  caixa: DOMRect,
+  preferido: LadoDaDica,
+  gap: number,
+  // a janela do alvo, que pode não ser a principal (janela solta da chamada)
+  { innerWidth, innerHeight }: { innerWidth: number; innerHeight: number },
+): Posicao {
   const cabe = (s: LadoDaDica) => {
     if (s === "top") return alvo.top - caixa.height - gap >= EDGE;
-    if (s === "bottom") return alvo.bottom + caixa.height + gap <= window.innerHeight - EDGE;
+    if (s === "bottom") return alvo.bottom + caixa.height + gap <= innerHeight - EDGE;
     if (s === "left") return alvo.left - caixa.width - gap >= EDGE;
-    return alvo.right + caixa.width + gap <= window.innerWidth - EDGE;
+    return alvo.right + caixa.width + gap <= innerWidth - EDGE;
   };
   const lado = cabe(preferido) ? preferido : cabe(OPOSTO[preferido]) ? OPOSTO[preferido] : preferido;
 
@@ -281,7 +294,7 @@ function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica, gap: n
     const left = fixar(
       centro - caixa.width / 2,
       EDGE,
-      Math.max(EDGE, window.innerWidth - caixa.width - EDGE),
+      Math.max(EDGE, innerWidth - caixa.width - EDGE),
     );
     return {
       lado,
@@ -294,7 +307,7 @@ function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica, gap: n
   const top = fixar(
     centro - caixa.height / 2,
     EDGE,
-    Math.max(EDGE, window.innerHeight - caixa.height - EDGE),
+    Math.max(EDGE, innerHeight - caixa.height - EDGE),
   );
   return {
     lado,

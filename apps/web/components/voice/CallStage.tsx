@@ -20,6 +20,9 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
+import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
+import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
@@ -248,6 +251,7 @@ export default function CallStage({
 
   const definirExpandido = useUI((s) => s.definirPalcoExpandido);
   const palcoExpandido = useUI((s) => s.palcoExpandido);
+  const emJanela = useChamadaEmJanela();
 
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
   /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
@@ -569,6 +573,8 @@ export default function CallStage({
             usuario={destinatario}
             eu={meUser}
           />
+        ) : conectadoAqui && emJanela ? (
+          <AvisoChamadaEmJanela />
         ) : conectadoAqui ? (
           /* Sem tela de espera: a grade é desenhada a partir do estado de voz
              do servidor, que já está aqui, e o `connecting` só quer dizer que a
@@ -659,6 +665,12 @@ export default function CallStage({
                   onTelaCheia={alternar}
                   visivel={controlesVisiveis}
                   moldura={daMoldura}
+                  emJanela={emJanela}
+                  onAbrirEmJanela={() =>
+                    emJanela
+                      ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
+                      : abrirJanelaDaChamada(titulo)
+                  }
                 />
               ) : undefined
             }

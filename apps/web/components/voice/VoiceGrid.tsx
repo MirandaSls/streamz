@@ -30,6 +30,7 @@ import {
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { janelaDe } from "@/lib/outra-janela";
 import { chaveDoTileDeTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
@@ -377,7 +378,9 @@ export default function VoiceGrid({
   }
   useEffect(() => {
     if (!faixaEl || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
+    // o da janela da faixa: na janela solta da chamada, o da principal nunca
+    // veria a miniatura cruzar o viewport dela
+    const observer = new (janelaDe(faixaEl).IntersectionObserver)(
       (entradas) => {
         setForaDeVista((atual) => {
           let mudou = false;
@@ -644,7 +647,7 @@ function useTamanho(el: HTMLElement | null) {
   const [tamanho, setTamanho] = useState({ largura: 0, altura: 0 });
   useEffect(() => {
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([entrada]) => {
+    const ro = new (janelaDe(el).ResizeObserver)(([entrada]) => {
       const r = entrada.contentRect;
       setTamanho({ largura: r.width, altura: r.height });
     });

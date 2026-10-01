@@ -2,18 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import type {
-  ElementInfo,
-  RemoteVideoTrack,
-  Track,
-  TrackPublication,
-} from "livekit-client";
+import type { Track, TrackPublication } from "livekit-client";
 import { displayNameOf } from "@streamz/shared";
 import { HeadphoneOff, MicOff, Monitor } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
-import { livekitCarregado } from "@/lib/livekit";
 import { useAuth } from "@/stores/auth";
+import JanelaDaChamada from "@/components/voice/JanelaDaChamada";
+import { prenderVideoEmOutraJanela } from "@/components/voice/video-em-outra-janela";
 import { useJanelasDeVoz, type JanelaDeVoz } from "@/stores/janelas-de-voz";
 import { camerasDe, participantesDe, telasDe, useVoice } from "@/stores/voice";
 
@@ -78,6 +74,23 @@ export default function JanelasDeVoz() {
 // ── o conteúdo de uma janela ──────────────────────────────────────────────
 
 function ConteudoDaJanela({
+  chave,
+  janela,
+  channelId,
+}: {
+  chave: string;
+  janela: JanelaDeVoz;
+  channelId: string;
+}) {
+  // ramo decidido no pai para não pôr hooks atrás de um early return; a
+  // carência de ausência não vale para a chamada: ela fecha com o `channelId`
+  if (janela.tipo === "chamada") {
+    return <JanelaDaChamada janela={janela} channelId={channelId} />;
+  }
+  return <ConteudoDaJanelaDeTile chave={chave} janela={janela} channelId={channelId} />;
+}
+
+function ConteudoDaJanelaDeTile({
   chave,
   janela,
   channelId,
@@ -223,16 +236,6 @@ function publicacaoDaJanela({ tipo, userId }: JanelaDeVoz): TrackPublication | n
 }
 
 /**
- * `track instanceof RemoteVideoTrack`, sem importar o SDK como valor (ver
- * `lib/livekit.ts`): sem ele carregado não há sala, e sem sala não há faixa
- * remota nenhuma — a resposta é `false`.
- */
-function ehFaixaDeVideoRemota(track: Track): track is RemoteVideoTrack {
-  const lk = livekitCarregado();
-  return !!lk && track instanceof lk.RemoteVideoTrack;
-}
-
-/**
  * Garante que a transmissão da janela é baixada enquanto ela estiver aberta.
  *
  * **Tela de outra pessoa:** o mesmo `assistir` do botão "Assistir" do tile —
@@ -270,21 +273,10 @@ function useAssinaturaDaTela({ tipo, userId }: JanelaDeVoz, meId: string | undef
 /**
  * `<video>` colado na faixa, **dentro da janela solta**.
  *
- * Não é o `VideoDaFaixa` do tile por causa do `adaptiveStream` do LiveKit
- * (ligado na sala, `stores/voice.ts`). Com ele, o `attach` cria um observador
- * de visibilidade para o elemento — um `IntersectionObserver` da **janela
- * principal** — e o SDK pede ao servidor para pausar a faixa quando nenhum
- * elemento dela está visível. Um elemento noutra janela nunca cruza o viewport
- * da principal: numa popup o vídeo congelaria no primeiro quadro (ou nem
- * começaria) sempre que o tile do palco não estivesse na tela junto. E mesmo
- * visível, o SDK pausa tudo quando a **aba principal** vai para segundo plano
- * (`pauseVideoInBackground`) — exatamente o momento em que alguém abre uma
- * janela solta.
- *
- * A saída é a API que o SDK tem para isso: `observeElementInfo` com um
- * `ElementInfo` nosso (`infoDaJanela`), que mede o elemento na janela dele e
- * responde à visibilidade **dela**. O do `attach` continua lá, dizendo
- * "invisível"; o SDK considera visível se **algum** estiver.
+ * Não é o `VideoDaFaixa` do tile por causa do enquadramento (`contain` sempre,
+ * sem o ajuste da miniatura); a parte de outra janela — `play()` e o
+ * `adaptiveStream` medindo na janela solta — é a mesma dos dois
+ * (`prenderVideoEmOutraJanela`).
  */
 function VideoNaJanela({
   track,
@@ -301,25 +293,9 @@ function VideoNaJanela({
     const el = ref.current;
     if (!el) return;
     track.attach(el);
-    // O `attach` decide `playsInline` e o empurrão de `play()` do Safari/
-    // Firefox com `instanceof HTMLVideoElement` — que é falso para um elemento
-    // de outra janela (outro realm). Os atributos vêm do JSX; o `play()` vem
-    // daqui. Faixa muda, sem áudio: o autoplay não é bloqueado.
-    el.play().catch(() => {
-      /* o `autoPlay` segue tentando; não há o que avisar */
-    });
-
-    // Faixa local (a minha câmera, a minha tela no navegador) não tem
-    // adaptiveStream: nada a observar.
-    const info =
-      ehFaixaDeVideoRemota(track) && track.isAdaptiveStream ? infoDaJanela(el, win) : null;
-    if (info && ehFaixaDeVideoRemota(track)) track.observeElementInfo(info);
-
+    const soltar = prenderVideoEmOutraJanela(track, el);
     return () => {
-      // antes do `detach`: ele também remove infos com `element === el`, e
-      // parar duas vezes é inofensivo, mas deixar o nosso sem `stopObserving`
-      // vazaria o `ResizeObserver` e o ouvinte de visibilidade da janela
-      if (info && ehFaixaDeVideoRemota(track)) track.stopObservingElementInfo(info);
+      soltar();
       track.detach(el);
       // solta a referência ao `MediaStream` da janela principal: sem isto o
       // elemento (que pode sobreviver no documento até a janela fechar) segura
@@ -351,64 +327,4 @@ function VideoNaJanela({
       className={`h-full w-full bg-black object-contain ${espelhar ? "-scale-x-100" : ""}`}
     />
   );
-}
-
-/**
- * O `ElementInfo` de um `<video>` que mora numa janela solta.
- *
- * - **Tamanho:** medido no próprio elemento, com um `ResizeObserver` **da
- *   janela solta** — é o tamanho dela que decide a camada do simulcast pedida
- *   (janela grande = camada alta). O `ResizeObserver` da principal não é
- *   garantido para elemento de outro documento.
- * - **Visível:** a janela não estar minimizada/oculta
- *   (`document.visibilityState` **dela**). Minimizar pausa de verdade — é
- *   banda que ninguém está vendo —, e voltar retoma.
- * - **`pictureInPicture` junto com `visible`:** é o único sinal que o SDK
- *   deixa passar por cima da pausa de segundo plano da aba **principal**
- *   (`updateVisibility`: `visível && !emSegundoPlano || pip`). Sem ele, a
- *   janela congelaria ao trocar de aba na principal.
- *
- * Os dois modos usam este mesmo objeto. No Document PiP o `attach` já daria
- * conta sozinho (o SDK procura o elemento na janela do PiP), mas ele mede a
- * visibilidade uma vez no `attach` e depende de um evento `enter` que, com a
- * janela já aberta antes do portal, não vem mais — e fica sujeito à mesma
- * pausa de segundo plano. Um caminho só, que funciona nos dois, é mais barato
- * de manter do que dois que falham de jeitos diferentes.
- */
-function infoDaJanela(el: HTMLVideoElement, win: Window): ElementInfo {
-  const doc = win.document;
-  let observador: ResizeObserver | null = null;
-
-  const aoMudarVisibilidade = () => {
-    const visivel = doc.visibilityState !== "hidden";
-    if (visivel === info.visible) return;
-    info.visible = visivel;
-    info.pictureInPicture = visivel;
-    info.visibilityChangedAt = Date.now();
-    info.handleVisibilityChanged?.();
-  };
-
-  const info: ElementInfo = {
-    element: el,
-    width: () => el.clientWidth,
-    height: () => el.clientHeight,
-    visible: doc.visibilityState !== "hidden",
-    pictureInPicture: doc.visibilityState !== "hidden",
-    visibilityChangedAt: undefined,
-    observe() {
-      // o construtor da própria janela: observador e elemento no mesmo realm
-      const Construtor =
-        (win as Window & { ResizeObserver?: typeof ResizeObserver }).ResizeObserver ??
-        ResizeObserver;
-      observador = new Construtor(() => info.handleResize?.());
-      observador.observe(el);
-      doc.addEventListener("visibilitychange", aoMudarVisibilidade);
-    },
-    stopObserving() {
-      observador?.disconnect();
-      observador = null;
-      doc.removeEventListener("visibilitychange", aoMudarVisibilidade);
-    },
-  };
-  return info;
 }

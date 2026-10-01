@@ -102,9 +102,9 @@ type DocumentoComWebkit = Document & {
 export const ATRIBUTO_DE_TELA_CHEIA = "data-tela-cheia-emulada";
 
 /** O elemento que está em tela cheia **do DOM** agora, pelos dois nomes. */
-function elementoEmTelaCheia(): Element | null {
+function elementoEmTelaCheia(documento?: Document): Element | null {
   if (typeof document === "undefined") return null;
-  const doc = document as DocumentoComWebkit;
+  const doc = (documento ?? document) as DocumentoComWebkit;
   return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
 }
 
@@ -335,8 +335,8 @@ async function sairDaEmulada(opcoes?: { janelaJaSaiu?: boolean }): Promise<void>
 // ── Tela cheia do DOM (navegador) ───────────────────────────────────────────
 
 /** Sai da tela cheia do elemento, pelos dois nomes. */
-async function sairDoElemento(): Promise<void> {
-  const doc = document as DocumentoComWebkit;
+async function sairDoElemento(documento?: Document): Promise<void> {
+  const doc = (documento ?? document) as DocumentoComWebkit;
   const sair: (() => Promise<void> | void) | undefined =
     typeof doc.exitFullscreen === "function"
       ? () => doc.exitFullscreen()
@@ -390,7 +390,12 @@ function pedirTelaCheiaDoElemento(el: HTMLElement): Promise<void> | null {
 export async function alternarTelaCheiaDe(el: HTMLElement | null, _opcoes?: OpcoesDeTelaCheia) {
   if (typeof document === "undefined") return;
 
-  if (caminhoDeAgora() === "emulado") {
+  // Elemento da janela solta da chamada (`JanelaDaChamada`): a emulação mexe
+  // na janela **principal** do Tauri (moldura, tamanho), que não é onde ele
+  // está. Para ele só serve a API do DOM do próprio documento dele.
+  const outraJanela = !!el?.ownerDocument && el.ownerDocument !== document;
+
+  if (!outraJanela && caminhoDeAgora() === "emulado") {
     // Sair vale também com `el` nulo: o elemento pode ter desmontado entre o
     // clique e aqui, e ficar preso em tela cheia é pior que sair sem pedir.
     if (emulada && (!el || emulada.elemento === el)) {
@@ -412,8 +417,8 @@ export async function alternarTelaCheiaDe(el: HTMLElement | null, _opcoes?: Opco
   }
 
   // ── Sair ─────────────────────────────────────────────────────────────────
-  if (elementoEmTelaCheia() === el) {
-    await sairDoElemento();
+  if (elementoEmTelaCheia(el.ownerDocument) === el) {
+    await sairDoElemento(el.ownerDocument);
     return;
   }
 
