@@ -15,6 +15,7 @@ import {
 import {
   FAIXA_ALTURA,
   FAIXA_GAP,
+  GAP,
   FAIXA_LARGURA,
   FOCO_GAP,
   TETO_DE_TILES_ANIMADOS,
@@ -23,6 +24,7 @@ import {
   estiloDoTile,
   larguraDaTira,
   melhorArranjo,
+  proporcaoDaTela,
   palcoUsaFoco,
   posicionarGrade,
   type Arranjo,
@@ -530,12 +532,23 @@ export default function VoiceGrid({
     // Com a tira oculta o destaque toma o palco inteiro (`naTira` 0), e isso
     // entra na assinatura: alternar não muda `daTira.length`.
     const naTira = membrosOcultos ? 0 : daTira.length;
-    const assinaturaDoFoco = `${naTira}@${tamanho.largura}x${tamanho.altura}`;
+    // Tela compartilhada (janela específica) tem proporção própria; sem ela o
+    // destaque 16:9 mostraria tarjas pretas. Câmera e tela sem faixa: 16:9.
+    const proporcaoDoFoco = principal.tela
+      ? proporcaoDaTela(principal.publication?.dimensions)
+      : proporcaoDaTela(null);
+    const assinaturaDoFoco = `${naTira}@${tamanho.largura}x${tamanho.altura}@${proporcaoDoFoco.toFixed(3)}`;
     let foco: Arranjo;
     if (memoDoFoco.current?.assinatura === assinaturaDoFoco) {
       foco = memoDoFoco.current.arranjo;
     } else {
-      foco = melhorArranjo(1, tamanho.largura, alturaDoDestaque(tamanho.altura, naTira));
+      foco = melhorArranjo(
+        1,
+        tamanho.largura,
+        alturaDoDestaque(tamanho.altura, naTira),
+        GAP,
+        proporcaoDoFoco,
+      );
       memoDoFoco.current = { assinatura: assinaturaDoFoco, arranjo: foco };
     }
     return (

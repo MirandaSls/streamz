@@ -141,6 +141,25 @@ export function palcoUsaFoco(
   return destaque.altura > grade.altura;
 }
 
+/**
+ * Proporção do destaque de uma tela compartilhada. Janela específica não é
+ * 16:9, e o destaque 16:9 deixava tarjas pretas nas laterais; com a proporção
+ * real o tile abraça o vídeo. Dimensões desconhecidas (câmera, tela sem faixa)
+ * ficam em 16:9, e janelas absurdas são limitadas para o destaque não virar uma
+ * fatia.
+ */
+export const PROPORCAO_MIN = 0.5;
+export const PROPORCAO_MAX = 3;
+
+export function proporcaoDaTela(
+  dimensions: { width?: number; height?: number } | null | undefined,
+): number {
+  const w = dimensions?.width;
+  const h = dimensions?.height;
+  if (!w || !h || !(w > 0) || !(h > 0) || !Number.isFinite(w / h)) return PROPORCAO;
+  return Math.min(PROPORCAO_MAX, Math.max(PROPORCAO_MIN, w / h));
+}
+
 export function melhorArranjo(
   quantidade: number,
   largura: number,
