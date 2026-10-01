@@ -63,31 +63,82 @@ export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number
   );
 }
 
+/**
+ * Medidor de segmentos do popover de supressão de ruído (o do Discord): barrinhas
+ * finas que acendem da esquerda para a direita conforme o nível. Existe à parte
+ * da `BarraDeNivel` porque a aba "Voz e vídeo" usa a barra contínua com limiar.
+ *
+ * Cor por posição, não por nível: as primeiras amarelas, o meio verde-oliva, o
+ * fim verde. O oliva não tem token de status; é o ponto médio entre
+ * `status-warning` e `status-positive`, daí o literal.
+ * Sem transição: o nível chega ~30x/s e qualquer easing deixaria o medidor
+ * atrás da voz (e já respeita prefers-reduced-motion por isso).
+ */
+export function MedidorSegmentado({
+  nivel,
+  segmentos = 24,
+}: {
+  nivel: number;
+  segmentos?: number;
+}) {
+  const n = Math.max(1, segmentos);
+  const valor = Math.min(1, Math.max(0, nivel));
+  const acesos = Math.round(valor * n);
+  return (
+    <div
+      role="meter"
+      aria-label="Nível do microfone"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(valor * 100)}
+      className="flex h-4 items-center gap-[3px]"
+    >
+      {Array.from({ length: n }, (_, i) => {
+        const pos = i / n;
+        const cor =
+          pos < 0.33 ? "bg-status-warning" : pos < 0.66 ? "bg-[#8fa63a]" : "bg-status-positive";
+        return (
+          <span
+            key={i}
+            aria-hidden="true"
+            className={`h-4 w-1 shrink-0 rounded-full ${i < acesos ? cor : "bg-border-normal"}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /** Interruptor do Discord: pílula que desliza, não caixa de seleção. */
 export function Chave({
   rotulo,
   ligado,
   onChange,
+  titulo = false,
 }: {
   rotulo: string;
   ligado: boolean;
   onChange: (v: boolean) => void;
+  /** rótulo no tamanho de título (16px), como no cabeçalho do popover de ruído. */
+  titulo?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-sm font-semibold text-text-strong">{rotulo}</span>
+      <span className={`font-semibold text-text-strong ${titulo ? "text-base" : "text-sm"}`}>
+        {rotulo}
+      </span>
       <button
         type="button"
         role="switch"
         aria-checked={ligado}
         aria-label={rotulo}
         onClick={() => onChange(!ligado)}
-        className={`relative h-6 w-10 shrink-0 rounded-full transition ${
+        className={`relative h-6 w-10 shrink-0 rounded-full transition motion-reduce:transition-none before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[''] ${
           ligado ? "bg-brand-500" : "bg-border-normal"
         }`}
       >
         <span
-          className={`absolute top-1 h-4 w-4 rounded-full bg-switch-thumb-background-default transition-all ${
+          className={`absolute top-1 h-4 w-4 rounded-full bg-switch-thumb-background-default transition-all motion-reduce:transition-none ${
             ligado ? "left-5" : "left-1"
           }`}
         />
