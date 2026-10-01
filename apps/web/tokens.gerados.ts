@@ -3,7 +3,7 @@
  * docs/referencias-discord/tokens/variaveis-resolvidas.json (Discord, 2026-09-11).
  * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.
  *
- * Só os tokens que o apps/web usa (248 de 613).
+ * Só os tokens que o apps/web usa (250 de 617).
  * Token novo no código (classe ou var()) não existe até rodar o gerador de novo.
  *
  * Nome da classe = utilitário + nome do token do Discord sem o `--`:
@@ -138,6 +138,7 @@ export const coresDoDiscord: Record<string, string> = {
   "control-secondary-text-default": cor("control-secondary-text-default"),
   "control-secondary-text-hover": cor("control-secondary-text-hover"),
   "green-360": cor("green-360"),
+  "green-new-38": cor("green-new-38"),
   "icon-default": cor("icon-default"),
   "icon-feedback-critical": cor("icon-feedback-critical"),
   "icon-feedback-info": cor("icon-feedback-info"),
@@ -145,8 +146,6 @@ export const coresDoDiscord: Record<string, string> = {
   "icon-feedback-warning": cor("icon-feedback-warning"),
   "icon-muted": cor("icon-muted"),
   "icon-overlay-light": cor("icon-overlay-light"),
-  "icon-status-dnd": cor("icon-status-dnd"),
-  "icon-status-idle": cor("icon-status-idle"),
   "icon-status-offline": cor("icon-status-offline"),
   "icon-status-online": cor("icon-status-online"),
   "icon-strong": cor("icon-strong"),
@@ -180,6 +179,7 @@ export const coresDoDiscord: Record<string, string> = {
   "mobile-background-scrim-opaque": cor("mobile-background-scrim-opaque"),
   "modal-background": cor("modal-background"),
   "modal-footer-background": cor("modal-footer-background"),
+  "neutral-34": cor("neutral-34"),
   "notice-background-critical": cor("notice-background-critical"),
   "notice-text-critical": cor("notice-text-critical"),
   "opacity-black-40": cor("opacity-black-40"),
@@ -200,6 +200,7 @@ export const coresDoDiscord: Record<string, string> = {
   "radio-thumb-background-active": cor("radio-thumb-background-active"),
   "reaction-text-hover": cor("reaction-text-hover"),
   "reaction-text-reacted-default": cor("reaction-text-reacted-default"),
+  "red-new-46": cor("red-new-46"),
   "scrollbar-auto-scrollbar-color-track": cor("scrollbar-auto-scrollbar-color-track"),
   "scrollbar-auto-thumb": cor("scrollbar-auto-thumb"),
   "scrollbar-auto-track": cor("scrollbar-auto-track"),
@@ -255,6 +256,7 @@ export const coresDoDiscord: Record<string, string> = {
   "text-strong": cor("text-strong"),
   "text-subtle": cor("text-subtle"),
   "white": cor("white"),
+  "yellow-new-30": cor("yellow-new-30"),
   "role-default": cor("role-default"),
 };
 

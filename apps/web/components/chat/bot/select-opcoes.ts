@@ -137,9 +137,9 @@ export function iconeDeCanal(type: Channel["type"], className = "text-icon-muted
  * dentro do select, junto do avatar — não é exclusiva da lista de membros.
  *
  * `surface` = `border-background-surface-high`: a lista vive sobre
- * `--background-surface-high` (a do `Popout`), e é essa a cor do recorte do
- * selo — a entrada no `FUNDO_DO_SELO` do `Avatar` vem de outro cartão da
- * rodada de correção.
+ * `--background-surface-high` (a do `Popout`). O selo de status não depende
+ * mais dela — o `Avatar` fura a foto e o recorte mostra o fundo real —, mas
+ * fica certa para o selo de voz, que ainda pinta o anel com ela.
  */
 function PrefixoDeUsuario({ user }: { user: PublicUser }) {
   const vivo = useLiveUser(user);
