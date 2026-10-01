@@ -210,6 +210,16 @@ export const WS_EVENTS = {
   FRIEND_NICKNAME_UPDATED: "friend.nicknameUpdated",
   /** Ignorei/deixei de ignorar alguém. Payload: `UsuarioIgnoradoEvent`. */
   USER_IGNORED: "user.ignored",
+  // ── pastas de servidores ──
+  /**
+   * servidor → cliente (sala `user:<id>`): o layout da barra de servidores
+   * (pastas e ordem) mudou noutra aba ou dispositivo. Payload: `GuildLayout`.
+   *
+   * Não há par cliente → servidor: a escrita é `PUT /users/me/guild-layout`
+   * (REST), e a API emite este evento depois de gravar. Contrato no fim do
+   * `index.ts`.
+   */
+  GUILD_LAYOUT_UPDATE: "guild.layout.update",
 } as const;
 
 
