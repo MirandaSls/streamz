@@ -412,6 +412,12 @@ interface VoiceStoreState {
   // ── foco/tela cheia da grade ──
   focado: string | null;
   /**
+   * "Ocultar membros" do modo foco: esconde a tira de miniaturas e deixa o
+   * destaque ocupar o palco inteiro. Em memória de propósito — é um gesto do
+   * momento, não preferência; sair da chamada devolve a tira.
+   */
+  membrosOcultos: boolean;
+  /**
    * Ninguém escolheu o palco ainda, então uma transmissão que comece pode
    * assumi-lo sozinha. Escolher (ou desfazer) o foco à mão desliga isso — quem
    * saiu de uma transmissão não quer ser jogado de volta nela.
@@ -514,6 +520,7 @@ interface VoiceStoreState {
    * tem dois tiles do mesmo dono.
    */
   setFocado: (chave: string | null) => void;
+  alternarMembrosOcultos: () => void;
   /** Foco sem gesto do usuário (transmissão que começa): não desliga o automático. */
   focarAutomaticamente: (chave: string) => void;
   setTelaCheia: (ativo: boolean) => void;
@@ -935,6 +942,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       telaComSom: false,
       audioDaTelaMudo: false,
       focado: null,
+      membrosOcultos: false,
       focoAutomatico: true,
       telaCheia: false,
       assistindo: new Set(),
@@ -970,6 +978,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     silenciados: carregarSilenciados(),
     telaSilenciada: {},
     focado: null,
+    membrosOcultos: false,
     focoAutomatico: true,
     telaCheia: false,
     assistindo: new Set<string>(),
@@ -1219,6 +1228,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         telaComSom: false,
         audioDaTelaMudo: false,
         focado: null,
+      membrosOcultos: false,
         focoAutomatico: true,
         assistindo: new Set<string>(),
         previa: null,
@@ -1808,6 +1818,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false }));
       aplicarAssinaturasDeTela();
     },
+    alternarMembrosOcultos: () => set((s) => ({ membrosOcultos: !s.membrosOcultos })),
     focarAutomaticamente: (focado) => {
       set({ focado });
       aplicarAssinaturasDeTela();
