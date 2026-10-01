@@ -136,6 +136,8 @@ services:
       # vírgula. Sem nenhum, o YouTube não toca a partir deste servidor.
       # Gerar com `scripts/gerar-token-do-youtube.sh`.
       YOUTUBE_REFRESH_TOKENS: ${YOUTUBE_REFRESH_TOKENS:-}
+      # Base pública da web: os botões do bot linkam para ela.
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
     volumes:

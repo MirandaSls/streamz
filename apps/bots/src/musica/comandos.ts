@@ -20,8 +20,9 @@ import {
 } from "./formatar";
 import {
   MENSAGEM_PLAYLIST_GERADA_SPOTIFY,
-  embedDeFaixa,
-  embedDeLote,
+  botaoDoSite,
+  embedDeAdicionado,
+  embedDeAdicionados,
   nomeDaFonte,
 } from "./embeds";
 import { SEM_LAVALINK, SEM_PONTE_DE_VOZ, dadosDaFaixa, obterServico } from "./servico";
@@ -205,70 +206,49 @@ const tocar: Comando = {
       return;
     }
 
-    // A fonte do áudio pode ser outra que não a do link, então o aviso não cita
-    // uma plataforma só.
-    const avisoDoSpotify = ehLinkDoSpotify(consulta)
-      ? "Do Spotify vem a lista de faixas; o áudio vem da mesma música em outra " +
-        "fonte, porque o Spotify não entrega áudio a terceiros."
-      : undefined;
-
     // Playlist inteira ou uma faixa só.
     if (resultado.loadType === "playlist") {
       // `add` com o array mantém a ordem da playlist; nada de embaralhar aqui.
       if (noTopo) await jogador.queue.splice(0, 0, ...resultado.tracks);
       else jogador.queue.add(resultado.tracks);
       const total = resultado.tracks.length;
-      const duracaoTotalMs = resultado.tracks.reduce((soma, t) => soma + (t.info.duration || 0), 0);
       const primeira = resultado.tracks[0]!;
       if (!jogador.playing) await jogador.play();
-      const capa = resultado.playlist?.thumbnail;
+      const botao = botaoDoSite();
       await ctx.responder({
         embeds: [
-          embedDeLote({
+          embedDeAdicionados({
             nome: resultado.playlist?.name ?? "Playlist",
             ...(/^https?:\/\//i.test(consulta) ? { url: consulta } : {}),
-            ...(capa ? { capaUrl: capa } : {}),
             fonte: nomeDaFonte(primeira.info.sourceName, primeira.info.uri),
             total,
-            duracaoTotalMs,
-            pediuPor: ctx.usuarioId,
-            ...(avisoDoSpotify || noTopo
-              ? { nota: [noTopo ? "Entrou no topo da fila." : "", avisoDoSpotify ?? ""].filter(Boolean).join(" ") }
-              : {}),
+            noTopo,
           }),
         ],
+        ...(botao ? { components: botao } : {}),
       });
       return;
     }
 
     const faixa = resultado.tracks[0]!;
-    const jaTocando = Boolean(jogador.queue.current);
     if (noTopo) await jogador.queue.splice(0, 0, faixa);
     else jogador.queue.add(faixa);
     if (!jogador.playing) await jogador.play();
 
-    const posicao = noTopo ? 1 : jogador.queue.tracks.length;
+    const botao = botaoDoSite();
     await ctx.responder({
       embeds: [
-        embedDeFaixa(jaTocando ? "fila" : "tocando", {
+        embedDeAdicionado({
           titulo: faixa.info.title,
           autor: faixa.info.author,
           ...(faixa.info.uri ? { url: faixa.info.uri } : {}),
-          ...(faixa.info.artworkUrl ? { capaUrl: faixa.info.artworkUrl } : {}),
           duracaoMs: faixa.info.duration,
           aoVivo: faixa.info.isStream,
           fonte: nomeDaFonte(faixa.info.sourceName, faixa.info.uri),
-          pediuPor: ctx.usuarioId,
-          ...(jaTocando ? { posicaoNaFila: posicao } : {}),
-          ...(avisoDoSpotify || (noTopo && jaTocando)
-            ? {
-                nota: [noTopo && jaTocando ? "No topo da fila." : "", avisoDoSpotify ?? ""]
-                  .filter(Boolean)
-                  .join(" "),
-              }
-            : {}),
+          noTopo,
         }),
       ],
+      ...(botao ? { components: botao } : {}),
     });
   },
 };

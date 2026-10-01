@@ -1,5 +1,5 @@
-import type { APIEmbed } from "discord.js";
-import { escaparMarkdown, formatarDuracao, formatarDuracaoOuAoVivo, truncar } from "./formatar";
+import type { APIActionRowComponent, APIEmbed, APIComponentInMessageActionRow } from "discord.js";
+import { escaparMarkdown, truncar } from "./formatar";
 
 /**
  * Volt Lime (`design.md`). Duplicada de `comandos.ts` porque lá não é exportada
@@ -7,8 +7,13 @@ import { escaparMarkdown, formatarDuracao, formatarDuracaoOuAoVivo, truncar } fr
  */
 export const COR_DO_EMBED = 0x9be31f;
 
+/** Barra lateral dos embeds compactos de "adicionado": verde do Spotify, violeta nas demais fontes. */
+export const COR_SPOTIFY = 0x1db954;
+export const COR_PADRAO = 0x8b6cf0;
+/** Âmbar do aviso de saída por inatividade. */
+export const COR_AVISO = 0xf5a623;
+
 /** Limites do Discord, em caracteres. */
-const LIMITE_TITULO = 250;
 const LIMITE_DESCRICAO = 4096;
 
 export const MENSAGEM_PLAYLIST_GERADA_SPOTIFY =
@@ -55,70 +60,109 @@ function plural(n: number): string {
   return n === 1 ? "1 faixa" : `${n} faixas`;
 }
 
-export interface DadosDeLote {
-  nome: string;
-  url?: string;
-  capaUrl?: string;
-  fonte: string;
-  total: number;
-  duracaoTotalMs: number;
-  pediuPor?: string;
-  nota?: string;
+/** Ícone do embed por fonte; o Spotify ganha o verde, as demais o check. */
+export function iconeDaFonte(fonte: string): string {
+  switch (fonte) {
+    case "Spotify":
+      return "🟢";
+    case "YouTube":
+      return "▶️";
+    case "SoundCloud":
+      return "☁️";
+    default:
+      return "✅";
+  }
 }
 
-/** Confirmação de playlist/álbum enfileirado, no estilo "Added X with N tracks". */
-export function embedDeLote(d: DadosDeLote): APIEmbed {
-  const duracao = formatarDuracao(d.duracaoTotalMs);
-  // O nome é cortado antes de escapar: cortar depois poderia separar a barra do caractere.
-  const descricao = `${tituloLinkado(truncar(d.nome, 200), d.url)}\n${plural(d.total)} · ${duracao}`;
-  const fields = [
-    { name: "Faixas", value: String(d.total), inline: true },
-    { name: "Duração total", value: duracao, inline: true },
-    ...(d.pediuPor ? [{ name: "Pedido por", value: `<@${d.pediuPor}>`, inline: true }] : []),
-  ];
-  return {
-    color: COR_DO_EMBED,
-    author: { name: truncar(`Playlist do ${d.fonte}`, 256) },
-    title: "Playlist na fila",
-    description: truncar(descricao, LIMITE_DESCRICAO),
-    ...(d.capaUrl ? { thumbnail: { url: d.capaUrl } } : {}),
-    fields,
-    ...(d.nota ? { footer: { text: truncar(d.nota, 200) } } : {}),
-  };
+const corDaFonte = (fonte: string): number => (fonte === "Spotify" ? COR_SPOTIFY : COR_PADRAO);
+
+/** `mm:ss` com minuto de dois dígitos (`02:37`); acima de 1h vira `h:mm:ss`. */
+function duracaoCompacta(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "00:00";
+  const total = Math.floor(ms / 1000);
+  const dois = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(total / 3600);
+  const m = Math.floor(total / 60) % 60;
+  const s = total % 60;
+  return h > 0 ? `${h}:${dois(m)}:${dois(s)}` : `${dois(m)}:${dois(s)}`;
 }
 
-export interface DadosDeFaixa {
+/** Limite do título dentro do embed compacto: mantém a linha curta. */
+const LIMITE_TITULO_COMPACTO = 70;
+
+export interface DadosDeAdicionado {
   titulo: string;
-  autor: string;
+  autor?: string | undefined;
   url?: string;
-  capaUrl?: string;
   duracaoMs: number;
   aoVivo: boolean;
   fonte: string;
-  pediuPor?: string;
-  posicaoNaFila?: number;
-  nota?: string;
+  /** "ao topo da fila" quando entrou no topo; senão "à fila". */
+  noTopo?: boolean;
 }
 
-export function embedDeFaixa(estado: "tocando" | "fila", d: DadosDeFaixa): APIEmbed {
-  const titulo =
-    estado === "tocando"
-      ? "Tocando agora"
-      : d.posicaoNaFila !== undefined
-        ? `Na fila, posição ${d.posicaoNaFila}`
-        : "Na fila";
-  const descricao = `${tituloLinkado(truncar(d.titulo, 200), d.url)}\n${escaparMarkdown(truncar(d.autor, 100))}`;
-  const fields = [
-    { name: "Duração", value: formatarDuracaoOuAoVivo(d.duracaoMs, d.aoVivo), inline: true },
-    ...(d.pediuPor ? [{ name: "Pedido por", value: `<@${d.pediuPor}>`, inline: true }] : []),
-  ];
+/** Uma linha só, sem título/thumbnail/campos/rodapé: é o que o bot de referência mostra. */
+export function embedDeAdicionado(d: DadosDeAdicionado): APIEmbed {
+  // Cortar antes de escapar: cortar depois poderia separar a barra do caractere.
+  const nome = truncar(d.autor ? `${d.autor} - ${d.titulo}` : d.titulo, LIMITE_TITULO_COMPACTO);
+  const duracao = d.aoVivo ? "ao vivo" : duracaoCompacta(d.duracaoMs);
+  const destino = d.noTopo ? "ao topo da fila" : "à fila";
   return {
-    color: COR_DO_EMBED,
-    author: { name: truncar(d.fonte, 256) },
-    title: truncar(titulo, LIMITE_TITULO),
-    description: truncar(descricao, LIMITE_DESCRICAO),
-    ...(d.capaUrl ? { thumbnail: { url: d.capaUrl } } : {}),
-    fields,
-    ...(d.nota ? { footer: { text: truncar(d.nota, 200) } } : {}),
+    color: corDaFonte(d.fonte),
+    description: truncar(
+      `${iconeDaFonte(d.fonte)} Adicionado ${tituloLinkado(nome, d.url)} - \`${duracao}\` ${destino}.`,
+      LIMITE_DESCRICAO,
+    ),
   };
+}
+
+export interface DadosDeAdicionados {
+  nome: string;
+  url?: string;
+  fonte: string;
+  total: number;
+  noTopo?: boolean;
+}
+
+export function embedDeAdicionados(d: DadosDeAdicionados): APIEmbed {
+  const nome = truncar(d.nome, LIMITE_TITULO_COMPACTO);
+  const destino = d.noTopo ? "ao topo da fila" : "à fila";
+  return {
+    color: corDaFonte(d.fonte),
+    description: truncar(
+      `${iconeDaFonte(d.fonte)} Adicionado ${tituloLinkado(nome, d.url)} com ${plural(d.total)} ${destino}.`,
+      LIMITE_DESCRICAO,
+    ),
+  };
+}
+
+/** Aviso enviado quando o timer de fila vazia derruba o player. */
+export function embedDeInatividade(): APIEmbed {
+  return {
+    color: COR_AVISO,
+    description: "Saí do canal de voz por inatividade.\nVocê pode desativar isso usando o comando /24-7.",
+  };
+}
+
+/**
+ * Botão de link para o painel web, lido de `WEB_PUBLIC_URL` a cada chamada
+ * (testável e sem estado). Sem URL http(s) válida não há botão.
+ */
+export function botaoDoSite(): APIActionRowComponent<APIComponentInMessageActionRow>[] | undefined {
+  const url = urlSegura(process.env.WEB_PUBLIC_URL?.trim().replace(/\/+$/, ""));
+  if (!url) return undefined;
+  return [
+    {
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 5,
+          label: "Controle a música direto pelo nosso site",
+          emoji: { name: "🌐" },
+          url,
+        },
+      ],
+    },
+  ];
 }

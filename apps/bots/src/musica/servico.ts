@@ -1,4 +1,4 @@
-import { Events, type Client } from "discord.js";
+import { Events, type APIEmbed, type Client } from "discord.js";
 import { LavalinkManager, type Player, type SearchResult, type Track } from "lavalink-client";
 import type { ContextoDoBot } from "../runtime/tipos";
 import { escaparMarkdown, truncar } from "./formatar";
@@ -7,6 +7,7 @@ import {
   consultasAlternativas,
   ehFonteAlternativa,
 } from "./fontes-alternativas";
+import { embedDeInatividade } from "./embeds";
 import { ArmazemDeConfiguracao } from "./configuracao";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
 
@@ -180,9 +181,14 @@ export class ServicoDeMusica {
     this.manager.on("queueEnd", (jogador, faixa) => {
       void this.aoAcabarAFila(jogador, faixa as Track | null);
     });
-    this.manager.on("playerDestroy", (jogador) => {
+    this.manager.on("playerDestroy", (jogador, motivo) => {
       this.autoplaySeguidas.delete(jogador.guildId);
       this.autoplayPendente.delete(jogador.guildId);
+      // `QueueEmpty` só nasce do timer de fila vazia da lib; /parar, /desconectar
+      // e troca de canal destroem com outro motivo, então não há falso positivo.
+      if (motivo === "QueueEmpty") {
+        void this.avisarNoCanal(jogador, { embeds: [embedDeInatividade()] });
+      }
     });
     this.manager.on("trackError", (jogador, faixa, evento) => {
       void this.aoFalharFaixa(jogador, faixa as Track | null, evento.exception);
@@ -414,12 +420,12 @@ export class ServicoDeMusica {
   }
 
   /** Escreve no canal de texto onde a música foi pedida. Falha em silêncio. */
-  private async avisarNoCanal(jogador: Player, texto: string) {
+  private async avisarNoCanal(jogador: Player, aviso: string | { embeds: APIEmbed[] }) {
     if (!jogador.textChannelId) return;
     try {
       const cliente = this.ctx.cliente as Client<true>;
       const canal = await cliente.channels.fetch(jogador.textChannelId);
-      if (canal?.isTextBased() && canal.isSendable()) await canal.send({ content: texto });
+      if (canal?.isTextBased() && canal.isSendable()) await canal.send(typeof aviso === "string" ? { content: aviso } : aviso);
     } catch (erro) {
       this.ctx.log.aviso("não consegui avisar no canal", { canal: jogador.textChannelId, erro });
     }

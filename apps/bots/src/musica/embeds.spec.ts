@@ -1,14 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
-  COR_DO_EMBED,
+  COR_AVISO,
+  COR_PADRAO,
+  COR_SPOTIFY,
   MENSAGEM_PLAYLIST_GERADA_SPOTIFY,
-  embedDeFaixa,
-  embedDeLote,
+  botaoDoSite,
+  embedDeAdicionado,
+  embedDeAdicionados,
+  embedDeInatividade,
   nomeDaFonte,
 } from "./embeds";
 
-const lote = { nome: "Rock", fonte: "Spotify", total: 3, duracaoTotalMs: 600_000 };
-const faixa = { titulo: "Música", autor: "Banda", duracaoMs: 225_000, aoVivo: false, fonte: "YouTube" };
+const lote = { nome: "Rock", fonte: "Spotify", total: 3 };
+const faixa = { titulo: "Música", autor: "Banda" as string | undefined, duracaoMs: 225_000, aoVivo: false, fonte: "YouTube" };
 
 describe("nomeDaFonte", () => {
   it("reconhece pelo sourceName", () => {
@@ -30,67 +34,94 @@ describe("nomeDaFonte", () => {
   });
 });
 
-describe("embedDeLote", () => {
+describe("embedDeAdicionado", () => {
+  it("é uma linha só, sem título, thumbnail, campos nem rodapé", () => {
+    const e = embedDeAdicionado({ ...faixa, url: "https://y.com/v" });
+    expect(e.description).toBe("▶️ Adicionado **[Banda - Música](https://y.com/v)** - `03:45` à fila.");
+    expect(e.title).toBeUndefined();
+    expect(e.thumbnail).toBeUndefined();
+    expect(e.fields).toBeUndefined();
+    expect(e.footer).toBeUndefined();
+  });
+  it("ícone e cor por fonte", () => {
+    const sp = embedDeAdicionado({ ...faixa, fonte: "Spotify" });
+    expect(sp.color).toBe(COR_SPOTIFY);
+    expect(sp.description).toMatch(/^🟢 /);
+    const outra = embedDeAdicionado({ ...faixa, fonte: "Outra fonte" });
+    expect(outra.color).toBe(COR_PADRAO);
+    expect(outra.description).toMatch(/^✅ /);
+    expect(embedDeAdicionado({ ...faixa, fonte: "SoundCloud" }).description).toMatch(/^☁️ /);
+  });
+  it("topo da fila, ao vivo e horas", () => {
+    expect(embedDeAdicionado({ ...faixa, noTopo: true }).description).toContain("ao topo da fila.");
+    expect(embedDeAdicionado({ ...faixa, aoVivo: true }).description).toContain("`ao vivo`");
+    expect(embedDeAdicionado({ ...faixa, duracaoMs: 3_723_000 }).description).toContain("`1:02:03`");
+  });
+  it("escapa markdown e não linka esquema inseguro", () => {
+    const e = embedDeAdicionado({ ...faixa, titulo: "**x**", url: "javascript:alert(1)" });
+    expect(e.description).toContain("\\*\\*x\\*\\*");
+    expect(e.description).not.toContain("](");
+    expect(embedDeAdicionado({ ...faixa, autor: undefined }).description).toContain("**Música**");
+  });
+  it("trunca o título e respeita o limite de descrição", () => {
+    const e = embedDeAdicionado({ ...faixa, titulo: "a".repeat(9000), url: "https://a.com" });
+    expect((e.description ?? "").length).toBeLessThanOrEqual(4096);
+    expect(e.description).not.toContain("a".repeat(80));
+  });
+});
+
+describe("embedDeAdicionados", () => {
   it("usa plural correto", () => {
-    expect(embedDeLote({ ...lote, total: 1 }).description).toContain("1 faixa ·");
-    expect(embedDeLote({ ...lote, total: 1 }).description).not.toContain("1 faixas");
-    expect(embedDeLote(lote).description).toContain("3 faixas ·");
+    expect(embedDeAdicionados({ ...lote, total: 1 }).description).toContain("com 1 faixa à fila.");
+    expect(embedDeAdicionados(lote).description).toContain("com 3 faixas à fila.");
+    expect(embedDeAdicionados({ ...lote, noTopo: true }).description).toContain("ao topo da fila.");
   });
-  it("escapa markdown no nome e linka só com http(s)", () => {
-    const e = embedDeLote({ ...lote, nome: "**oferta** [x](http://m)", url: "https://a.com/p" });
-    expect(e.description).toContain("\\*\\*oferta\\*\\*");
-    expect(e.description).toContain("](https://a.com/p)");
-    const sem = embedDeLote({ ...lote, url: "javascript:alert(1)" });
-    expect(sem.description).not.toContain("](");
-    expect(embedDeLote(lote).description).toContain("**Rock**");
+  it("linka só com http(s), escapa e usa a cor da fonte", () => {
+    const e = embedDeAdicionados({ ...lote, nome: "**oferta**", url: "https://a.com/p" });
+    expect(e.description).toBe("🟢 Adicionado **[\\*\\*oferta\\*\\*](https://a.com/p)** com 3 faixas à fila.");
+    expect(e.color).toBe(COR_SPOTIFY);
+    expect(embedDeAdicionados({ ...lote, url: "ftp://x" }).description).not.toContain("](");
+    expect(embedDeAdicionados({ ...lote, fonte: "YouTube" }).color).toBe(COR_PADRAO);
   });
-  it("mostra horas acima de 1h e de 24h", () => {
-    const f = (ms: number) => embedDeLote({ ...lote, duracaoTotalMs: ms }).fields?.[1]?.value;
-    expect(f(3_723_000)).toBe("1:02:03");
-    expect(f(25 * 3_600_000)).toBe("25:00:00");
-  });
-  it("monta author, cor, thumbnail, pedido e rodapé", () => {
-    const e = embedDeLote({ ...lote, capaUrl: "https://c/1.png", pediuPor: "42", nota: "obs" });
-    expect(e.color).toBe(COR_DO_EMBED);
-    expect(e.author?.name).toBe("Playlist do Spotify");
-    expect(e.title).toBe("Playlist na fila");
-    expect(e.thumbnail?.url).toBe("https://c/1.png");
-    expect(e.fields?.map((x) => x.name)).toEqual(["Faixas", "Duração total", "Pedido por"]);
-    expect(e.fields?.[2]?.value).toBe("<@42>");
-    expect(e.footer?.text).toBe("obs");
-    expect(embedDeLote(lote).fields).toHaveLength(2);
-    expect(embedDeLote(lote).footer).toBeUndefined();
-  });
-  it("respeita os limites do Discord", () => {
-    const e = embedDeLote({ ...lote, nome: "*".repeat(5000), url: "https://a.com" });
-    expect((e.title ?? "").length).toBeLessThanOrEqual(250);
+  it("respeita o limite de descrição", () => {
+    const e = embedDeAdicionados({ ...lote, nome: "*".repeat(5000), url: "https://a.com" });
     expect((e.description ?? "").length).toBeLessThanOrEqual(4096);
   });
 });
 
-describe("embedDeFaixa", () => {
-  it("títulos por estado", () => {
-    expect(embedDeFaixa("tocando", faixa).title).toBe("Tocando agora");
-    expect(embedDeFaixa("fila", { ...faixa, posicaoNaFila: 4 }).title).toBe("Na fila, posição 4");
+describe("embedDeInatividade", () => {
+  it("é âmbar e cita o /24-7", () => {
+    const e = embedDeInatividade();
+    expect(e.color).toBe(COR_AVISO);
+    expect(e.description).toContain("/24-7");
   });
-  it("descrição linkada, autor, fonte e campos", () => {
-    const e = embedDeFaixa("tocando", { ...faixa, url: "https://y.com/v", pediuPor: "7", capaUrl: "https://c/i.png" });
-    expect(e.description).toBe("**[Música](https://y.com/v)**\nBanda");
-    expect(e.author?.name).toBe("YouTube");
-    expect(e.fields?.[0]).toEqual({ name: "Duração", value: "3:45", inline: true });
-    expect(e.fields?.[1]?.value).toBe("<@7>");
-    expect(e.thumbnail?.url).toBe("https://c/i.png");
+});
+
+describe("botaoDoSite", () => {
+  const original = process.env.WEB_PUBLIC_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.WEB_PUBLIC_URL;
+    else process.env.WEB_PUBLIC_URL = original;
   });
-  it("ao vivo e link ausente", () => {
-    const e = embedDeFaixa("tocando", { ...faixa, aoVivo: true });
-    expect(e.fields?.[0]?.value).toBe("ao vivo");
-    expect(e.description).toContain("**Música**");
+  it("sem env ou com URL inválida não há botão", () => {
+    delete process.env.WEB_PUBLIC_URL;
+    expect(botaoDoSite()).toBeUndefined();
+    process.env.WEB_PUBLIC_URL = "javascript:alert(1)";
+    expect(botaoDoSite()).toBeUndefined();
+    process.env.WEB_PUBLIC_URL = "  ";
+    expect(botaoDoSite()).toBeUndefined();
   });
-  it("respeita limites com título enorme", () => {
-    const e = embedDeFaixa("fila", { ...faixa, titulo: "a".repeat(9000), autor: "b".repeat(9000), nota: "n".repeat(500) });
-    expect((e.title ?? "").length).toBeLessThanOrEqual(250);
-    expect((e.description ?? "").length).toBeLessThanOrEqual(4096);
-    expect((e.footer?.text ?? "").length).toBeLessThanOrEqual(200);
+  it("com env vira botão de link com 🌐, sem barra final", () => {
+    process.env.WEB_PUBLIC_URL = "https://streamz.chat/";
+    const linha = botaoDoSite()?.[0];
+    expect(linha?.type).toBe(1);
+    expect(linha?.components[0]).toMatchObject({
+      type: 2,
+      style: 5,
+      emoji: { name: "🌐" },
+      label: "Controle a música direto pelo nosso site",
+      url: "https://streamz.chat",
+    });
   });
 });
 
