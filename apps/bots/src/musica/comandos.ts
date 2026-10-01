@@ -196,8 +196,9 @@ const tocar: Comando = {
 
     const resultado = await servico.buscar(jogador, consulta, ctx.usuarioId);
     if (!resultado.tracks?.length) {
-      // Playlist "gerada" do Spotify (Daily Mix etc.) volta do Lavalink como
-      // `error` genérico; sem este ramo a pessoa leria só "não achei nada".
+      // Playlist do Spotify sem faixas (mesmo após o fallback pelo embed) pode
+      // ser privada, gerada pelo Spotify (Daily Mix etc.) ou o Spotify fora do
+      // ar; o Lavalink devolve `error` genérico e a mensagem não acusa uma causa só.
       if (ehLinkDoSpotify(consulta) && /\/playlist\//i.test(consulta)) {
         await ctx.responder(MENSAGEM_PLAYLIST_GERADA_SPOTIFY);
         return;

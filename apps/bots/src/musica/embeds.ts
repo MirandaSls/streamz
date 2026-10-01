@@ -17,7 +17,7 @@ export const COR_AVISO = 0xf5a623;
 const LIMITE_DESCRICAO = 4096;
 
 export const MENSAGEM_PLAYLIST_GERADA_SPOTIFY =
-  "O Spotify não libera playlists geradas por ele (This Is, Daily Mix, Top Hits) para outros apps. Use uma playlist criada por uma pessoa, ou o link da playlist no YouTube.";
+  "Não consegui ler essa playlist do Spotify. Ela pode ser privada (deixe pública) ou gerada pelo Spotify (This Is, Daily Mix, Top Hits), que o Spotify não libera para outros apps. Tente de novo ou use o link da playlist no YouTube.";
 
 /**
  * Reconhece a fonte pelo `sourceName` do Lavalink e, na falta dele, pelo host
