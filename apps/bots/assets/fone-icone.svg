@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Fone">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a0f4d"/>
+      <stop offset="0.5" stop-color="#7b2ff7"/>
+      <stop offset="1" stop-color="#d946ef"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
+  <!-- arco do headphone -->
+  <path d="M126 300 V260 A130 130 0 0 1 386 260 V300" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+  <!-- conchas -->
+  <rect x="92" y="272" width="66" height="116" rx="30" fill="#fff"/>
+  <rect x="354" y="272" width="66" height="116" rx="30" fill="#fff"/>
+  <!-- ondas sonoras -->
+  <g fill="none" stroke="#fbcfff" stroke-width="12" stroke-linecap="round">
+    <path d="M234 214 A30 30 0 0 1 278 214"/>
+    <path d="M216 196 A55 55 0 0 1 296 196" opacity="0.85"/>
+    <path d="M198 178 A80 80 0 0 1 314 178" opacity="0.65"/>
+  </g>
+  <!-- notas musicais -->
+  <g fill="#fde4ff" stroke="#fde4ff" stroke-linecap="round">
+    <ellipse cx="226" cy="350" rx="19" ry="14" transform="rotate(-20 226 350)" stroke="none"/>
+    <ellipse cx="290" cy="336" rx="19" ry="14" transform="rotate(-20 290 336)" stroke="none"/>
+    <path d="M241 346 V274 M305 332 V260" stroke-width="10" fill="none"/>
+    <path d="M241 274 L305 260 V282 L241 296 Z" stroke="none" fill="#f5b8ff"/>
+  </g>
+</svg>
