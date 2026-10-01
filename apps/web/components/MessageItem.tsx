@@ -1089,6 +1089,16 @@ function MessageItem({
           onResponder={responder}
           onEncaminhar={encaminharPelaBarra}
           onMais={openMenu}
+          onCopiarLink={copiarLink}
+          onMarcarNaoLida={marcarNaoLida}
+          onFixar={alternarFixada}
+          fixada={message.pinned}
+          podeFixar={canPin}
+          onApagar={
+            canDelete
+              ? () => onDelete(message.id, shiftPressionado() || confirmacaoLembrada("apagar-mensagem"))
+              : undefined
+          }
         />
       )}
 

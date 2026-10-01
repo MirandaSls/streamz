@@ -4,12 +4,18 @@ import type { MouseEvent, ReactNode } from "react";
 import {
   CornerUpLeft,
   CornerUpRight,
+  Link2,
+  MailOpen,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   SmilePlus,
+  Trash2,
 } from "@/components/ui/icones";
 import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { useShiftSegurado } from "@/components/chat/tecla-shift";
 
 type Clique = (e: MouseEvent<HTMLButtonElement>) => void;
 
@@ -27,7 +33,17 @@ type Clique = (e: MouseEvent<HTMLButtonElement>) => void;
  * `rounded-[6px]` vence o `rounded-lg` do lado numérico do primitivo por ser
  * valor arbitrário (o Tailwind emite os arbitrários depois dos nomeados).
  */
-function Acao({ rotulo, onClick, children }: { rotulo: string; onClick: Clique; children: ReactNode }) {
+function Acao({
+  rotulo,
+  onClick,
+  children,
+  perigo = false,
+}: {
+  rotulo: string;
+  onClick: Clique;
+  children: ReactNode;
+  perigo?: boolean;
+}) {
   return (
     <BotaoDeIcone
       rotulo={rotulo}
@@ -35,6 +51,7 @@ function Acao({ rotulo, onClick, children }: { rotulo: string; onClick: Clique; 
       onClick={onClick}
       tamanho={28}
       fundo="hover"
+      perigo={perigo}
       className="rounded-[6px]"
     />
   );
@@ -90,6 +107,14 @@ function Acao({ rotulo, onClick, children }: { rotulo: string; onClick: Clique; 
  * visível mesmo sem o ponteiro em cima
  * (`.message__5126c.selected__5126c .buttons__5126c{opacity:1}`).
  *
+ * **Modo Shift:** segurando Shift sobre a mensagem a barra troca para a
+ * versão estendida do Discord, na mesma caixa: "Copiar link", "Marcar como
+ * não lida", "Fixar"/"Desafixar" (só com `podeFixar`), "Adicionar reação",
+ * "Responder", "Encaminhar" e "Mais"; na mensagem própria o "Responder" vem
+ * antes da reação, entram "Editar" e "Excluir mensagem" (em vermelho) no lugar
+ * do "Mais". Sem reações rápidas nem separador. As mesmas regras de permissão
+ * valem, e a linha de `sistema` nunca muda.
+ *
  * **Narração** (`sistema`): a linha de sistema só tem "Adicionar reação" e
  * "Mais" — não se responde, edita nem encaminha um aviso do canal. Sem print
  * da barra sobre narração; a caixa e os botões são os mesmos.
@@ -109,6 +134,12 @@ export default function BarraDeAcoes({
   onResponder,
   onEncaminhar,
   onMais,
+  onCopiarLink,
+  onMarcarNaoLida,
+  onFixar,
+  fixada = false,
+  podeFixar = false,
+  onApagar,
 }: {
   /** primeiro item desenhado na lista: a barra não pode sair por cima. */
   primeiro: boolean;
@@ -130,15 +161,33 @@ export default function BarraDeAcoes({
   onResponder?: () => void;
   onEncaminhar?: Clique;
   onMais: Clique;
+  /** ações do modo Shift: sem elas a barra não troca. */
+  onCopiarLink?: Clique;
+  onMarcarNaoLida?: Clique;
+  onFixar?: Clique;
+  fixada?: boolean;
+  podeFixar?: boolean;
+  onApagar?: Clique;
 }) {
+  const shift = useShiftSegurado();
   const reacoes = podeReagir !== false;
+  const estendida =
+    shift && !sistema && Boolean(onCopiarLink && onMarcarNaoLida && onFixar);
+  const podeResp = podeResponder !== false && Boolean(onResponder);
+  const reagirAcao = reacoes && (
+    <Acao rotulo="Adicionar reação" onClick={onAbrirSeletor}>
+      <SmilePlus size={20} />
+    </Acao>
+  );
   const topo = primeiro ? "top-0.5" : cabecalho ? "top-[-15px]" : "top-[-25px]";
   return (
     <div
       // `block` e não `flex` no invólucro: quem é flex é a caixa de dentro; o
       // invólucro só carrega a posição e a área de hover dos 32px
       className={`absolute right-0 z-[1] pl-8 pr-[14px] ${
-        selecionada ? "block" : "hidden group-focus-within:block group-hover:block"
+        selecionada
+          ? "block"
+          : "hidden group-focus-within:block group-hover:block"
       } ${topo}`}
     >
       <div
@@ -146,44 +195,114 @@ export default function BarraDeAcoes({
         aria-label="Ações da mensagem"
         className="flex items-center rounded-lg border border-border-muted bg-background-surface-high p-0.5 shadow-shadow-low hover:shadow-shadow-medium"
       >
-        {reacoes && !sistema && onReagir && (
+        {estendida ? (
           <>
-            {rapidas.map((emoji) => (
-              <Acao key={emoji} rotulo={`Reagir com ${rotuloDaReacao(emoji)}`} onClick={() => onReagir(emoji)}>
-                <EmojiDaReacao emoji={emoji} tamanho={20} />
+            <Acao rotulo="Copiar link da mensagem" onClick={onCopiarLink!}>
+              <Link2 size={20} />
+            </Acao>
+            <Acao rotulo="Marcar como não lido" onClick={onMarcarNaoLida!}>
+              <MailOpen size={20} />
+            </Acao>
+            {podeFixar && (
+              <Acao
+                rotulo={fixada ? "Desafixar mensagem" : "Fixar mensagem"}
+                onClick={onFixar!}
+              >
+                {fixada ? <PinOff size={20} /> : <Pin size={20} />}
               </Acao>
-            ))}
-            {rapidas.length > 0 && (
-              <span aria-hidden="true" className="mx-1 my-0.5 h-6 w-px shrink-0 rounded-full bg-border-subtle" />
+            )}
+            {propria ? (
+              <>
+                {podeResp && (
+                  <Acao rotulo="Responder" onClick={onResponder!}>
+                    <CornerUpLeft size={20} />
+                  </Acao>
+                )}
+                {reagirAcao}
+                {onEditar && (
+                  <Acao rotulo="Editar" onClick={onEditar}>
+                    <Pencil size={20} />
+                  </Acao>
+                )}
+                {onEncaminhar && (
+                  <Acao rotulo="Encaminhar" onClick={onEncaminhar}>
+                    <CornerUpRight size={20} />
+                  </Acao>
+                )}
+                {onApagar && (
+                  <Acao rotulo="Excluir mensagem" onClick={onApagar} perigo>
+                    <Trash2 size={20} />
+                  </Acao>
+                )}
+              </>
+            ) : (
+              <>
+                {reagirAcao}
+                {podeResp && (
+                  <Acao rotulo="Responder" onClick={onResponder!}>
+                    <CornerUpLeft size={20} />
+                  </Acao>
+                )}
+                {onEncaminhar && (
+                  <Acao rotulo="Encaminhar" onClick={onEncaminhar}>
+                    <CornerUpRight size={20} />
+                  </Acao>
+                )}
+                <Acao rotulo="Mais" onClick={onMais}>
+                  <MoreHorizontal size={20} />
+                </Acao>
+              </>
             )}
           </>
+        ) : (
+          <>
+            {reacoes && !sistema && onReagir && (
+              <>
+                {rapidas.map((emoji) => (
+                  <Acao
+                    key={emoji}
+                    rotulo={`Reagir com ${rotuloDaReacao(emoji)}`}
+                    onClick={() => onReagir(emoji)}
+                  >
+                    <EmojiDaReacao emoji={emoji} tamanho={20} />
+                  </Acao>
+                ))}
+                {rapidas.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="mx-1 my-0.5 h-6 w-px shrink-0 rounded-full bg-border-subtle"
+                  />
+                )}
+              </>
+            )}
+            {reacoes && (
+              <Acao rotulo="Adicionar reação" onClick={onAbrirSeletor}>
+                <SmilePlus size={20} />
+              </Acao>
+            )}
+            {!sistema &&
+              (propria
+                ? onEditar && (
+                    <Acao rotulo="Editar" onClick={onEditar}>
+                      <Pencil size={20} />
+                    </Acao>
+                  )
+                : podeResponder !== false &&
+                  onResponder && (
+                    <Acao rotulo="Responder" onClick={onResponder}>
+                      <CornerUpLeft size={20} />
+                    </Acao>
+                  ))}
+            {!sistema && onEncaminhar && (
+              <Acao rotulo="Encaminhar" onClick={onEncaminhar}>
+                <CornerUpRight size={20} />
+              </Acao>
+            )}
+            <Acao rotulo="Mais" onClick={onMais}>
+              <MoreHorizontal size={20} />
+            </Acao>
+          </>
         )}
-        {reacoes && (
-          <Acao rotulo="Adicionar reação" onClick={onAbrirSeletor}>
-            <SmilePlus size={20} />
-          </Acao>
-        )}
-        {!sistema &&
-          (propria
-            ? onEditar && (
-                <Acao rotulo="Editar" onClick={onEditar}>
-                  <Pencil size={20} />
-                </Acao>
-              )
-            : podeResponder !== false &&
-              onResponder && (
-                <Acao rotulo="Responder" onClick={onResponder}>
-                  <CornerUpLeft size={20} />
-                </Acao>
-              ))}
-        {!sistema && onEncaminhar && (
-          <Acao rotulo="Encaminhar" onClick={onEncaminhar}>
-            <CornerUpRight size={20} />
-          </Acao>
-        )}
-        <Acao rotulo="Mais" onClick={onMais}>
-          <MoreHorizontal size={20} />
-        </Acao>
       </div>
     </div>
   );
