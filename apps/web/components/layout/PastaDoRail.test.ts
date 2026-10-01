@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { separarEmojis } from "@/lib/twemoji";
 import {
   LADO_DA_MINIATURA,
   classeDaPilula,
@@ -125,5 +126,14 @@ describe("rotuloDaPasta", () => {
     );
     expect(rotuloDaPasta({ nome: "teste", aberta: true, ativa: false, naoLido: true })).toBe("Pasta teste");
     expect(rotuloDaPasta({ nome: "teste", aberta: false, ativa: true, naoLido: true })).toBe("Pasta teste");
+  });
+});
+
+describe("nome da pasta no tooltip", () => {
+  it("separa o emoji e preserva o Unicode estilizado sem perder caractere", () => {
+    const nome = "𝓕𝓪𝔃𝓮𝓷𝓭𝓪, Mansão Dev 💻";
+    const partes = separarEmojis(nome);
+    expect(partes.filter((p) => p.tipo === "emoji").map((p) => p.valor)).toEqual(["💻"]);
+    expect(partes.map((p) => p.valor).join("")).toBe(nome);
   });
 });

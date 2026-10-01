@@ -206,6 +206,10 @@ export function resolveGuildLayout(layout: GuildLayout | null, guildIds: string[
  * Nome que a UI mostra para a pasta: o `name` dela; sem nome, os dois
  * primeiros servidores (ex.: "Fazenda, Mansão Dev"), como o Discord faz.
  *
+ * Os nomes entram **como estão** (só `trim` nas bordas), ligados por ", ":
+ * sem normalizar nem remover emoji ou Unicode estilizado ("𝓕𝓪𝔃𝓮𝓷𝓭𝓪",
+ * "Mansão Dev 💻") — quem desenha o emoji é a UI.
+ *
  * Servidor cujo nome ainda não chegou ao cliente é pulado em vez de virar
  * "undefined" no tooltip; sem nenhum nome conhecido, "Pasta".
  */

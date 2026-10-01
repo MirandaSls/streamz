@@ -5,6 +5,8 @@ import type { Guild, GuildFolder } from "@streamz/shared";
 import { Folder } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/primitivos";
+import Emoji from "@/components/ui/Emoji";
+import { separarEmojis } from "@/lib/twemoji";
 
 /*
  * Pasta de servidores do rail — réplica da `folderGroup` do Discord.
@@ -63,6 +65,23 @@ export function siglaDoServidor(nome: string): string {
     .join("")
     .slice(0, 4)
     .toUpperCase();
+}
+
+/**
+ * Nome com os emoji desenhados em Twemoji (como nome de servidor/canal no
+ * resto do app). O texto passa intacto: a tipografia Unicode estilizada
+ * ("𝓕𝓪𝔃𝓮𝓷𝓭𝓪") é só caractere e sai pela fonte. Quebra de linha natural: o
+ * emoji é `inline-block`, então cai para a linha de baixo quando não cabe,
+ * como o 💻 no print 05.
+ */
+export function NomeComEmoji({ nome }: { nome: string }) {
+  return (
+    <>
+      {separarEmojis(nome).map((parte, i) =>
+        parte.tipo === "texto" ? parte.valor : <Emoji key={i} emoji={parte.valor} />,
+      )}
+    </>
+  );
 }
 
 export interface Miniatura {
@@ -261,7 +280,7 @@ export default function PastaDoRail({
               : ""
           }`}
         >
-          <Tooltip label={nome} side="right" rail>
+          <Tooltip label={<NomeComEmoji nome={nome} />} side="right" rail>
             <button
               type="button"
               onClick={onToggle}
