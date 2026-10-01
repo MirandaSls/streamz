@@ -17,8 +17,9 @@
 # É idempotente: rodar duas vezes no mesmo commit reaproveita as imagens que já
 # existem no disco (use --refazer-imagens para forçar) e o `up -d` não mexe em
 # contêiner que já está na tag certa. Publicação bem-sucedida também faz a
-# própria faxina: apaga a worktree desta publicação e guarda só as
-# $IMAGENS_GUARDADAS imagens mais recentes de cada app (ver passo 5).
+# própria faxina: apaga a worktree desta publicação, remove as worktrees já
+# mergeadas no main e guarda só as $IMAGENS_GUARDADAS imagens mais recentes de
+# cada app (ver passo 5).
 #
 # O que NÃO cobre: o instalador `.exe` do desktop (job `instalador .exe` do
 # desktop.yml) e o `clippy` do Rust — os dois exigem Windows. Ver §3.6 e §5 do
@@ -30,6 +31,7 @@ STACK=/opt/stack/streamz
 REPO=ghcr.io/mirandasls
 IMAGEM_NODE=node:22
 ESPERA_SEGUNDOS=180
+WORKTREES_FIXAS="referencias paridade"  # nomes de worktree que a faxina nunca remove
 IMAGENS_GUARDADAS=3  # imagens guardadas por app (as mais recentes) — dá para voltar versão sem rebuild
 
 # As mesmas `gh variable list` do repositório — NEXT_PUBLIC_* é embutida no
@@ -226,6 +228,45 @@ if git -C "$STACK" worktree remove --force "$arvore" 2>/dev/null; then
 else
   log "faxina: não consegui remover $arvore — verifique à mão"
 fi
+
+# Worktrees já mergeadas no main: o servidor acumulou 67 worktrees (160 GB) e
+# travou por OOM em 2026-10-01, então a publicação também faz a limpeza
+# periódica. Os commits seguem no main, logo remover a pasta não perde
+# trabalho. Ficam de fora, de propósito: o próprio $STACK, as fixas
+# ($WORKTREES_FIXAS), as com mudança local, as cujo HEAD não é ancestral de
+# origin/main (trabalho não mergeado) e as mexidas na última hora (podem ser
+# uma publicação ou sessão em andamento). Sem --force e sem apagar branches.
+removidas=0
+p=""
+sha=""
+while IFS= read -r linha || [[ -n "$linha" ]]; do
+  case "$linha" in
+    "worktree "*) p="${linha#worktree }"; sha="" ;;
+    "HEAD "*)     sha="${linha#HEAD }" ;;
+    "")
+      if [[ -n "$p" && -n "$sha" && "$p" != "$STACK" ]]; then
+        nome="$(basename "$p")"
+        fixa=0
+        for f in $WORKTREES_FIXAS; do
+          if [[ "$nome" == "$f" ]]; then fixa=1; fi
+        done
+        if [[ "$fixa" -eq 0 && -d "$p" ]] \
+          && [[ -z "$(git -C "$p" status --porcelain 2>/dev/null || echo erro)" ]] \
+          && git -C "$STACK" merge-base --is-ancestor "$sha" origin/main 2>/dev/null \
+          && [[ -z "$(find "$p" -maxdepth 0 -mmin -60 2>/dev/null || true)" ]]; then
+          if git -C "$STACK" worktree remove "$p" 2>/dev/null; then
+            removidas=$((removidas+1))
+          else
+            log "faxina: não consegui remover a worktree $p — deixei"
+          fi
+        fi
+      fi
+      p=""; sha=""
+      ;;
+  esac
+done < <(git -C "$STACK" worktree list --porcelain 2>/dev/null || true; echo)
+git -C "$STACK" worktree prune 2>/dev/null || true
+log "faxina: $removidas worktree(s) mergeada(s) removida(s)"
 
 # Guarda só as $IMAGENS_GUARDADAS mais novas de cada app. A tag recém-publicada
 # e a que o contêiner está rodando agora nunca são apagadas, mesmo que por
