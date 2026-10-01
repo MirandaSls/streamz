@@ -30,11 +30,7 @@ static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new()
 /// Ícone grande do executável em `caminho`, pronto para `<img src>`.
 pub fn do_executavel(caminho: &str) -> Option<String> {
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(guardado) = cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(caminho)
-    {
+    if let Some(guardado) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(caminho) {
         return guardado.clone();
     }
 
