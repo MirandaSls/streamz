@@ -17,8 +17,10 @@ import { LarguraDaFileira, nivelDaBarra } from "@/components/voice/compactacao-d
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { ehNo, janelaDe } from "@/lib/outra-janela";
 import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -72,14 +74,16 @@ export default function VoiceControls({
   useEffect(() => {
     if (!mais) return;
     const fora = (e: MouseEvent) => {
-      if (!caixa.current?.contains(e.target as Node)) setMais(null);
+      if (!ehNo(e.target) || !caixa.current?.contains(e.target)) setMais(null);
     };
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setMais(null);
-    window.addEventListener("mousedown", fora);
-    window.addEventListener("keydown", esc);
+    // a janela da barra: na janela solta da chamada o clique fora é lá
+    const win = janelaDe(caixa.current);
+    win.addEventListener("mousedown", fora);
+    win.addEventListener("keydown", esc);
     return () => {
-      window.removeEventListener("mousedown", fora);
-      window.removeEventListener("keydown", esc);
+      win.removeEventListener("mousedown", fora);
+      win.removeEventListener("keydown", esc);
     };
   }, [mais]);
 
@@ -225,9 +229,7 @@ export default function VoiceControls({
     // encavalavam em janela estreita. Aqui dentro ela é só um item em fluxo.
     <div
       {...moldura}
-      className={`flex items-center ${nivel >= 2 ? "gap-2" : "gap-3"} transition-opacity duration-200 ${
-        escondida ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
+      className={`flex items-center ${nivel >= 2 ? "gap-2" : "gap-3"} ${classeDaMoldura(!escondida, "baixo")}`}
     >
       {/* Nível 2: tela e sons saem da barra porque também vivem no painel
           "Voz conectada" do rodapé (`VoiceConnectedBar`). O "Mais" entra na

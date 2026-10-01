@@ -288,8 +288,20 @@ export const DOWNLOAD_TOKEN_TTL_SECONDS = 120;
 export const downloadTokenSchema = z.object({
   senha: z.string().min(1, "Informe a senha").max(200),
   plataforma: z.enum(DOWNLOAD_PLATAFORMAS),
+  /** Ausente = a mais recente. */
+  versao: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/, "Versão inválida")
+    .optional(),
 });
 export type DownloadTokenInput = z.infer<typeof downloadTokenSchema>;
+
+/** Corpo de `POST /downloads/versoes`: mesma senha e plataforma do token. */
+export const downloadVersoesSchema = z.object({
+  senha: z.string().min(1, "Informe a senha").max(200),
+  plataforma: z.enum(DOWNLOAD_PLATAFORMAS),
+});
+export type DownloadVersoesInput = z.infer<typeof downloadVersoesSchema>;
 
 /**
  * O que a página pode saber **antes** da senha: para quais sistemas existe
@@ -309,6 +321,24 @@ export interface DownloadCatalogo {
   /** false = sem `DOWNLOAD_PASSWORD`; a página explica em vez de pedir senha. */
   configurado: boolean;
   disponiveis: DownloadDisponivel[];
+}
+
+/** Uma versão instalável de uma plataforma. */
+export interface DownloadVersao {
+  versao: string;
+  /** bytes */
+  tamanho: number;
+  /** ISO 8601 */
+  atualizadoEm: string;
+}
+
+/**
+ * Versões disponíveis para a plataforma, da mais nova para a mais antiga (a
+ * posição 0 é a mais recente). Só sai depois da senha: o catálogo público
+ * esconde a versão de propósito, porque a build ainda é privada.
+ */
+export interface DownloadVersoes {
+  versoes: DownloadVersao[];
 }
 
 /** Senha aceita: a URL que baixa o arquivo, com o token curto já embutido. */

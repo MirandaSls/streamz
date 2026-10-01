@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api-error";
 import {
   API_PADRAO_DO_INSTALADOR,
   aspasDeShell,
+  comandoDeDownloadMac,
   comandoDoTerminalMac,
   dataDoInstalador,
   detectarSistema,
@@ -178,6 +179,52 @@ describe("comando do Terminal do macOS", () => {
   it("não deixa aspa simples nem $(…) escaparem das aspas", () => {
     expect(comandoDoTerminalMac("https://x'$(id)", "https://api';id;'")).toBe(
       String.raw`curl -fsSL 'https://x'\''$(id)/instalar-mac.sh' | STREAMZ_API='https://api'\'';id;'\''' bash`,
+    );
+  });
+
+  it("põe STREAMZ_VERSAO do lado do bash quando a versão é válida", () => {
+    expect(comandoDoTerminalMac("https://streamz.chat", API_PADRAO_DO_INSTALADOR, "1.3.18")).toBe(
+      "curl -fsSL 'https://streamz.chat/instalar-mac.sh' | STREAMZ_VERSAO='1.3.18' bash",
+    );
+    expect(comandoDoTerminalMac("http://localhost:3000", "http://localhost:3333", "1.3.18")).toBe(
+      "curl -fsSL 'http://localhost:3000/instalar-mac.sh' | STREAMZ_API='http://localhost:3333' STREAMZ_VERSAO='1.3.18' bash",
+    );
+  });
+
+  it("ignora versão fora do formato no comando do instalador", () => {
+    for (const ruim of ["1.3", "1.3.18; id", "$(id)", "v1.3.18", ""]) {
+      expect(comandoDoTerminalMac("https://streamz.chat", API_PADRAO_DO_INSTALADOR, ruim)).toBe(
+        "curl -fsSL 'https://streamz.chat/instalar-mac.sh' | bash",
+      );
+    }
+  });
+
+  it("comandoDeDownloadMac: com versão, a senha fica fora do comando e vai por stdin", () => {
+    const c = comandoDeDownloadMac("https://api.streamz.chat", "1.3.18");
+    expect(c).not.toContain("\n");
+    expect(c).toContain("read -rs S");
+    expect(c).toContain("--data-binary @-");
+    expect(c).toContain("'https://api.streamz.chat/api/downloads/token'");
+    expect(c).toContain(`"plataforma":"macos","versao":"1.3.18"`);
+    expect(c).toContain('-o ~/Downloads/Streamz-1.3.18.dmg "$U"');
+  });
+
+  it("comandoDeDownloadMac: sem versão, não manda versao e usa Streamz.dmg", () => {
+    const c = comandoDeDownloadMac("https://api.streamz.chat");
+    expect(c).not.toContain("versao");
+    expect(c).toContain('-o ~/Downloads/Streamz.dmg "$U"');
+  });
+
+  it("comandoDeDownloadMac: versão inválida é ignorada", () => {
+    const c = comandoDeDownloadMac("https://api.streamz.chat", "1.3.18; id");
+    expect(c).not.toContain("versao");
+    expect(c).not.toContain("id");
+    expect(c).toContain("Streamz.dmg");
+  });
+
+  it("comandoDeDownloadMac: escapa API não padrão", () => {
+    expect(comandoDeDownloadMac("https://api';id;'")).toContain(
+      String.raw`'https://api'\'';id;'\''/api/downloads/token'`,
     );
   });
 

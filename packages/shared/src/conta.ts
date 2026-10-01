@@ -8,6 +8,7 @@
 import { idSchema } from "./internos";
 
 import { z } from "zod";
+import { usernameSchema } from "./auth";
 import type { AuthTokens } from "./auth";
 import type { PublicUser } from "./dominio";
 
@@ -149,11 +150,9 @@ const emailSchema = z
   .max(MAX_EMAIL_LENGTH, `E-mail acima de ${MAX_EMAIL_LENGTH} caracteres`)
   .email("E-mail inválido");
 
-const usuarioSchema = z
-  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
-  .min(3, "O usuário precisa de ao menos 3 caracteres")
-  .max(32, "O usuário precisa de no máximo 32 caracteres")
-  .regex(/^[a-zA-Z0-9_.-]+$/, "O usuário aceita apenas letras, números, _ . e -");
+// Nome de usuário novo: a regra é uma só e mora em `auth.ts` (`usernameSchema`)
+// — registro aqui e em `registerSchema` não podem aceitar coisas diferentes.
+const usuarioSchema = usernameSchema;
 
 const senhaNovaSchema = z
   .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
@@ -173,10 +172,14 @@ export type ContaRegistroInput = z.infer<typeof contaRegistroSchema>;
 
 /** Login por **e-mail ou usuário** — um campo só, como no Discord. */
 export const contaLoginSchema = z.object({
+  // Sem regra de formato de usuário de propósito: conta criada antes da regra
+  // nova (com maiúscula ou hífen) precisa continuar entrando. A API compara o
+  // usuário em minúsculas (`normalizarUsername`), então a caixa digitada aqui
+  // não importa.
   identificador: z
     .string({ required_error: "obrigatório" })
     .trim()
-    .min(3, "Informe seu e-mail ou usuário")
+    .min(2, "Informe seu e-mail ou usuário")
     .max(MAX_EMAIL_LENGTH),
   password: z.string({ required_error: "obrigatório" }).min(1, "Informe sua senha"),
 });

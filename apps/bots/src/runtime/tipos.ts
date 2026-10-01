@@ -10,7 +10,12 @@
  * Ver `apps/bots/CONTRATO.md` para o passo a passo de acrescentar um bot.
  */
 
-import type { APIEmbed, Client } from "discord.js";
+import type {
+  APIActionRowComponent,
+  APIEmbed,
+  APIComponentInMessageActionRow,
+  Client,
+} from "discord.js";
 
 // ── Comandos ────────────────────────────────────────────────────────────────
 
@@ -61,6 +66,8 @@ export interface OpcaoDeComando {
 export interface RespostaDeComando {
   conteudo?: string;
   embeds?: APIEmbed[];
+  /** Botões e menus (linhas de ação); a API de compat já os aceita em mensagem de bot. */
+  components?: APIActionRowComponent<APIComponentInMessageActionRow>[];
   /**
    * Mensagem efêmera (`flags: 64`): só quem chamou vê.
    *
@@ -173,4 +180,10 @@ export interface Bot {
   permissoesPadrao?: number;
   /** Caminho do PNG do ícone, relativo à raiz de `apps/bots`. */
   icone?: string;
+  /**
+   * Nomes que este bot já teve. O provisionamento os usa para reencontrar a
+   * aplicação existente (a chave é o nome) e o PATCH já a renomeia; sem isso,
+   * renomear criaria uma aplicação nova, com token novo e sem as instalações.
+   */
+  readonly nomesAnteriores?: readonly string[];
 }

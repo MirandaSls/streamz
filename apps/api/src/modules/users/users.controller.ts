@@ -25,14 +25,17 @@ import {
   MAX_CUSTOM_STATUS,
   MAX_DISPLAY_NAME,
   MAX_PRONOUNS,
+  guildLayoutSchema,
   notaDeUsuarioSchema,
+  statusUpdateSchema,
 } from "@streamz/shared";
-import type { CustomStatusDuration, NotaDeUsuarioInput, UserStatus } from "@streamz/shared";
+import type { CustomStatusDuration, GuildLayout, NotaDeUsuarioInput, StatusUpdateInput, UserStatus } from "@streamz/shared";
 import { UsersService } from "./users.service";
+import { GuildLayoutService } from "./guild-layout.service";
 import { cabecalhosDeImagemPublica } from "./imagem-de-perfil";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
-import { UPLOAD_THROTTLE } from "../../common/throttle";
+import { GUILD_LAYOUT_THROTTLE, UPLOAD_THROTTLE } from "../../common/throttle";
 import { zodBody } from "../../common/zod.pipe";
 
 class ProfileDto {
@@ -75,23 +78,34 @@ class CustomStatusDto {
   duration!: CustomStatusDuration;
 }
 
-const STATUSES: UserStatus[] = ["ONLINE", "IDLE", "DND", "OFFLINE"];
-
-class StatusDto {
-  // null = automático; OFFLINE = invisível
-  @IsOptional()
-  @IsIn(STATUSES)
-  manualStatus!: UserStatus | null;
-}
-
 @Controller("users")
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly guildLayout: GuildLayoutService,
+  ) {}
 
   @UseGuards(JwtGuard)
   @Get("me")
   me(@CurrentUser() user: JwtPayload) {
     return this.users.getPublic(user.sub);
+  }
+
+  /** Pastas e ordem da barra de servidores, já reconciliada com meus servidores. */
+  @UseGuards(JwtGuard)
+  @Get("me/guild-layout")
+  meuLayoutDeServidores(@CurrentUser() user: JwtPayload) {
+    return this.guildLayout.obter(user.sub);
+  }
+
+  @GUILD_LAYOUT_THROTTLE
+  @UseGuards(JwtGuard)
+  @Put("me/guild-layout")
+  salvarLayoutDeServidores(
+    @CurrentUser() user: JwtPayload,
+    @Body(zodBody(guildLayoutSchema)) corpo: GuildLayout,
+  ) {
+    return this.guildLayout.salvar(user.sub, corpo);
   }
 
   @UseGuards(JwtGuard)
@@ -194,8 +208,11 @@ export class UsersController {
 
   @UseGuards(JwtGuard)
   @Patch("me/status")
-  updateStatus(@CurrentUser() user: JwtPayload, @Body() dto: StatusDto) {
-    return this.users.updateStatus(user.sub, dto.manualStatus ?? null);
+  updateStatus(
+    @CurrentUser() user: JwtPayload,
+    @Body(zodBody(statusUpdateSchema)) dto: StatusUpdateInput,
+  ) {
+    return this.users.updateStatus(user.sub, dto.manualStatus, dto.duration);
   }
 
   @UseGuards(JwtGuard)

@@ -8,6 +8,7 @@ import {
   TETO_DE_TILES_ANIMADOS,
   TRANSICAO_DE_REFLOW,
   alturaDoDestaque,
+  proporcaoDaTela,
   distribuir,
   estiloDoTile,
   larguraDaTira,
@@ -290,5 +291,23 @@ describe("estiloDoTile", () => {
 describe("TETO_DE_TILES_ANIMADOS", () => {
   it("é o teto do Element Call", () => {
     expect(TETO_DE_TILES_ANIMADOS).toBe(50);
+  });
+});
+
+describe("proporcaoDaTela", () => {
+  it("usa a proporção real da janela", () => {
+    expect(proporcaoDaTela({ width: 1000, height: 1000 })).toBe(1);
+  });
+  it("volta a 16:9 sem dimensões", () => {
+    expect(proporcaoDaTela(undefined)).toBeCloseTo(16 / 9);
+    expect(proporcaoDaTela({ width: 0, height: 100 })).toBeCloseTo(16 / 9);
+  });
+  it("limita janelas absurdas", () => {
+    expect(proporcaoDaTela({ width: 5000, height: 100 })).toBe(3);
+    expect(proporcaoDaTela({ width: 100, height: 5000 })).toBe(0.5);
+  });
+  it("destaque 4:3 ocupa o palco sem tarja", () => {
+    const a = melhorArranjo(1, 1000, 600, GAP, proporcaoDaTela({ width: 800, height: 600 }));
+    expect(a.largura / a.altura).toBeCloseTo(4 / 3, 1);
   });
 });

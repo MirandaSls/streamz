@@ -107,7 +107,7 @@ services:
       start_period: 60s
       retries: 10
 
-  # ── j-bots ── Streamz Música ───────────────────────────────────────────────
+  # ── j-bots ── Fone ───────────────────────────────────────────────
   # **Um container por bot**, todos com a mesma imagem; `BOTS` diz qual roda.
   #
   # Por que um por bot e não um processo com todos: um bot que estoura derruba
@@ -136,6 +136,8 @@ services:
       # vírgula. Sem nenhum, o YouTube não toca a partir deste servidor.
       # Gerar com `scripts/gerar-token-do-youtube.sh`.
       YOUTUBE_REFRESH_TOKENS: ${YOUTUBE_REFRESH_TOKENS:-}
+      # Base pública da web: os botões do bot linkam para ela.
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
     volumes:
@@ -147,7 +149,7 @@ services:
       - lavalink
     mem_limit: 256m
 
-  # ── j-bots ── Streamz Boas-vindas ──────────────────────────────────────────
+  # ── j-bots ── Porteiro ──────────────────────────────────────────
   # Recebe quem chega no servidor. Não precisa de Lavalink nem da ponte de voz:
   # só do gateway da API. Depende só de `api`.
   #   docker compose --profile bots up -d bot-boas-vindas
@@ -181,7 +183,7 @@ services:
       - api
     mem_limit: 192m
 
-  # ── j-bots ── Streamz Moderação ────────────────────────────────────────────
+  # ── j-bots ── Guarda ────────────────────────────────────────────
   # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
   # para dois PRs de bots diferentes não disputarem as mesmas linhas.
   #
@@ -214,7 +216,7 @@ services:
       - api
     mem_limit: 256m
 
-  # ── j-bots ── Streamz Níveis ───────────────────────────────────────────────
+  # ── j-bots ── Degrau ───────────────────────────────────────────────
   # XP por mensagem, ranking e cargos por nível. Entrou no fim do bloco de bots,
   # que é onde o `CONTRATO.md` manda pôr um bot novo (o `bot-cargos` entrou
   # depois e é quem está no fim agora).
@@ -261,7 +263,7 @@ services:
       - api
     mem_limit: 256m
 
-  # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
+  # ── j-bots ── CrachÃ¡ ───────────────────────────────────────────────
   # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
   # para dois PRs de bots diferentes não disputarem as mesmas linhas.
   #
@@ -393,11 +395,11 @@ volumes:
   lavalink-plugins:
   # A configuração de boas-vindas de cada servidor (um JSON por servidor).
   boas-vindas-dados:
-  # Avisos e configuração por servidor do Streamz Moderação (um JSON por
+  # Avisos e configuração por servidor do Guarda (um JSON por
   # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
   bot-moderacao-dados:
-  # O XP de cada servidor (`<guildId>.json`), do Streamz Níveis. Montado em
+  # O XP de cada servidor (`<guildId>.json`), do Degrau. Montado em
   # `/dados`, como o de todo bot com estado.
   niveis-dados:
-  # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
+  # Os painéis do CrachÃ¡, um JSON por servidor. Pequeno e só dele.
   cargos-dados:

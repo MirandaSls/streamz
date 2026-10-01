@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o ícone do bot **Streamz Moderação** — um escudo na paleta do repo.
+"""Gera o ícone do bot **Guarda** — um escudo na paleta do repo.
 
 Arte própria, desenhada aqui com primitivas do Pillow: nada copiado de
 terceiros (os bots de moderação do Discord são serviços fechados de outras

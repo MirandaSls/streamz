@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AuthTokens, PublicUser } from "@streamz/shared";
 import { api } from "@/lib/api";
+import { useGuildLayout } from "@/stores/guild-layout";
 import { useAdmin } from "@/stores/admin";
 import { useConta } from "@/stores/conta";
 import { disconnectSocket } from "@/lib/socket";
@@ -28,11 +29,14 @@ export const useAuth = create<AuthState>((set) => ({
     // o socket é um singleton autenticado no handshake: sobrevivendo ao login,
     // a nova sessão herdaria a conexão do usuário anterior na mesma aba
     disconnectSocket();
-    salvarTokens(tokens);
     // todo login entra no cofre e vira a conta ativa — inclusive o da tela de
     // entrada. É o que faz "Gerenciar contas" já ter a conta certa na lista sem
     // ninguém precisar "adicionar" a que acabou de entrar.
+    // Tem de vir ANTES de `salvarTokens`: ele grava o refresh em `cofre.ativa`,
+    // que só passa a ser a conta nova depois de `guardarConta`. Invertido, a
+    // conta anterior ficaria com o refresh da nova e expiraria em minutos.
     mudarCofre((cofre) => guardarConta(cofre, user, tokens.refreshToken));
+    salvarTokens(tokens);
     salvarUsuarioGuardado(user);
     set({ user });
   },
@@ -68,6 +72,8 @@ export const useAuth = create<AuthState>((set) => ({
     // a conta (e-mail, 2FA) é da sessão que acabou: entrar com outra na mesma
     // aba não pode herdar a anterior
     useConta.getState().clear();
+    // pastas de servidor são da conta, não do aparelho
+    useGuildLayout.getState().limpar();
     set({ user: null });
   },
 }));

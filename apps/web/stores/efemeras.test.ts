@@ -24,6 +24,7 @@ const BOT: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
 };
 
 function efemera(extra: Partial<Message> = {}): Message {

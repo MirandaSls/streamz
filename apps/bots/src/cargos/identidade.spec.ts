@@ -9,8 +9,9 @@ import { MODOS } from "./modos";
  * descrição de 301 caracteres já custou uma bancada inteira ao bot de música;
  * aqui custa 5 ms.
  */
-describe("identidade do Streamz Cargos", () => {
+describe("identidade do Crachá", () => {
   it("o nome cabe no limite da API", () => {
+    expect(bot.nomesAnteriores).toEqual(["Streamz Cargos"]);
     expect(bot.nome.length).toBeGreaterThanOrEqual(2);
     expect(bot.nome.length).toBeLessThanOrEqual(MAX_APP_NAME);
   });
@@ -20,7 +21,7 @@ describe("identidade do Streamz Cargos", () => {
   });
 
   it("o nome é do Streamz, não de bot de terceiro", () => {
-    expect(bot.nome).toMatch(/^Streamz /);
+    expect(bot.nome).toBe("Crachá");
     expect(`${bot.nome} ${bot.descricao}`.toLowerCase()).not.toMatch(
       /carl-?bot|yagpdb|mee6|dyno|reaction ?roles ?bot/,
     );

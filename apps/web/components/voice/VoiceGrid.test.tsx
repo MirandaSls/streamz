@@ -42,6 +42,8 @@ const falsas = vi.hoisted(() => {
     tick: 0,
     falando: new Set<string>(),
     focado: null as string | null,
+    membrosOcultos: false,
+    alternarMembrosOcultos: vi.fn(),
     focoAutomatico: true,
     assistindo: new Set<string>(),
     volumes: {} as Record<string, number>,
@@ -391,6 +393,35 @@ describe("o palco cai para a grade quando o foco não cabe", () => {
     // os três continuam na grade: a pessoa focada, a outra e a transmissão
     for (const chave of ["ana", "bia", "ana:sid1"]) {
       expect(html).toContain(`data-voice-tile="${chave}"`);
+    }
+  });
+});
+
+describe("sozinho na call, clicar no próprio card entra em foco", () => {
+  it("destaque grande, tira com o próprio tile em miniatura e a pílula de ocultar", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana")] };
+    falsas.sala.participantes = [participante("ana", [])];
+    falsas.voz.focado = "ana";
+
+    const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" guildId="guild1" />);
+
+    // o mesmo tile aparece duas vezes: no destaque e na miniatura da tira
+    expect(html.split('data-voice-tile="ana"').length - 1).toBe(2);
+    expect(html).toContain('data-miniatura="ana"');
+    expect(html).toContain('aria-label="Ocultar membros"');
+  });
+
+  it("com os membros ocultos a tira some e a pílula vira Mostrar membros", () => {
+    falsas.voz.states = { [CANAL]: [estado("ana", "Ana")] };
+    falsas.sala.participantes = [participante("ana", [])];
+    falsas.voz.focado = "ana";
+    falsas.voz.membrosOcultos = true;
+    try {
+      const html = renderToStaticMarkup(<VoiceGrid channelId={CANAL} nomeDoCanal="Geral" guildId="guild1" />);
+      expect(html).not.toContain("data-miniatura");
+      expect(html).toContain('aria-label="Mostrar membros"');
+    } finally {
+      falsas.voz.membrosOcultos = false;
     }
   });
 });

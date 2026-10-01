@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Guarda, moderação e segurança">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b0a12"/>
+      <stop offset="0.5" stop-color="#dc2626"/>
+      <stop offset="1" stop-color="#fb7185"/>
+    </linearGradient>
+    <path id="s" d="M0 -50 L40 -34 V0 C40 24 22 42 0 54 C-22 42 -40 24 -40 0 V-34 Z"/>
+  </defs>
+  <rect width="1200" height="400" fill="url(#bg)"/>
+  <!-- escudos translúcidos em fileira -->
+  <g fill="#fff" fill-opacity="0.15">
+    <use href="#s" transform="translate(620 90) scale(1.2)"/>
+    <use href="#s" transform="translate(740 90) scale(1.2)"/>
+    <use href="#s" transform="translate(860 90) scale(1.2)"/>
+    <use href="#s" transform="translate(980 90) scale(1.2)"/>
+    <use href="#s" transform="translate(1100 90) scale(1.2)"/>
+  </g>
+  <g fill="#fff" fill-opacity="0.24">
+    <use href="#s" transform="translate(680 240) scale(2.1)"/>
+    <use href="#s" transform="translate(900 240) scale(2.1)"/>
+    <use href="#s" transform="translate(1120 240) scale(2.1)"/>
+  </g>
+  <g fill="#fecdd3" fill-opacity="0.2">
+    <use href="#s" transform="translate(790 340) scale(0.9)"/>
+    <use href="#s" transform="translate(1010 340) scale(0.9)"/>
+  </g>
+  <text x="70" y="230" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="150" font-weight="700" fill="#fff">Guarda</text>
+  <text x="76" y="290" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="36" fill="#ffe4e8" fill-opacity="0.92">moderação e segurança</text>
+</svg>

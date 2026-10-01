@@ -25,7 +25,7 @@ import { fundoDaLinha } from "@/components/chat/mensagem/fundo";
 import PilulaDeReacao from "@/components/chat/mensagem/PilulaDeReacao";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { horaCompleta } from "@/lib/format";
+import { hora, horaCompleta } from "@/lib/format";
 import { goToMessage } from "@/stores/messages-navigate";
 import { useAuthorColor } from "@/stores/permissions";
 import { useLiveUser } from "@/stores/presence";
@@ -249,12 +249,14 @@ export default function SystemMessageItem({
         {/* mesmo cinza do resto da frase: dois níveis de cinza na mesma linha
             faziam a hora parecer outro tipo de informação. No compacto toda
             linha mostra a hora, como na `MessageItem` compacta. */}
+        {/* Paridade Discord: só a hora curta ao lado do texto; a data completa fica no title. */}
         <span
+          title={horaCompleta(message.createdAt)}
           className={`shrink-0 text-text-xs text-text-muted ${
             grouped && !compacto ? "opacity-0 group-hover:opacity-100" : ""
           }`}
         >
-          {horaCompleta(message.createdAt)}
+          {hora(message.createdAt)}
         </span>
       </span>
 

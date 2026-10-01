@@ -16,6 +16,7 @@ import {
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import HeaderIcon from "@/components/chat/HeaderIcon";
 import InboxPopover from "@/components/chat/InboxPopover";
+import AtivoAgora from "@/components/friends/AtivoAgora";
 import AddFriend from "@/components/friends/AddFriend";
 import EstadoVazio from "@/components/friends/EstadoVazio";
 import FriendRow, { FriendRowEsqueleto, RowAction } from "@/components/friends/FriendRow";
@@ -373,7 +374,9 @@ export default function FriendsPage() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+      {/* corpo + painel "Ativo agora" lado a lado; o painel mora abaixo do cabeçalho, como no Discord */}
+      <div className="flex min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-6">
         {loading && !loaded && (
           <div role="list" aria-label="Carregando amigos">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -493,6 +496,8 @@ export default function FriendsPage() {
               </div>
             </>
           ))}
+      </div>
+      <AtivoAgora />
       </div>
     </main>
   );

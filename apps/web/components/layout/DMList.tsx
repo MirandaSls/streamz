@@ -687,7 +687,7 @@ function LinhaDeConversa({
       });
       items.push({
         label: "Alterar ícone",
-        onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
+        onSelect: () => ui.openModal({ kind: "editGroup", channelId: dm.id }),
       });
       items.push({ label: "Fechar mensagem direta", onSelect: () => void hide(dm.id) });
       items.push({ separator: true });
@@ -758,7 +758,7 @@ function LinhaDeConversa({
             surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"}
           />
         ) : (
-          <GroupAvatar iconUrl={dm.iconUrl} size="md" />
+          <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="md" />
         )}
         <span className="min-w-0">
           <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>

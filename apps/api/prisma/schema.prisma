@@ -69,6 +69,8 @@ model User {
   // status escolhido pelo usuário (Ausente, Não perturbe, Invisível=OFFLINE);
   // null = automático. Só vale enquanto ele está conectado.
   manualStatus          UserStatus?
+  /// quando o status manual expira; null = para sempre
+  manualStatusExpiresAt DateTime?
   createdAt             DateTime    @default(now())
   // ── d-social ──
   // Status personalizado: texto + emoji + quando deixa de valer (null = nunca).
@@ -112,6 +114,8 @@ model User {
   blocksMade          Block[]         @relation("Blocker")
   blocksReceived      Block[]         @relation("Blocked")
   hiddenChannels      DMHidden[]
+  // ── pastas de servidores ──
+  guildLayout         UserGuildLayout?
   // ── g-emojis-midia ──
   customEmojis     CustomEmoji[]   @relation("EmojiCreator")
   createdStickers  Sticker[]       @relation("StickerCreator")
@@ -786,6 +790,10 @@ model Friendship {
   pairKey     String           @unique
   createdAt   DateTime         @default(now())
   acceptedAt  DateTime?
+  // Texto de apresentação que acompanha o pedido ("sou o fulano do servidor X").
+  // O teto de 120 caracteres mora no contrato (`friendRequestSchema`), não
+  // aqui: a coluna é TEXT para a regra poder mudar sem migration.
+  mensagem    String?
 
   requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
   addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
@@ -1459,4 +1467,15 @@ model EphemeralMessage {
 
   @@index([expiresAt])
   @@index([interactionId, original])
+}
+
+/// Pastas e ordem da barra de servidores, por usuário. Um documento inteiro
+/// (`GuildLayout` de @streamz/shared) trocado de uma vez: Json e não tabelas
+/// de pasta/posição porque o último a gravar vence e ninguém consulta por item.
+model UserGuildLayout {
+  userId    String   @id
+  layout    Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

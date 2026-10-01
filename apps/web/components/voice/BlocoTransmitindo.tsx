@@ -60,7 +60,7 @@ function IconeDaOrigem() {
           )}
         </span>
       ) : dm && isGroupChannel(dm) ? (
-        <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} size="md" />
+        <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} seed={dm.id} size="md" />
       ) : dm?.others[0] ? (
         <Avatar user={dm.others[0]} size="md" />
       ) : (

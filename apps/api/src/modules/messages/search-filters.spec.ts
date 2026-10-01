@@ -207,6 +207,7 @@ const ana: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
 };
 const bia: PublicUser = { ...ana, id: "u-bia", username: "bia" };
 

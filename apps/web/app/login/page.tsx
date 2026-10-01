@@ -27,6 +27,12 @@ import { useAuth } from "@/stores/auth";
  * senha ganha só a borda de erro. O `<p sr-only role="alert">` que duplicava
  * o anúncio saiu: o erro do `Campo` já tem `role="alert"` embutido.
  */
+/** E-mail segue como digitado (sem trim extra além das pontas); usuário vai em minúsculas. */
+function normalizarIdentificador(v: string): string {
+  const t = v.trim();
+  return t.includes("@") ? t : t.toLowerCase();
+}
+
 export default function LoginPage() {
   // `useSearchParams` exige Suspense no App Router (a página é pré-renderizada)
   return (
@@ -59,7 +65,7 @@ function LoginForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
-    const invalido = validarLogin(identificador.trim(), password);
+    const invalido = validarLogin(normalizarIdentificador(identificador), password);
     if (invalido) {
       setError(invalido);
       return;
@@ -67,7 +73,7 @@ function LoginForm() {
     setError(null);
     setLoading(true);
     try {
-      const resultado = await api.login(identificador.trim(), password);
+      const resultado = await api.login(normalizarIdentificador(identificador), password);
       if (exigeMfa(resultado)) {
         setTicket(resultado.ticket);
         setPassword("");
@@ -208,7 +214,7 @@ function LoginForm() {
             name="identificador"
             autoComplete="username"
             value={identificador}
-            onChange={(e) => setIdentificador(e.target.value)}
+            onChange={(e) => setIdentificador(e.target.value.includes("@") ? e.target.value : e.target.value.toLowerCase())}
             disabled={loading}
             erro={!!error}
             autoFocus

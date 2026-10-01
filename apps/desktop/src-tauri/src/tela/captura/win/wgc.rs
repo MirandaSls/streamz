@@ -41,9 +41,11 @@ use super::super::{copiar_sem_padding, intervalo_do_fps, Alvo, Capturador, Erro,
 use super::{hmonitor_de, hwnd_de};
 
 /// Quanto uma miniatura espera pelo primeiro quadro. O WGC entrega o primeiro
-/// em um ou dois vsyncs; meio segundo é folga para máquina lenta sem travar a
-/// grade quando uma janela não repinta (conteúdo protegido devolve nada).
-const ESPERA_DA_MINIATURA: Duration = Duration::from_millis(500);
+/// em um ou dois vsyncs (~33 ms a 60 Hz); 150 ms dá folga e, como a web refaz a
+/// listagem a cada 3 s, uma janela lenta é só adiada para a rodada seguinte —
+/// o que não pode é travar a grade esperando uma janela que não repinta
+/// (conteúdo protegido devolve nada).
+const ESPERA_DA_MINIATURA: Duration = Duration::from_millis(150);
 
 /// A propriedade `IsBorderRequired` existe nesta versão do Windows? É o que
 /// separa "WGC sem borda" de "WGC com borda amarela", e portanto Win 11 de

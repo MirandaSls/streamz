@@ -6,7 +6,9 @@
 //! de aplicativo antigo, sem canal alfa, com máscara, ausente — e nenhuma dessas
 //! variações justifica derrubar a listagem inteira de fontes.
 
+use std::collections::HashMap;
 use std::ffi::c_void;
+use std::sync::{Mutex, OnceLock};
 
 use base64::Engine as _;
 use image::codecs::png::PngEncoder;
@@ -19,8 +21,31 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::Shell::ExtractIconExW;
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
+/// Cache por caminho do `.exe`. A web refaz a listagem de fontes a cada 3 s e
+/// extrair + codificar PNG a cada rodada é trabalho jogado fora: o ícone de um
+/// executável não muda enquanto o app roda. Guarda também o `None` — quem não
+/// tem ícone legível continuaria falhando (e pagando a extração) toda vez.
+static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+
 /// Ícone grande do executável em `caminho`, pronto para `<img src>`.
 pub fn do_executavel(caminho: &str) -> Option<String> {
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(guardado) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(caminho) {
+        return guardado.clone();
+    }
+
+    // Extrai sem segurar o lock: é chamada ao Win32 lenta e travaria as outras
+    // threads. Duas threads no mesmo caminho podem extrair ambas; o resultado é
+    // idêntico e a última escrita vale.
+    let resultado = extrair(caminho);
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(caminho.to_string(), resultado.clone());
+    resultado
+}
+
+fn extrair(caminho: &str) -> Option<String> {
     let mut wide: Vec<u16> = caminho.encode_utf16().collect();
     wide.push(0);
 

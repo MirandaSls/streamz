@@ -119,7 +119,8 @@ import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import {
   NINGUEM,
   comFalante,
-  falantesDeIdentidades,
+  donoDoParticipante,
+  falantesDeParticipantes,
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
@@ -412,6 +413,12 @@ interface VoiceStoreState {
   // ── foco/tela cheia da grade ──
   focado: string | null;
   /**
+   * "Ocultar membros" do modo foco: esconde a tira de miniaturas e deixa o
+   * destaque ocupar o palco inteiro. Em memória de propósito — é um gesto do
+   * momento, não preferência; sair da chamada devolve a tira.
+   */
+  membrosOcultos: boolean;
+  /**
    * Ninguém escolheu o palco ainda, então uma transmissão que comece pode
    * assumi-lo sozinha. Escolher (ou desfazer) o foco à mão desliga isso — quem
    * saiu de uma transmissão não quer ser jogado de volta nela.
@@ -514,6 +521,7 @@ interface VoiceStoreState {
    * tem dois tiles do mesmo dono.
    */
   setFocado: (chave: string | null) => void;
+  alternarMembrosOcultos: () => void;
   /** Foco sem gesto do usuário (transmissão que começa): não desliga o automático. */
   focarAutomaticamente: (chave: string) => void;
   setTelaCheia: (ativo: boolean) => void;
@@ -935,6 +943,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       telaComSom: false,
       audioDaTelaMudo: false,
       focado: null,
+      membrosOcultos: false,
       focoAutomatico: true,
       telaCheia: false,
       assistindo: new Set(),
@@ -970,6 +979,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     silenciados: carregarSilenciados(),
     telaSilenciada: {},
     focado: null,
+    membrosOcultos: false,
     focoAutomatico: true,
     telaCheia: false,
     assistindo: new Set<string>(),
@@ -1219,6 +1229,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         telaComSom: false,
         audioDaTelaMudo: false,
         focado: null,
+      membrosOcultos: false,
         focoAutomatico: true,
         assistindo: new Set<string>(),
         previa: null,
@@ -1808,6 +1819,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false }));
       aplicarAssinaturasDeTela();
     },
+    alternarMembrosOcultos: () => set((s) => ({ membrosOcultos: !s.membrosOcultos })),
     focarAutomaticamente: (focado) => {
       set({ focado });
       aplicarAssinaturasDeTela();
@@ -2394,13 +2406,13 @@ async function entrarNaSala(
     const eu = donoDaIdentidade(room.localParticipant.identity ?? "");
     // as minhas identidades ficam de fora: quem decide o meu anel é o detector
     // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
-    const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
-    const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    const outros = room.activeSpeakers.filter((p) => donoDoParticipante(p) !== eu);
+    const proximo = falantesDeParticipantes(outros);
     // reforço dos avisos por data message (ver `TOPICO_FALA`): quem saiu no
     // meio da frase não manda um "parei de falar", então tira daqui quem já
     // não está mais na sala antes de somar — senão o anel dele ficava preso
     const presentes = new Set(
-      Array.from(room.remoteParticipants.values()).map((p) => donoDaIdentidade(p.identity)),
+      Array.from(room.remoteParticipants.values()).map((p) => donoDoParticipante(p)),
     );
     for (const dono of falandoPorAviso) {
       if (presentes.has(dono)) proximo.add(dono);
@@ -2419,7 +2431,7 @@ async function entrarNaSala(
       // explícito, embora `recomporFalantes` já limpe quem não está mais na
       // sala: sem esperar o próximo recálculo para descartar o aviso de quem
       // acabou de sair
-      falandoPorAviso.delete(donoDaIdentidade(participant.identity));
+      falandoPorAviso.delete(donoDoParticipante(participant));
       recomporFalantes();
       rerender();
     })
@@ -2839,12 +2851,9 @@ export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
     // provavelmente é inerte (o Chrome só a aplica onde há suporte do sistema),
     // mas uma variável a menos no tabuleiro custa uma linha
     voiceIsolation: false,
-    // sem isto o navegador escolhe a taxa/canais que quiser (em alguns aparelhos
-    // 16/44,1 kHz ou estéreo), e o RNNoise roda a 48 kHz mono: pedir o mesmo
-    // evita reamostragem e canal duplicado. `ideal`, nunca `exact`: aparelho que
-    // não suporta cairia em `OverconstrainedError` e ficaria sem microfone
-    sampleRate: { ideal: 48000 },
-    channelCount: { ideal: 1 },
+    // NÃO se pede taxa nem canais: no WebKit do macOS um `ideal` de taxa/canal
+    // deixou a captura muda entre a 1.3.16 e a 1.3.17. A cadeia do RNNoise já
+    // reamostra pelo AudioContext, então não "conserte" isto de volta.
   };
 }
 

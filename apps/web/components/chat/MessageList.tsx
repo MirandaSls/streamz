@@ -317,8 +317,12 @@ export default function MessageList({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`scroller-auto scroller-fade flex-1 select-text overflow-y-auto ${className}`}
+        className={`scroller-auto scroller-fade flex flex-1 select-text flex-col overflow-y-auto ${className}`}
       >
+        {/* `mt-auto` num pai flex: conteúdo mais baixo que a área desce para o
+            fundo (como no Discord, colado ao composer); se passar da altura a
+            margem some e a rolagem é a de sempre — `justify-end` cortaria o topo. */}
+        <div className="mt-auto shrink-0">
         {loadingOlderError ? (
           /* `.messagesErrorBar` do Discord (mesmo arquivo, extends `.barBase`):
              bg `--notice-background-critical`, borda `--border-feedback-critical`,
@@ -454,6 +458,7 @@ export default function MessageList({
             </div>
           );
         })}
+        </div>
       </div>
 
       {/*

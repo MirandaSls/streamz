@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o ícone do bot **Streamz Cargos** — uma etiqueta na paleta do repo.
+"""Gera o ícone do bot **CrachÃ¡** — uma etiqueta na paleta do repo.
 
 Arte própria, desenhada aqui com primitivas do Pillow: nada copiado de
 terceiros (e, em especial, nada da arte de nenhum bot de *reaction roles* do

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A prova do **Streamz Níveis** (`apps/bots/src/niveis`) ponta a ponta, na
+# A prova do **Degrau** (`apps/bots/src/niveis`) ponta a ponta, na
 # bancada descartável. Irmã de `prova-botmus.sh`, mesmo desenho.
 #
 #   ./prova-botniv.sh [sufixo] [porta]       # padrão: botniv 3431
@@ -116,7 +116,7 @@ APP="$(docker run --rm --network "$REDE" -e T="$TOKEN_DO_ADMIN" node:22 node -e 
   })
     .then((r) => r.json())
     .then((p) => {
-      const a = (p.itens || []).find((x) => x.name === 'Streamz Níveis');
+      const a = (p.itens || []).find((x) => x.name === 'Degrau');
       if (!a) throw new Error('o aplicativo não está no diretório');
       process.stdout.write(JSON.stringify({ id: a.id, snowflake: a.snowflake, name: a.name, botUserId: a.botUser.id }));
     });

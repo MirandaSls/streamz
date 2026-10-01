@@ -47,10 +47,16 @@ describe("validarRegistro", () => {
     ).toBeNull();
   });
 
+  it("normaliza maiúscula no usuário e recusa pontos consecutivos", () => {
+    const base = { email: "ana@exemplo.com", password: SENHA_BOA };
+    expect(validarRegistro({ ...base, username: "Ana.Souza" })).toBeNull();
+    expect(validarRegistro({ ...base, username: "ana..souza" })).not.toBeNull();
+  });
+
   it("recusa e-mail inválido, usuário fora do formato e senha curta", () => {
     const base = { email: "ana@exemplo.com", username: "ana.souza", password: SENHA_BOA };
     expect(validarRegistro({ ...base, email: "ana(at)exemplo" })).toContain("E-mail");
-    expect(validarRegistro({ ...base, username: "ab" })).toContain("usuário");
+    expect(validarRegistro({ ...base, username: "a" })).toContain("usuário");
     expect(validarRegistro({ ...base, username: "ana souza" })).toContain("apenas letras");
     expect(validarRegistro({ ...base, password: "12345" })).toContain("caracteres");
   });
@@ -63,7 +69,7 @@ describe("validarLogin", () => {
   });
 
   it("recusa identificador curto e senha vazia", () => {
-    expect(validarLogin("an", "qualquer")).toContain("e-mail ou usuário");
+    expect(validarLogin("a", "qualquer")).toContain("e-mail ou usuário");
     expect(validarLogin("ana.souza", "")).toContain("senha");
   });
 });

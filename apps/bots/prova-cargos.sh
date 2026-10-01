@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A prova do **Streamz Cargos** (`apps/bots/src/cargos`) ponta a ponta, na
+# A prova do **CrachÃ¡** (`apps/bots/src/cargos`) ponta a ponta, na
 # bancada descartável. Irmã da `apps/api/test/discord-compat/prova-botmus.sh`,
 # com o mesmo desenho e o prefixo de contêiner trocado.
 #
@@ -113,7 +113,7 @@ APP="$(docker run --rm --network "$REDE" -e T="$TOKEN_DO_ADMIN" node:22 node -e 
   })
     .then((r) => r.json())
     .then((p) => {
-      const a = (p.itens || []).find((x) => x.name === 'Streamz Cargos');
+      const a = (p.itens || []).find((x) => x.name === 'CrachÃ¡');
       if (!a) throw new Error('o aplicativo não está no diretório');
       process.stdout.write(JSON.stringify({ id: a.id, snowflake: a.snowflake, name: a.name, botUserId: a.botUser.id }));
     });

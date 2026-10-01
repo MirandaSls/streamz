@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
-import { IsString, Length } from "class-validator";
+import { IsOptional, IsString, Length, MaxLength } from "class-validator";
 import {
   apelidoDeAmigoSchema,
   ignorarUsuarioSchema,
+  MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
   type ApelidoDeAmigoInput,
   type IgnorarUsuarioInput,
 } from "@streamz/shared";
@@ -16,6 +17,14 @@ class FriendRequestDto {
   @IsString()
   @Length(3, 32)
   username!: string;
+
+  /** Apresentação que vai para a conversa quando o pedido vira amizade. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_FRIEND_REQUEST_MESSAGE_LENGTH, {
+    message: `Mensagem acima de ${MAX_FRIEND_REQUEST_MESSAGE_LENGTH} caracteres`,
+  })
+  mensagem?: string;
 }
 
 class BlockDto {
@@ -43,7 +52,7 @@ export class FriendsController {
   @FRIEND_REQUEST_THROTTLE
   @Post("requests")
   request(@CurrentUser() user: JwtPayload, @Body() dto: FriendRequestDto) {
-    return this.friends.request(user.sub, dto.username);
+    return this.friends.request(user.sub, dto.username, dto.mensagem);
   }
 
   @Post("requests/:id/accept")

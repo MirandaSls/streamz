@@ -106,6 +106,12 @@ describe("actionForEvent", () => {
     expect(actionForEvent(tecla("-", { ctrl: true }))).toBe("zoomMenos");
   });
 
+  it("resolve Ctrl+R (e Cmd+R) para recarregar, sem colidir com Ctrl+Shift+R", () => {
+    expect(actionForEvent(tecla("r", { ctrl: true }))).toBe("recarregar");
+    expect(actionForEvent(tecla("r", { meta: true }))).toBe("recarregar");
+    expect(actionForEvent(tecla("R", { ctrl: true, shift: true }))).toBeNull();
+  });
+
   it("devolve null para tecla solta", () => {
     expect(actionForEvent(tecla("a"))).toBeNull();
   });

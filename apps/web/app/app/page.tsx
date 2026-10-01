@@ -12,6 +12,7 @@ import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import UserFooter from "@/components/layout/UserFooter";
 import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
+import AvisoDeVersao from "@/components/desktop/AvisoDeVersao";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
@@ -339,6 +340,8 @@ export default function AppPage() {
       <ProfilePopoverHost />
       <Toasts />
       <AvisoDoWebView2 />
+      {/* client.outdated: faixa dispensável (aviso) ou tela que cobre o app (bloqueado) */}
+      <AvisoDeVersao />
       {/* f-desktop: só existe dentro do Tauri; desconta a própria altura no
           <html> (ver globals.css) e traz o aviso de atualização */}
       <BarraDeTitulo />

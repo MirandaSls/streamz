@@ -15,7 +15,7 @@ import { podeMexerNoCargo } from "./hierarquia";
 import { decidirAoDesreagir, decidirAoReagir } from "./modos";
 
 /**
- * O serviço do **Streamz Cargos**: o que acontece quando alguém reage.
+ * O serviço do **Crachá**: o que acontece quando alguém reage.
  *
  * ## Por que `Events.Raw` e não `messageReactionAdd`
  *

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LarguraDaFileira, larguraDoCentro } from "@/components/voice/compactacao-da-barra";
+import { janelaDe } from "@/lib/outra-janela";
 
 /** `gap-4` entre as colunas da grade. */
 const GAP_PX = 16;
@@ -127,7 +128,8 @@ export default function FileiraDeControles({
         return proximo;
       });
 
-    const ro = new ResizeObserver(medir);
+    // o da janela da fileira: na solta da chamada, o da principal não mede
+    const ro = new (janelaDe(raizEl).ResizeObserver)(medir);
     alvos.forEach(([el]) => ro.observe(el));
     medir();
     return () => ro.disconnect();

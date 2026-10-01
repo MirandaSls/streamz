@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A prova do **Streamz Moderação** (`apps/bots/src/moderacao`), ponta a ponta,
+# A prova do **Guarda** (`apps/bots/src/moderacao`), ponta a ponta,
 # na bancada descartável.
 #
 #   ./prova-botmod.sh [sufixo] [porta]       # padrão: botmod 3451
@@ -116,7 +116,7 @@ APP="$(docker run --rm --network "$REDE" -e T="$TOKEN_DO_ADMIN" node:22 node -e 
   })
     .then((r) => r.json())
     .then((p) => {
-      const a = (p.itens || []).find((x) => x.name === 'Streamz Moderação');
+      const a = (p.itens || []).find((x) => x.name === 'Guarda');
       if (!a) throw new Error('o aplicativo não está no diretório');
       process.stdout.write(JSON.stringify({ id: a.id, snowflake: a.snowflake, name: a.name, botUserId: a.botUser.id }));
     });

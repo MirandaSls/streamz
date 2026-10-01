@@ -3,7 +3,7 @@
  * docs/referencias-discord/tokens/variaveis-resolvidas.json (Discord, 2026-09-11).
  * NÃO EDITE À MÃO: mude o gerador e rode de novo. ADR-0009.
  *
- * Só os tokens que o apps/web usa (248 de 613).
+ * Só os tokens que o apps/web usa (251 de 642).
  * Token novo no código (classe ou var()) não existe até rodar o gerador de novo.
  *
  * Cada cor sai em três variáveis: o hex, os canais (`-rgb`) e o alfa (`-a`).
@@ -386,6 +386,9 @@
   --green-360: #3d9e60;
   --green-360-rgb: 61 158 96;
   --green-360-a: 1;
+  --green-new-38: #45a366;
+  --green-new-38-rgb: 69 163 102;
+  --green-new-38-a: 1;
   --icon-default: #efeff1;
   --icon-default-rgb: 239 239 241;
   --icon-default-a: 1;
@@ -407,12 +410,6 @@
   --icon-overlay-light: #ffffff;
   --icon-overlay-light-rgb: 255 255 255;
   --icon-overlay-light-a: 1;
-  --icon-status-dnd: #dc4247;
-  --icon-status-dnd-rgb: 220 66 71;
-  --icon-status-dnd-a: 1;
-  --icon-status-idle: #ffcb6e;
-  --icon-status-idle-rgb: 255 203 110;
-  --icon-status-idle-a: 1;
   --icon-status-offline: #9d9ea5;
   --icon-status-offline-rgb: 157 158 165;
   --icon-status-offline-a: 1;
@@ -512,6 +509,9 @@
   --modal-footer-background: #242429;
   --modal-footer-background-rgb: 36 36 41;
   --modal-footer-background-a: 1;
+  --neutral-34: #84858d;
+  --neutral-34-rgb: 132 133 141;
+  --neutral-34-a: 1;
   --notice-background-critical: #4f000f;
   --notice-background-critical-rgb: 79 0 15;
   --notice-background-critical-a: 1;
@@ -521,6 +521,9 @@
   --opacity-black-40: #00000066;
   --opacity-black-40-rgb: 0 0 0;
   --opacity-black-40-a: 0.4;
+  --opacity-green-28: #00854447;
+  --opacity-green-28-rgb: 0 133 68;
+  --opacity-green-28-a: 0.2784;
   --opacity-white-8: #ffffff14;
   --opacity-white-8-rgb: 255 255 255;
   --opacity-white-8-a: 0.0784;
@@ -572,6 +575,9 @@
   --reaction-text-reacted-default: #d1edb4;
   --reaction-text-reacted-default-rgb: 209 237 180;
   --reaction-text-reacted-default-a: 1;
+  --red-new-46: #da3e44;
+  --red-new-46-rgb: 218 62 68;
+  --red-new-46-a: 1;
   --scrollbar-auto-scrollbar-color-track: #0e0e10;
   --scrollbar-auto-scrollbar-color-track-rgb: 14 14 16;
   --scrollbar-auto-scrollbar-color-track-a: 1;
@@ -737,6 +743,9 @@
   --white: #ffffff;
   --white-rgb: 255 255 255;
   --white-a: 1;
+  --yellow-new-30: #ffc04e;
+  --yellow-new-30-rgb: 255 192 78;
+  --yellow-new-30-a: 1;
   --role-default: #81828a;
   --role-default-rgb: 129 130 138;
   --role-default-a: 1;

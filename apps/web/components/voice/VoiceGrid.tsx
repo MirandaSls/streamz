@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, UserPlus, Volume2 } from "@/components/ui/icones";
+import { ChevronDown, Plus, UserPlus, Users, Volume2 } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
 import PalcoMobile from "@/components/voice/PalcoMobile";
@@ -15,6 +15,7 @@ import {
 import {
   FAIXA_ALTURA,
   FAIXA_GAP,
+  GAP,
   FAIXA_LARGURA,
   FOCO_GAP,
   TETO_DE_TILES_ANIMADOS,
@@ -23,6 +24,7 @@ import {
   estiloDoTile,
   larguraDaTira,
   melhorArranjo,
+  proporcaoDaTela,
   palcoUsaFoco,
   posicionarGrade,
   type Arranjo,
@@ -30,6 +32,7 @@ import {
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { janelaDe } from "@/lib/outra-janela";
 import { chaveDoTileDeTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { usePreferenciasDoPalco } from "@/stores/preferencias-do-palco";
@@ -225,6 +228,8 @@ export default function VoiceGrid({
   const states = useVoice((s) => s.statesOf(channelId));
   const falando = useVoice((s) => s.falando);
   const focado = useVoice((s) => s.focado);
+  const membrosOcultos = useVoice((s) => s.membrosOcultos);
+  const alternarMembrosOcultos = useVoice((s) => s.alternarMembrosOcultos);
   const focoAutomatico = useVoice((s) => s.focoAutomatico);
   const assistindo = useVoice((s) => s.assistindo);
   const setFocado = useVoice((s) => s.setFocado);
@@ -377,7 +382,9 @@ export default function VoiceGrid({
   }
   useEffect(() => {
     if (!faixaEl || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
+    // o da janela da faixa: na janela solta da chamada, o da principal nunca
+    // veria a miniatura cruzar o viewport dela
+    const observer = new (janelaDe(faixaEl).IntersectionObserver)(
       (entradas) => {
         setForaDeVista((atual) => {
           let mudou = false;
@@ -500,10 +507,15 @@ export default function VoiceGrid({
   // candidato, e aí ele volta a ser um tile da grade como qualquer outro —
   // **sem sair de `resto`**, que é o que impedia a transmissão de sumir.
   const principal =
-    candidato && palcoUsaFoco(tiles.length - 1, tamanho.largura, tamanho.altura, faixa)
+    candidato &&
+    palcoUsaFoco(tiles.length - 1, tamanho.largura, tamanho.altura, faixa)
       ? candidato
       : null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
+  // Sozinho na call, clicar no próprio card também foca (como no Discord): o
+  // destaque é o tile e a tira guarda o mesmo tile em miniatura, que é onde
+  // se clica para voltar à grade. Com 2+ a tira não repete o destaque.
+  const daTira = principal && resto.length === 0 ? tiles : resto;
   // O teto do Element Call: acima dele o reflow volta a ser seco, porque
   // `top/left/width/height` custam layout e pintura a cada quadro e isso soma
   // ao custo de decodificar os vídeos (ver `TETO_DE_TILES_ANIMADOS`).
@@ -515,21 +527,35 @@ export default function VoiceGrid({
     // dependa do leiaute escolhido, ou os dois modos se mediriam um ao outro.
     //
     // Memo manual (ver o comentário de `memoDoFoco` lá em cima): o destaque só
-    // muda de tamanho quando `resto.length` ou o palco medido mudam — mute de
+    // muda de tamanho quando `daTira.length` ou o palco medido mudam — mute de
     // quem está na tira não é nenhum dos dois.
-    const assinaturaDoFoco = `${resto.length}@${tamanho.largura}x${tamanho.altura}`;
+    // Com a tira oculta o destaque toma o palco inteiro (`naTira` 0), e isso
+    // entra na assinatura: alternar não muda `daTira.length`.
+    const naTira = membrosOcultos ? 0 : daTira.length;
+    // Tela compartilhada (janela específica) tem proporção própria; sem ela o
+    // destaque 16:9 mostraria tarjas pretas. Câmera e tela sem faixa: 16:9.
+    const proporcaoDoFoco = principal.tela
+      ? proporcaoDaTela(principal.publication?.dimensions)
+      : proporcaoDaTela(null);
+    const assinaturaDoFoco = `${naTira}@${tamanho.largura}x${tamanho.altura}@${proporcaoDoFoco.toFixed(3)}`;
     let foco: Arranjo;
     if (memoDoFoco.current?.assinatura === assinaturaDoFoco) {
       foco = memoDoFoco.current.arranjo;
     } else {
-      foco = melhorArranjo(1, tamanho.largura, alturaDoDestaque(tamanho.altura, resto.length));
+      foco = melhorArranjo(
+        1,
+        tamanho.largura,
+        alturaDoDestaque(tamanho.altura, naTira),
+        GAP,
+        proporcaoDoFoco,
+      );
       memoDoFoco.current = { assinatura: assinaturaDoFoco, arranjo: foco };
     }
     return (
       <div
         ref={setPalco}
-        className="flex h-full min-h-0 flex-col items-center"
-        style={{ gap: FOCO_GAP }}
+        className="relative flex h-full min-h-0 flex-col items-center"
+        style={{ gap: membrosOcultos ? 0 : FOCO_GAP }}
       >
         {/* o destaque mantém 16:9 e fica centralizado nos dois eixos, como na
             print: é `melhorArranjo` com uma vaga só. Aqui só o *tamanho* anima
@@ -547,7 +573,7 @@ export default function VoiceGrid({
           </div>
         </div>
 
-        {resto.length > 0 && (
+        {daTira.length > 0 && !membrosOcultos && (
           /* A tira também posiciona cada miniatura de forma absoluta: sem isso
              quem entra empurra as outras num corte seco. O invólucro de largura
              explícita é o que mantém o comportamento de antes — centralizada
@@ -561,8 +587,8 @@ export default function VoiceGrid({
             className="flex shrink-0 justify-center overflow-x-auto"
             style={{ height: FAIXA_ALTURA }}
           >
-            <div className="relative shrink-0" style={estiloDaTira(resto.length, animar)}>
-              {resto.map((t, i) => (
+            <div className="relative shrink-0" style={estiloDaTira(daTira.length, animar)}>
+              {daTira.map((t, i) => (
                 <div
                   key={t.key}
                   ref={refDaMiniatura(t.key)}
@@ -586,6 +612,33 @@ export default function VoiceGrid({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Sem miniaturas não há o que ocultar: o botão só existe com a tira.
+            Com a tira oculta `faixaEl` volta a null e o observer se desfaz
+            sozinho (o efeito depende dele); `foraDeVista` fica velho mas é
+            inofensivo, porque a tira nasce de novo e o observer reconfirma. */}
+        {daTira.length > 0 && (
+          <div
+            className="absolute left-1/2 z-10 -translate-x-1/2"
+            style={{ bottom: membrosOcultos ? 8 : FAIXA_ALTURA - 12 }}
+          >
+            <Tooltip label={membrosOcultos ? "Mostrar membros" : "Ocultar membros"}>
+              <button
+                type="button"
+                aria-label={membrosOcultos ? "Mostrar membros" : "Ocultar membros"}
+                aria-pressed={membrosOcultos}
+                onClick={alternarMembrosOcultos}
+                className="flex h-6 items-center gap-0.5 rounded-full bg-background-base-lowest/90 px-2 text-control-overlay-secondary-icon-default shadow-popout backdrop-blur transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
+              >
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-150 ${membrosOcultos ? "rotate-180" : ""}`}
+                />
+                <Users size={14} />
+              </button>
+            </Tooltip>
           </div>
         )}
       </div>
@@ -644,7 +697,7 @@ function useTamanho(el: HTMLElement | null) {
   const [tamanho, setTamanho] = useState({ largura: 0, altura: 0 });
   useEffect(() => {
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([entrada]) => {
+    const ro = new (janelaDe(el).ResizeObserver)(([entrada]) => {
       const r = entrada.contentRect;
       setTamanho({ largura: r.width, altura: r.height });
     });

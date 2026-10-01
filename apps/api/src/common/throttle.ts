@@ -153,3 +153,11 @@ export const LIVEKIT_WEBHOOK_THROTTLE = Throttle({ default: { ttl: seconds(60), 
  * cliente em loop de erro inunde o log do servidor.
  */
 export const DIAGNOSTICS_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 10 } });
+
+// ── pastas de servidores ──
+/**
+ * Gravar o layout da barra de servidores (`PUT /users/me/guild-layout`). Cada
+ * arrastar-e-soltar vira uma gravação, então o uso humano é em rajada curta;
+ * o teto é apertado porque cada PUT escreve no banco e acorda todas as abas.
+ */
+export const GUILD_LAYOUT_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 30 } });

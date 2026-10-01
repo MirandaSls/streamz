@@ -6,6 +6,8 @@ import {
   type Comando,
   type Contexto,
 } from "../runtime/tipos";
+import { COMANDOS_DE_CONFIG } from "./comandos-config";
+import { COMANDOS_EXTRA } from "./comandos-extra";
 import {
   barraDeProgresso,
   ehLinkDoSpotify,
@@ -16,6 +18,13 @@ import {
   nomeDoModoDeRepeticao,
   truncar,
 } from "./formatar";
+import {
+  MENSAGEM_PLAYLIST_GERADA_SPOTIFY,
+  botaoDoSite,
+  embedDeAdicionado,
+  embedDeAdicionados,
+  nomeDaFonte,
+} from "./embeds";
 import { SEM_LAVALINK, SEM_PONTE_DE_VOZ, dadosDaFaixa, obterServico } from "./servico";
 
 /** Volt Lime (`design.md`): a cor de destaque do Streamz. */
@@ -27,7 +36,7 @@ const FAIXAS_LISTADAS = 10;
 // ── Ajudantes ───────────────────────────────────────────────────────────────
 
 /** Comando de música exige servidor: em DM não há canal de voz para entrar. */
-async function servidorDe(ctx: Contexto): Promise<Guild | null> {
+export async function servidorDe(ctx: Contexto): Promise<Guild | null> {
   if (!ctx.guildId) {
     await ctx.responder({ conteudo: "Só funciona dentro de um servidor.", efemera: true });
     return null;
@@ -48,7 +57,7 @@ async function servidorDe(ctx: Contexto): Promise<Guild | null> {
  * (o bot acabou de subir, ou o intent de membros não está ligado); o estado de
  * voz em si vem do `voice_states` do `GUILD_CREATE` e do `VOICE_STATE_UPDATE`.
  */
-async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<string | null> {
+export async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<string | null> {
   const membro =
     servidor.members.cache.get(ctx.usuarioId) ??
     (await servidor.members.fetch(ctx.usuarioId).catch(() => null));
@@ -56,7 +65,7 @@ async function canalDeVozDeQuemPediu(ctx: Contexto, servidor: Guild): Promise<st
 }
 
 /** O jogador daquele servidor, ou uma resposta dizendo que não há nada tocando. */
-async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
+export async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
   if (!ctx.guildId) {
     await ctx.responder({ conteudo: "Só funciona dentro de um servidor.", efemera: true });
     return null;
@@ -76,7 +85,7 @@ async function jogadorAtivo(ctx: Contexto): Promise<Player | null> {
  * está — é a regra que todo bot de música tem e a primeira reclamação de quem
  * não a tem.
  */
-async function podeMandar(ctx: Contexto, jogador: Player, servidor: Guild): Promise<boolean> {
+export async function podeMandar(ctx: Contexto, jogador: Player, servidor: Guild): Promise<boolean> {
   const meuCanal = await canalDeVozDeQuemPediu(ctx, servidor);
   if (meuCanal && meuCanal === jogador.voiceChannelId) return true;
   await ctx.responder({
@@ -121,11 +130,23 @@ const tocar: Comando = {
       obrigatoria: true,
       restoDaLinha: true,
     },
+    // O contexto só expõe texto/número (não há leitor de booleano nem `-f` no
+    // parser do prefixo), então a opção é inteira 0/1 e só vale no `/`.
+    {
+      nome: "inserir-primeiro",
+      descricao: "1 = coloca no topo da fila em vez do fim",
+      tipo: TIPO_INTEIRO,
+      escolhas: [
+        { nome: "sim", valor: 1 },
+        { nome: "não", valor: 0 },
+      ],
+    },
   ],
   async executar(ctx) {
     const servidor = await servidorDe(ctx);
     if (!servidor) return;
 
+    const noTopo = ctx.numero("inserir-primeiro") === 1;
     const consulta = ctx.texto("busca")?.trim();
     if (!consulta) {
       await ctx.responder({ conteudo: "Diz o que eu procuro: `/tocar <busca ou link>`.", efemera: true });
@@ -175,49 +196,59 @@ const tocar: Comando = {
 
     const resultado = await servico.buscar(jogador, consulta, ctx.usuarioId);
     if (!resultado.tracks?.length) {
+      // Playlist "gerada" do Spotify (Daily Mix etc.) volta do Lavalink como
+      // `error` genérico; sem este ramo a pessoa leria só "não achei nada".
+      if (ehLinkDoSpotify(consulta) && /\/playlist\//i.test(consulta)) {
+        await ctx.responder(MENSAGEM_PLAYLIST_GERADA_SPOTIFY);
+        return;
+      }
       await ctx.responder(`Não achei nada para **${escaparMarkdown(truncar(consulta, 80))}**.`);
       return;
     }
 
-    const avisoDoSpotify = ehLinkDoSpotify(consulta)
-      ? "Do Spotify vem a faixa; o áudio vem da mesma gravação no YouTube " +
-        "(o Spotify não entrega áudio a terceiros)."
-      : undefined;
-
     // Playlist inteira ou uma faixa só.
     if (resultado.loadType === "playlist") {
-      jogador.queue.add(resultado.tracks);
+      // `add` com o array mantém a ordem da playlist; nada de embaralhar aqui.
+      if (noTopo) await jogador.queue.splice(0, 0, ...resultado.tracks);
+      else jogador.queue.add(resultado.tracks);
       const total = resultado.tracks.length;
+      const primeira = resultado.tracks[0]!;
       if (!jogador.playing) await jogador.play();
+      const botao = botaoDoSite();
       await ctx.responder({
         embeds: [
-          {
-            color: COR,
-            title: "Playlist na fila",
-            description: `**${escaparMarkdown(
-              truncar(resultado.playlist?.name ?? "Playlist", 100),
-            )}** — ${total} faixa${total === 1 ? "" : "s"}`,
-            ...(avisoDoSpotify ? { footer: { text: avisoDoSpotify } } : {}),
-          },
+          embedDeAdicionados({
+            nome: resultado.playlist?.name ?? "Playlist",
+            ...(/^https?:\/\//i.test(consulta) ? { url: consulta } : {}),
+            fonte: nomeDaFonte(primeira.info.sourceName, primeira.info.uri),
+            total,
+            noTopo,
+          }),
         ],
+        ...(botao ? { components: botao } : {}),
       });
       return;
     }
 
     const faixa = resultado.tracks[0]!;
-    const jaTocando = Boolean(jogador.queue.current);
-    jogador.queue.add(faixa);
+    if (noTopo) await jogador.queue.splice(0, 0, faixa);
+    else jogador.queue.add(faixa);
     if (!jogador.playing) await jogador.play();
 
-    const posicao = jogador.queue.tracks.length;
+    const botao = botaoDoSite();
     await ctx.responder({
       embeds: [
-        embedDaFaixa(
-          jaTocando ? `Na fila, posição ${posicao}` : "Tocando agora",
-          faixa,
-          avisoDoSpotify,
-        ),
+        embedDeAdicionado({
+          titulo: faixa.info.title,
+          autor: faixa.info.author,
+          ...(faixa.info.uri ? { url: faixa.info.uri } : {}),
+          duracaoMs: faixa.info.duration,
+          aoVivo: faixa.info.isStream,
+          fonte: nomeDaFonte(faixa.info.sourceName, faixa.info.uri),
+          noTopo,
+        }),
       ],
+      ...(botao ? { components: botao } : {}),
     });
   },
 };
@@ -352,7 +383,7 @@ const pausar: Comando = {
 const continuar: Comando = {
   nome: "continuar",
   descricao: "Continua de onde parou",
-  apelidos: ["resume", "despausar"],
+  apelidos: ["resume", "unpause", "despausar"],
   async executar(ctx) {
     const servidor = await servidorDe(ctx);
     if (!servidor) return;
@@ -461,7 +492,7 @@ const remover: Comando = {
 const repetir: Comando = {
   nome: "repetir",
   descricao: "Repetição: desligada, na faixa ou na fila",
-  apelidos: ["loop"],
+  apelidos: ["loop", "repeat"],
   opcoes: [
     {
       nome: "modo",
@@ -517,4 +548,6 @@ export const COMANDOS: Comando[] = [
   embaralhar,
   remover,
   repetir,
+  ...COMANDOS_EXTRA,
+  ...COMANDOS_DE_CONFIG,
 ];

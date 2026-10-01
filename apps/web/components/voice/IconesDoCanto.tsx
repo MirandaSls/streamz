@@ -2,6 +2,8 @@
 
 import { ExternalLink, Maximize, Minimize } from "@/components/ui/icones";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { podeAbrirJanelaSolta } from "@/lib/janela-solta";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 
 /**
@@ -34,37 +36,38 @@ import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
  * A cor do glifo na print é `#9d9ea5`, entre `--icon-muted` (`#96979e`, o
  * repouso do primitivo) e `--icon-subtle`; fica a do primitivo.
  *
- * O pop-out ainda não existe aqui (na web depende da API de
- * document-picture-in-picture). Pela regra do §6.6 do PROCESSO ele fica
- * **visível e desabilitado**, com "(em breve)" na dica — o canto do Discord tem
- * dois ícones, e sumir com um mudaria o desenho da tela.
+ * O pop-out abre a chamada inteira numa janela solta (`lib/janela-solta.ts`) e
+ * some onde a plataforma não abre janela (app de celular).
  */
 export default function IconesDoCanto({
   telaCheia,
   onTelaCheia,
   visivel,
   moldura,
+  emJanela,
+  onAbrirEmJanela,
 }: {
   telaCheia: boolean;
   onTelaCheia: () => void;
   visivel: boolean;
   moldura?: PropsDaMoldura;
+  emJanela: boolean;
+  onAbrirEmJanela: () => void;
 }) {
   return (
     <div
       {...moldura}
-      className={`flex items-center gap-4 transition-opacity duration-200 ${
-        visivel ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={`flex items-center gap-4 ${classeDaMoldura(visivel, "baixo")}`}
     >
-      <BotaoDeIcone
-        rotulo="Abrir em janela à parte"
-        icone={<ExternalLink size={20} />}
-        tamanho="md"
-        comFundo
-        desabilitado
-        motivoDesabilitado="Abrir em janela à parte (em breve)"
-      />
+      {podeAbrirJanelaSolta() && (
+        <BotaoDeIcone
+          rotulo={emJanela ? "Voltar para a chamada" : "Abrir em janela à parte"}
+          icone={<ExternalLink size={20} />}
+          tamanho="md"
+          comFundo
+          onClick={onAbrirEmJanela}
+        />
+      )}
       <BotaoDeIcone
         rotulo={telaCheia ? "Sair da tela cheia" : "Tela cheia"}
         icone={telaCheia ? <Minimize size={20} /> : <Maximize size={20} />}

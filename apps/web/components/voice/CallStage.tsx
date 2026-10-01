@@ -20,10 +20,15 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
+import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
+import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { levarAbaParaTextoEnquantoJanelaAberta } from "@/lib/chamada-em-janela-navegacao";
+import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { useTelaCheia } from "@/components/voice/fullscreen";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useOcultarInativo, type PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -248,6 +253,7 @@ export default function CallStage({
 
   const definirExpandido = useUI((s) => s.definirPalcoExpandido);
   const palcoExpandido = useUI((s) => s.palcoExpandido);
+  const emJanela = useChamadaEmJanela();
 
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
   /** Ninguém na chamada deste canal e nenhuma chamada saindo — ver o `return null`. */
@@ -441,9 +447,7 @@ export default function CallStage({
           continuam valendo: o React os propaga a partir dos filhos. */}
       <div
         {...daMoldura}
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 transition-opacity duration-200 ${
-          molduraVisivel ? "opacity-100" : "opacity-0"
-        }`}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 ${classeDaMoldura(molduraVisivel, "cima")}`}
       >
         {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
             que mantém o título de fato centralizado — os dois lados dividem a
@@ -566,9 +570,12 @@ export default function CallStage({
         {chamando && !transmitindoNoToque ? (
           <Chamando
             nome={destinatario ? displayNameOf(destinatario) : titulo}
-            usuario={destinatario}
+            outros={grupo && conversa ? conversa.others : destinatario ? [destinatario] : []}
+            jaEntraram={grupo ? estados.map((e) => e.user.id) : []}
             eu={meUser}
           />
+        ) : conectadoAqui && emJanela ? (
+          <AvisoChamadaEmJanela />
         ) : conectadoAqui ? (
           /* Sem tela de espera: a grade é desenhada a partir do estado de voz
              do servidor, que já está aqui, e o `connecting` só quer dizer que a
@@ -659,6 +666,12 @@ export default function CallStage({
                   onTelaCheia={alternar}
                   visivel={controlesVisiveis}
                   moldura={daMoldura}
+                  emJanela={emJanela}
+                  onAbrirEmJanela={() =>
+                    emJanela
+                      ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
+                      : abrirEmJanelaEIrParaTexto(titulo, channelId)
+                  }
                 />
               ) : undefined
             }
@@ -709,9 +722,7 @@ function BotaoDeExpandir({
   return (
     <div
       {...moldura}
-      className={`transition-opacity duration-200 ${
-        visivel ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={classeDaMoldura(visivel, "baixo")}
     >
       <BotaoDeIcone
         rotulo={expandido ? "Recolher o palco" : "Expandir o palco"}
@@ -753,34 +764,48 @@ function BotaoDeExpandir({
  */
 function Chamando({
   nome,
-  usuario,
+  outros,
+  jaEntraram,
   eu,
 }: {
   nome: string;
-  usuario: PublicUser | null;
+  /** Quem estou chamando: 1 em DM, todos os outros participantes em grupo. */
+  outros: PublicUser[];
+  /** Ids de quem já está na sala (só em grupo): esses não ganham o anel. */
+  jaEntraram: string[];
   eu: PublicUser | null;
 }) {
   return (
     <div className="grid h-full min-h-0 place-items-center overflow-hidden">
       <div className="flex flex-col items-center gap-4">
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-6">
           {eu && (
             // na chamada não se mostra status de presença, como no Discord
             <Avatar user={eu} size="xl" surface="border-black" />
           )}
-          <span className="relative grid place-items-center">
-            <span
-              aria-hidden="true"
-              className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
-            />
-            {usuario ? (
-              <Avatar user={usuario} size="xl" surface="border-black" />
-            ) : (
+          {outros.length > 0 ? (
+            outros.map((u) => (
+              <span key={u.id} className="relative grid place-items-center">
+                {!jaEntraram.includes(u.id) && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
+                  />
+                )}
+                <Avatar user={u} size="xl" surface="border-black" />
+              </span>
+            ))
+          ) : (
+            <span className="relative grid place-items-center">
+              <span
+                aria-hidden="true"
+                className="absolute h-[88px] w-[88px] animate-ping rounded-full bg-status-positive/20"
+              />
               <span className="grid h-20 w-20 place-items-center rounded-full bg-background-base-lowest">
                 <Phone size={30} className="text-text-muted" aria-hidden="true" />
               </span>
-            )}
-          </span>
+            </span>
+          )}
         </div>
         <p className="sr-only">{nome}</p>
         <p className="sr-only">Chamando…</p>
@@ -839,4 +864,10 @@ function ConviteParaEntrar({
       </div>
     </div>
   );
+}
+
+/** Abre a janela primeiro (gesto transitório) e só depois leva a aba ao texto. */
+function abrirEmJanelaEIrParaTexto(titulo: string, canalId: string): void {
+  abrirJanelaDaChamada(titulo);
+  levarAbaParaTextoEnquantoJanelaAberta(canalId);
 }

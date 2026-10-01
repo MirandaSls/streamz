@@ -24,9 +24,9 @@ use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE,
-    GW_OWNER, WS_CHILD, WS_EX_TOOLWINDOW,
+    EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowPlacement, GetWindowRect,
+    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow,
+    IsWindowVisible, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, WINDOWPLACEMENT, WS_CHILD, WS_EX_TOOLWINDOW,
 };
 
 use crate::tela::captura::Alvo;
@@ -83,12 +83,14 @@ fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
         if !IsWindowVisible(hwnd).as_bool() {
             return None;
         }
-        // Minimizada não tem o que capturar: tanto o WGC quanto a duplicação de
-        // desktop devolvem quadro vazio. Melhor não oferecer do que oferecer um
-        // retângulo preto.
-        if IsIconic(hwnd).as_bool() {
-            return None;
-        }
+        // Minimizada **é oferecida**, como o Discord faz: jogo em tela cheia
+        // exclusiva (ex.: League of Legends) é minimizado pelo Windows quando o
+        // usuário dá Alt+Tab para o Streamz, e descartar a janela aqui a faria
+        // sumir da aba "Aplicativos" justo na hora de escolhê-la. O que não dá é
+        // capturar minimizada (o WGC nunca entrega quadro): quem inicia a
+        // transmissão recusa via `minimizada`, com uma frase, em vez de aqui
+        // esconder a opção.
+        let minimizada = IsIconic(hwnd).as_bool();
 
         let estilo = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         if estilo & WS_CHILD.0 != 0 {
@@ -109,8 +111,14 @@ fn descrever_janela(hwnd: HWND) -> Option<Fonte> {
 
         // Só o tamanho conta, nunca a posição: janela no segundo ou terceiro
         // monitor tem coordenadas negativas ou além da largura do principal,
-        // e é tão oferecível quanto a do principal.
-        let r = moldura_visivel(hwnd)?;
+        // e é tão oferecível quanto a do principal. Minimizada é medida pelo
+        // tamanho restaurado: o retângulo dela vale ~160×28 em -32000,-32000 e
+        // o corte de `MINIMO_PX` derrubaria justamente o jogo que queremos listar.
+        let r = if minimizada {
+            tamanho_restaurado(hwnd)?
+        } else {
+            moldura_visivel(hwnd)?
+        };
         let largura = r.right - r.left;
         let altura = r.bottom - r.top;
         if largura < MINIMO_PX || altura < MINIMO_PX {
@@ -183,6 +191,19 @@ fn moldura_visivel(hwnd: HWND) -> Option<RECT> {
         unsafe { GetWindowRect(hwnd, &mut r) }.ok()?;
     }
     Some(r)
+}
+
+/// O retângulo que a janela minimizada terá ao ser restaurada
+/// (`rcNormalPosition`). Vem em coordenadas de área de trabalho, não de tela, e
+/// sem descontar a borda invisível — serve só para dar tamanho à miniatura e ao
+/// rótulo, que é tudo o que se quer de uma janela que ainda não dá para capturar.
+fn tamanho_restaurado(hwnd: HWND) -> Option<RECT> {
+    let mut p = WINDOWPLACEMENT {
+        length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    unsafe { GetWindowPlacement(hwnd, &mut p) }.ok()?;
+    Some(p.rcNormalPosition)
 }
 
 fn titulo_da_janela(hwnd: HWND) -> Option<String> {
@@ -328,8 +349,10 @@ pub fn alvo(id: &str) -> Option<Alvo> {
 
 /// A fonte é uma janela **minimizada**?
 ///
-/// A enumeração já esconde as minimizadas (não há o que capturar nelas), mas
-/// entre listar e clicar cabe um Win+D. Quem inicia a transmissão pergunta
+/// A enumeração **oferece** as minimizadas (jogo em tela cheia exclusiva é
+/// minimizado no Alt+Tab e precisa aparecer na lista), mas não há o que capturar
+/// nelas — e, mesmo com a janela na tela ao listar, entre listar e clicar cabe
+/// um Win+D. Quem inicia a transmissão pergunta
 /// isto antes de abrir a captura: com a janela na barra de tarefas, o WGC
 /// nunca entrega um quadro e o outro lado fica em "Carregando a transmissão…"
 /// para sempre. Recusar com uma frase é melhor que transmitir o nada.

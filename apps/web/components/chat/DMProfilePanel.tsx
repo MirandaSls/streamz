@@ -7,6 +7,7 @@ import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import { Button } from "@/components/ui/primitivos";
 import Tooltip from "@/components/ui/Tooltip";
+import UsernameCopiavel from "@/components/ui/UsernameCopiavel";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useFriends, useRelationship } from "@/stores/friends";
@@ -356,7 +357,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
             </h2>
             {/* o username é branco, não apagado; os 21px de topo a topo saem da
                 entrelinha do nome, não de uma margem */}
-            <p className="truncate text-sm leading-[21px] text-text-strong">{user.username}</p>
+            <p className="truncate text-sm leading-[21px] text-text-strong"><UsernameCopiavel username={user.username} /></p>
 
             {/* como no Discord: uma linha cinza e clicável sob o username, não
                 recolhíveis. Some inteira sem mútuos (nada de contagem zero); o

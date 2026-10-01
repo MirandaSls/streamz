@@ -9,11 +9,12 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Check, ChevronRight, Settings } from "@/components/ui/icones";
+import { ChevronRight, Headphones, Mic, Monitor, Settings } from "@/components/ui/icones";
 import { SUBMENU_DELAY } from "@/components/ui/ContextMenu";
 import { Popout } from "@/components/ui/primitivos/Popout";
-import { SliderDeVolume } from "@/components/voice/pecas-de-voz";
-import { useSistemaDeAudio } from "@/lib/microfone";
+import { MedidorSegmentado, SliderDeVolume } from "@/components/voice/pecas-de-voz";
+import { useNivelDoMicrofone } from "@/components/voice/useNivelDoMicrofone";
+import { useSistemaDeAudio, type SistemaDeAudio } from "@/lib/microfone";
 import { ui } from "@/stores/ui";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import {
@@ -45,36 +46,46 @@ import {
  * atravessar o menu a caminho de outro item não disparar nada. Clique e seta →
  * continuam abrindo, seta ← e Esc fecham.
  *
- * Sem cabeçalho no submenu: ele é uma lista de escolhas com a marca (✓) na que
- * vale, porque o título já está no item que ficou aceso ao lado.
+ * Sem cabeçalho no submenu: ele é uma lista de escolhas com um rádio à direita
+ * (círculo cheio no accent com ponto `accent-ink` na escolhida, borda de 2px na
+ * outra), porque o título já está no item que ficou aceso ao lado.
  *
- * **Medidas.** O submenu (a lista de aparelhos) não tem print 1:1 do Discord
- * em `docs/Reference` — só do próprio app (`191405`, `191402`, `191339` e
- * `191344`), e é de lá que vêm caixa de 288 (x 206..493 e 261..548, 288 de
- * largura em todos), linha de 35px (bg do selecionado em `191339`, y
- * 235..269) e respiro de 6 (`p-1.5`) — e do `ContextMenu`, os 4px de
- * sobreposição do submenu sobre o item. O espelhamento na borda da janela
- * agora é o do `Popout` (ver `Submenu`).
+ * **Medidas.** Vêm dos prints reais do Discord (menu do microfone com o submenu
+ * de dispositivos, o de "Perfil de entrada" e o do fone). Caixa do menu-pai e do
+ * submenu de dispositivos têm a MESMA largura, ~1,63x o texto "Dispositivo de
+ * entrada" (221 de caixa para 135 de texto na captura) — com o nosso texto de
+ * 14px semibold (~154px) dá ~250px. O submenu de "Perfil de entrada" é mais
+ * estreito (186/221 do pai, ~210px): só texto e rádio. Linha com título e
+ * subtítulo tem 52px (20px + 16px de texto, `py-2`); respiro da caixa de 6px.
+ * O espelhamento na borda da janela é o do `Popout` (ver `Submenu`), e os 4px
+ * de sobreposição do submenu sobre o item vêm do `ContextMenu`.
  *
- * **O menu-pai em si tem print real do Discord: `2026-09-03 201137`**
- * (achado depois da primeira medida, resolução 3439×1360 — fora do padrão
- * 1919×1079 do resto do acervo, então vale só para **ordem e presença**, não
- * para px). Ele mostra "Dispositivo de entrada" e "Perfil de entrada" (o
- * Krisp deles) seguidos de uma **divisória**, "Volume de entrada" com o
- * slider, **outra divisória**, e só então "Configurações de voz" — três
- * blocos, não dois. A divisória que faltava (entre o bloco dos dois itens com
- * submenu e o slider) foi a correção que este print trouxe: antes só havia a
- * de baixo (`AtalhoDeConfiguracoes`). "Perfil de entrada"/Isolamento de Voz é
- * Krisp e não é portado (o cartão pede "Krisp não; o nosso supressor com o
- * texto certo"): o lugar equivalente aqui é a "Redução de ruído" com os
- * níveis que o supressor próprio (RNNoise, `PopoverDeRuido`) realmente tem.
+ * Ordem e blocos do menu-pai: "Dispositivo de entrada" e "Perfil de entrada",
+ * divisória, "Volume de entrada" com o slider (sem o número) e o "Nível de
+ * entrada", divisória, "Configurações de voz".
+ *
+ * ## "Perfil de entrada": o mapeamento
+ *
+ * O Discord tem três perfis (Isolamento de Voz, Estúdio, Personalizado). Aqui
+ * eles são uma leitura de `audio.processamento` (`eco`, `ruido`, `ganho`):
+ * - **Isolamento de Voz** = `ruido: "avancada"` (RNNoise, a supressão forte);
+ *   eco e ganho ficam como estavam.
+ * - **Estúdio** = tudo desligado (`ruido: "off"`, sem eco, sem ganho): a
+ *   captura crua.
+ * - **Personalizado** = qualquer outra combinação (ex.: supressão do navegador
+ *   `"padrao"`, ou `"off"` com eco/ganho ligados). Escolhê-lo estando nele não
+ *   muda nada; vindo de outro perfil, restaura a última combinação
+ *   personalizada vista nesta sessão, ou `"padrao"` se não houve nenhuma.
  */
 
 /**
  * Largura da caixa. Fica aqui porque é a mesma do submenu, e o `UserFooter`
  * passa esta constante ao `PopoverFlutuante` em vez de repetir o número.
  */
-export const LARGURA_DO_MENU_DE_AUDIO = 288;
+export const LARGURA_DO_MENU_DE_AUDIO = 250;
+
+/** Submenu de "Perfil de entrada": só texto e rádio, bem mais estreito. */
+const LARGURA_DO_SUBMENU_DE_PERFIL = 210;
 
 /**
  * `p-1.5` da caixa: o submenu sobe esse tanto para o primeiro item dele ficar
@@ -89,11 +100,49 @@ const RESPIRO = 6;
  */
 const SOBREPOSICAO = 4;
 
-const RUIDO: Record<NivelDeRuido, string> = {
-  off: "Desligada",
-  padrao: "Padrão",
-  avancada: "Avançada",
+type Processamento = { eco: boolean; ruido: NivelDeRuido; ganho: boolean };
+export type PerfilDeEntrada = "isolamento" | "estudio" | "personalizado";
+
+export const NOME_DO_PERFIL: Record<PerfilDeEntrada, string> = {
+  isolamento: "Isolamento de Voz",
+  estudio: "Estúdio",
+  personalizado: "Personalizado",
 };
+
+/** Lê o perfil que o processamento atual representa (mapeamento no cabeçalho). */
+export function perfilDeEntrada(p: Processamento): PerfilDeEntrada {
+  if (p.ruido === "avancada") return "isolamento";
+  if (p.ruido === "off" && !p.eco && !p.ganho) return "estudio";
+  return "personalizado";
+}
+
+/**
+ * Última combinação personalizada vista, para "Personalizado" ter para onde
+ * voltar. Vive no módulo (o menu é desmontado a cada fechamento) e some com a
+ * sessão: guardar em disco seria persistir um palpite.
+ */
+let ultimoPersonalizado: Processamento | null = null;
+
+/** O processamento que escolher `perfil` produz a partir de `atual`. */
+export function processamentoDoPerfil(perfil: PerfilDeEntrada, atual: Processamento): Processamento {
+  if (perfil === "isolamento") return { ...atual, ruido: "avancada" };
+  if (perfil === "estudio") return { eco: false, ruido: "off", ganho: false };
+  if (perfilDeEntrada(atual) === "personalizado") return atual;
+  return ultimoPersonalizado ?? { ...atual, ruido: "padrao" };
+}
+
+/** O valor da linha "Dispositivo": o aparelho em uso; no padrão, o aparelho por trás dele. */
+function valorDoAparelho(
+  lista: MediaDeviceInfo[],
+  id: string | null,
+  prefixo: string,
+  nomePadrao: string,
+  aparelhoDoPadrao: string | null,
+): string {
+  if (id === null) return aparelhoDoPadrao ?? nomePadrao;
+  const nome = nomeEscolhido(lista, id, prefixo);
+  return nome === "Padrão do sistema" ? (aparelhoDoPadrao ?? nomePadrao) : nome;
+}
 
 /* ------------------------------------------------------------------ */
 /* Submenu                                                             */
@@ -183,6 +232,7 @@ function Submenu({
   pedidoDeFoco,
   onFechar,
   onSegurar,
+  largura,
   children,
 }: {
   aberto: boolean;
@@ -198,6 +248,7 @@ function Submenu({
   pedidoDeFoco: number;
   onFechar: () => void;
   onSegurar: () => void;
+  largura: number;
   children: ReactNode;
 }) {
   // o `Popout` não expõe a caixa por ref: o miolo é o ponto de onde achar os itens
@@ -236,7 +287,7 @@ function Submenu({
       alinhamento="start"
       distancia={-SOBREPOSICAO}
       deslocamento={-RESPIRO}
-      largura={LARGURA_DO_MENU_DE_AUDIO}
+      largura={largura}
       // aberto pelo hover o foco fica no item do pai, como antes; o `Popout`
       // leva o foco ao primeiro item só quando veio do teclado
       focarAoAbrir={autoFoco}
@@ -259,12 +310,14 @@ function LinhaComSubmenu({
   titulo,
   valor,
   ctrl,
+  larguraDoSubmenu = LARGURA_DO_MENU_DE_AUDIO,
   children,
 }: {
   chave: string;
   titulo: string;
   valor: string;
   ctrl: Submenus;
+  larguraDoSubmenu?: number;
   children: ReactNode;
 }) {
   const botao = useRef<HTMLButtonElement>(null);
@@ -304,7 +357,7 @@ function LinhaComSubmenu({
         }`}
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-text-strong">{titulo}</span>
+          <span className="block text-sm font-medium text-text-strong">{titulo}</span>
           <span className="block truncate text-xs text-text-muted">{valor}</span>
         </span>
         <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden="true" />
@@ -320,6 +373,7 @@ function LinhaComSubmenu({
         rotulo={titulo}
         autoFoco={porTeclado.current}
         pedidoDeFoco={pedidoDeFoco}
+        largura={larguraDoSubmenu}
         onSegurar={ctrl.segurar}
         onFechar={() => {
           ctrl.fechar();
@@ -332,7 +386,7 @@ function LinhaComSubmenu({
   );
 }
 
-/** Uma escolha do submenu, com a marca na que vale. */
+/** Uma escolha só de texto do submenu (perfis de entrada): rádio à direita, sem ícone. */
 function Escolha({
   rotulo,
   marcada,
@@ -348,14 +402,91 @@ function Escolha({
       role="menuitemradio"
       aria-checked={marcada}
       onClick={onSelect}
-      className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition ${
-        marcada ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
+      className="flex w-full items-center gap-3 rounded-[3px] px-2 py-2 text-left text-sm transition hover:bg-interactive-background-hover"
+    >
+      <span className="min-w-0 flex-1 truncate font-medium text-text-strong">{rotulo}</span>
+      <Radio marcado={marcada} />
+    </button>
+  );
+}
+
+/**
+ * O rádio do Discord, à direita: não marcado é um círculo com borda de 2px
+ * cinza; marcado é o círculo cheio no accent com um ponto no centro. O ponto é
+ * `accent-ink`, nunca branco: branco sobre o limão não tem contraste (design.md).
+ */
+function Radio({ marcado }: { marcado: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${
+        marcado ? "bg-brand-500" : "border-2 border-channels-default"
       }`}
     >
-      <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
-        {marcada && <Check size={16} />}
+      {marcado && <span className="h-2 w-2 rounded-full bg-control-primary-text-default" />}
+    </span>
+  );
+}
+
+/**
+ * Separa "Nome (Detalhe)" em título e subtítulo. O navegador entrega um label
+ * só; quando ele vem no formato do Windows ("Alto-falantes (Realtek Audio)") o
+ * detalhe é o aparelho físico e vai para a linha de baixo, como no Discord.
+ * Sem parênteses finais, só título.
+ */
+export function dividirNome(nome: string): { titulo: string; subtitulo: string | null } {
+  const m = /^(.*?)\s*\((.+)\)\s*$/.exec(nome);
+  if (!m || !m[1]) return { titulo: nome, subtitulo: null };
+  return { titulo: m[1], subtitulo: m[2] ?? null };
+}
+
+/** Monitor para saída de vídeo (HDMI, DisplayPort, TV); senão o ícone do tipo. */
+const SAIDA_DE_VIDEO = /hdmi|display ?port|monitor|\btv\b|nvidia|amd high|intel\(r\) display/i;
+type IconeDeAparelho = typeof Mic;
+function iconeDoAparelho(nome: string, tipo: "entrada" | "saida"): IconeDeAparelho {
+  if (tipo === "saida" && SAIDA_DE_VIDEO.test(nome)) return Monitor;
+  return tipo === "entrada" ? Mic : Headphones;
+}
+
+/**
+ * Uma escolha de aparelho: ícone, título e subtítulo (sempre os dois, como no
+ * Discord) e o rádio à direita. Sem `subtitulo` explícito, o detalhe entre
+ * parênteses do label vira subtítulo e, na falta dele, o tipo da porta.
+ */
+function EscolhaDeAparelho({
+  nome,
+  subtitulo,
+  tipo,
+  marcada,
+  onSelect,
+  icone,
+}: {
+  nome: string;
+  subtitulo?: string;
+  tipo: "entrada" | "saida";
+  marcada: boolean;
+  onSelect: () => void;
+  icone?: IconeDeAparelho;
+}) {
+  const dividido = dividirNome(nome);
+  const titulo = subtitulo === undefined ? dividido.titulo : nome;
+  const sub =
+    subtitulo ?? dividido.subtitulo ?? (tipo === "entrada" ? "Microfone" : "Alto-falantes");
+  const Icone = icone ?? iconeDoAparelho(nome, tipo);
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={marcada}
+      onClick={onSelect}
+      className="flex w-full items-center gap-3 rounded-[3px] px-2 py-2 text-left transition hover:bg-interactive-background-hover"
+    >
+      <Icone size={20} className="shrink-0 text-text-muted" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-text-strong">{titulo}</span>
+        <span className="block truncate text-xs text-text-muted">{sub}</span>
       </span>
-      <span className="min-w-0 flex-1 truncate">{rotulo}</span>
+      <Radio marcado={marcada} />
     </button>
   );
 }
@@ -395,29 +526,61 @@ function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
   );
 }
 
-/** A lista "Padrão do sistema + aparelhos", que é igual nos dois menus. */
+/**
+ * "Padrão do Windows" no Windows (inclui o Tauri, que usa o WebView2), "Padrão
+ * do sistema" nos demais — o Chromium não diz o nome do sistema, o UA sim.
+ */
+function nomeDoPadrao(sistema: SistemaDeAudio | null): string {
+  return sistema === "windows" ? "Padrão do Windows" : "Padrão do sistema";
+}
+
+/**
+ * O aparelho por trás do "Padrão": o que o navegador resolveu (`entradaPadrao`)
+ * e, sem essa informação, o primeiro da lista — melhor que uma linha sem
+ * subtítulo, e o Discord sempre mostra um nome ali.
+ */
+function aparelhoPadrao(
+  lista: MediaDeviceInfo[],
+  idResolvido: string | null,
+): string | null {
+  const achado = idResolvido ? lista.find((d) => d.deviceId === idResolvido) : undefined;
+  return (achado ?? lista[0])?.label || null;
+}
+
+/** A lista "Padrão + aparelhos", que é igual nos dois menus. */
 function ListaDeAparelhos({
+  tipo,
   opcoes,
   atual,
+  nomePadrao,
+  aparelhoDoPadrao,
   onEscolher,
   aviso,
 }: {
+  tipo: "entrada" | "saida";
   opcoes: { id: string; nome: string }[];
   atual: string | null;
+  nomePadrao: string;
+  aparelhoDoPadrao: string | null;
   onEscolher: (id: string | null) => void;
   aviso: string | null;
 }) {
   return (
     <>
-      <Escolha
-        rotulo="Padrão do sistema"
+      <EscolhaDeAparelho
+        nome={nomePadrao}
+        subtitulo={aparelhoDoPadrao ?? (tipo === "entrada" ? "Microfone" : "Alto-falantes")}
+        tipo={tipo}
+        // o "Padrão" é o aparelho que o sistema escolhe: monitor na saída, como no Discord
+        icone={tipo === "saida" ? Monitor : Mic}
         marcada={atual === null}
         onSelect={() => onEscolher(null)}
       />
       {opcoes.map((o) => (
-        <Escolha
+        <EscolhaDeAparelho
           key={o.id}
-          rotulo={o.nome}
+          nome={o.nome}
+          tipo={tipo}
           marcada={atual === o.id}
           onSelect={() => onEscolher(o.id)}
         />
@@ -454,18 +617,28 @@ export function MenuDeEntrada() {
   const entrada = useVoice((s) => s.audio.entrada);
   const setAudioPref = useVoice((s) => s.setAudioPref);
   const aviso = explicarMidia(devices.motivo);
+  // o menu só existe aberto: montado = medindo, desmontado = captura devolvida
+  const nivel = useNivelDoMicrofone(true);
+  const sistema = useSistemaDeAudio();
+  const nomePadrao = nomeDoPadrao(sistema);
+  const aparelhoDoPadrao = aparelhoPadrao(devices.inputs, devices.entradaPadrao);
+  const perfil = perfilDeEntrada(processamento);
+  if (perfil === "personalizado") ultimoPersonalizado = processamento;
 
   return (
     <>
       <LinhaComSubmenu
         chave="aparelho"
         titulo="Dispositivo de entrada"
-        valor={nomeEscolhido(devices.inputs, devices.inputId, "Microfone")}
+        valor={valorDoAparelho(devices.inputs, devices.inputId, "Microfone", nomePadrao, aparelhoDoPadrao)}
         ctrl={ctrl}
       >
         <ListaDeAparelhos
+          tipo="entrada"
           opcoes={opcoesDe(devices.inputs, "Microfone")}
           atual={devices.inputId}
+          nomePadrao={nomePadrao}
+          aparelhoDoPadrao={aparelhoDoPadrao}
           onEscolher={devices.setInput}
           aviso={aviso}
         />
@@ -473,16 +646,19 @@ export function MenuDeEntrada() {
 
       <LinhaComSubmenu
         chave="ruido"
-        titulo="Redução de ruído"
-        valor={RUIDO[processamento.ruido]}
+        titulo="Perfil de entrada"
+        valor={NOME_DO_PERFIL[perfil]}
         ctrl={ctrl}
+        larguraDoSubmenu={LARGURA_DO_SUBMENU_DE_PERFIL}
       >
-        {(["off", "padrao", "avancada"] as NivelDeRuido[]).map((nivel) => (
+        {(Object.keys(NOME_DO_PERFIL) as PerfilDeEntrada[]).map((p) => (
           <Escolha
-            key={nivel}
-            rotulo={RUIDO[nivel]}
-            marcada={processamento.ruido === nivel}
-            onSelect={() => setAudioPref({ processamento: { ...processamento, ruido: nivel } })}
+            key={p}
+            rotulo={NOME_DO_PERFIL[p]}
+            marcada={perfil === p}
+            onSelect={() =>
+              setAudioPref({ processamento: processamentoDoPerfil(p, processamento) })
+            }
           />
         ))}
       </LinhaComSubmenu>
@@ -493,7 +669,12 @@ export function MenuDeEntrada() {
           label="Volume de entrada"
           valor={entrada}
           onChange={(v) => setAudioPref({ entrada: v })}
+          mostrarValor={false}
         />
+      </div>
+      <div className="space-y-2 px-2 pb-3" onPointerEnter={() => ctrl.agendar(null)}>
+        <p className="text-sm font-semibold text-text-strong">Nível de entrada</p>
+        <MedidorSegmentado nivel={nivel} segmentos={30} preencher />
       </div>
 
       <AtalhoDeConfiguracoes ctrl={ctrl} />
@@ -514,18 +695,24 @@ export function MenuDeSaida() {
   // painel de dentro da chamada — antes só este menu a respeitava
   const escolha = escolhaDeSaida(devices, sistema, "Saída");
   const aviso = escolha.motivoFixo ?? explicarMidia(devices.motivo);
+  const nomePadrao = nomeDoPadrao(sistema);
+  // a saída não tem resolução do apelido "default": cai no primeiro da lista
+  const aparelhoDoPadrao = aparelhoPadrao(devices.outputs, null);
 
   return (
     <>
       <LinhaComSubmenu
         chave="aparelho"
         titulo="Dispositivo de saída"
-        valor={nomeEscolhido(devices.outputs, escolha.escolhido, "Saída")}
+        valor={valorDoAparelho(devices.outputs, escolha.escolhido, "Saída", nomePadrao, aparelhoDoPadrao)}
         ctrl={ctrl}
       >
         <ListaDeAparelhos
+          tipo="saida"
           opcoes={escolha.opcoes}
           atual={escolha.escolhido}
+          nomePadrao={nomePadrao}
+          aparelhoDoPadrao={aparelhoDoPadrao}
           onEscolher={devices.setOutput}
           aviso={aviso}
         />
@@ -537,6 +724,7 @@ export function MenuDeSaida() {
           label="Volume de saída"
           valor={saida}
           onChange={(v) => setAudioPref({ saida: v })}
+          mostrarValor={false}
         />
       </div>
 

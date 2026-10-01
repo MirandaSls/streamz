@@ -1,4 +1,5 @@
 import type {
+  GuildLayout,
   ApelidoDeAmigoEvent,
   ConversaFixadaEvent,
   MinhaAssociacaoEditarInput,
@@ -50,6 +51,7 @@ import type {
   DownloadAutorizado,
   DownloadCatalogo,
   DownloadPlataforma,
+  DownloadVersoes,
   DMLeaveResult,
   FriendLists,
   FriendRequest,
@@ -103,6 +105,7 @@ import type {
   ServidorComOApp,
   SessaoView,
   TokenCriado,
+  StatusDuration,
   UserStatus,
   VoiceModerarInput,
   VoiceMoveInput,
@@ -127,6 +130,7 @@ const ROTAS_SEM_REFRESH = [
   "/auth/forgot-password",
   "/auth/reset-password",
   "/downloads/token",
+  "/downloads/versoes",
 ];
 
 /**
@@ -263,8 +267,10 @@ export const api = {
   // ── eu / usuários ──
   me: () => request<PublicUser>("/users/me"),
   updateProfile: (body: ProfileUpdate) => request<PublicUser>("/users/me", patch(body)),
-  updateStatus: (manualStatus: UserStatus | null) =>
-    request<PublicUser>("/users/me/status", patch({ manualStatus })),
+  // `duration` só importa para IDLE/DND/OFFLINE; o ausente automático e o
+  // "Disponível" não passam nada e caem em "forever" (sem prazo).
+  updateStatus: (manualStatus: UserStatus | null, duration: StatusDuration = "forever") =>
+    request<PublicUser>("/users/me/status", patch({ manualStatus, duration })),
   updateAvatar: (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -287,7 +293,8 @@ export const api = {
 
   // ── d-social: amigos e bloqueio ──
   friends: () => request<FriendLists>("/friends"),
-  requestFriend: (username: string) => request<FriendRequest>("/friends/requests", json({ username })),
+  requestFriend: (username: string, mensagem?: string) =>
+    request<FriendRequest>("/friends/requests", json(mensagem ? { username, mensagem } : { username })),
   acceptFriend: (requestId: string) =>
     request<FriendRequest>(`/friends/requests/${requestId}/accept`, { method: "POST" }),
   removeFriendRequest: (requestId: string) =>
@@ -861,8 +868,14 @@ export const api = {
   // download do app de desktop (senha única, conferida no servidor)
   downloadCatalogo: () => request<DownloadCatalogo>("/downloads"),
   /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
-  downloadAutorizar: (senha: string, plataforma: DownloadPlataforma) =>
-    request<DownloadAutorizado>("/downloads/token", json({ senha, plataforma })),
+  downloadAutorizar: (senha: string, plataforma: DownloadPlataforma, versao?: string) =>
+    request<DownloadAutorizado>(
+      "/downloads/token",
+      json({ senha, plataforma, ...(versao ? { versao } : {}) }),
+    ),
+  /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
+  downloadVersoes: (senha: string, plataforma: DownloadPlataforma) =>
+    request<DownloadVersoes>("/downloads/versoes", json({ senha, plataforma })),
 
   // ── j-painel-admin ── painel do administrador da instância (só leitura)
   /** Toda conta pode perguntar; só quem está em `PLATFORM_ADMIN_EMAILS` ouve true. */
@@ -893,6 +906,12 @@ export const api = {
   /** Desafixar (idempotente; responde `fixadaEm: null`). */
   desafixarDM: (channelId: string) =>
     request<ConversaFixadaEvent>(`/dms/${channelId}/pin`, del()),
+
+  /** Pastas e ordem da barra de servidores (por conta, sincronizado entre aparelhos). */
+  guildLayout: {
+    get: () => request<GuildLayout>("/users/me/guild-layout"),
+    put: (layout: GuildLayout) => request<GuildLayout>("/users/me/guild-layout", put(layout)),
+  },
 
   /** Todas as minhas notas (carregar uma vez no boot, junto de `friends`). */
   minhasNotas: () => request<NotasDeUsuario>("/users/me/notes"),

@@ -5,7 +5,7 @@ import { COMANDOS } from "./comandos";
 import { ServicoDeNiveis, definirServico, obterServico } from "./servico";
 
 /**
- * **Streamz Níveis** — o bot oficial de XP e níveis da instância.
+ * **Degrau** — o bot oficial de XP e níveis da instância.
  *
  * Nome, arte e texto **próprios**. Os bots que fazem isto no Discord são
  * serviços fechados de outras empresas, que só falam com o `discord.com`: não
@@ -37,7 +37,8 @@ import { ServicoDeNiveis, definirServico, obterServico } from "./servico";
  */
 
 const bot: Bot = {
-  nome: "Streamz Níveis",
+  nome: "Degrau",
+  nomesAnteriores: ["Streamz Níveis"],
 
   // A descrição vai para "Descobrir aplicativos" e é contrato com quem
   // instala. `MAX_APP_DESCRIPTION` é **300** caracteres e a API recusa com um

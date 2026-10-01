@@ -17,6 +17,7 @@ import {
   MAX_PRONOUNS,
   HEX_COLOR,
   customStatusExpiry,
+  statusExpiry,
 } from "@streamz/shared";
 import type {
   CustomStatusUpdate,
@@ -25,6 +26,7 @@ import type {
   NotasDeUsuario,
   ProfileUpdate,
   PublicUser,
+  StatusDuration,
   UserProfile,
   UserStatus,
 } from "@streamz/shared";
@@ -104,10 +106,41 @@ export class UsersService {
   }
 
   /**
+   * Devolve ao automático quem teve o status manual vencido. Chamado pelo job
+   * por minuto: a leitura já trata vencido como ausente, mas a presença efetiva
+   * (`status`) e quem está vendo precisam ser atualizados.
+   */
+  async expirarStatusManuais(agora: Date): Promise<number> {
+    const vencidos = await this.prisma.user.findMany({
+      where: { manualStatus: { not: null }, manualStatusExpiresAt: { lt: agora } },
+      select: { id: true, status: true, manualStatus: true },
+      take: 500,
+    });
+    for (const v of vencidos) {
+      // conectado = status efetivo diferente de OFFLINE ou invisível (OFFLINE manual)
+      const conectado = v.status !== "OFFLINE" || v.manualStatus === "OFFLINE";
+      const status: UserStatus = conectado ? "ONLINE" : "OFFLINE";
+      const u = await this.prisma.user.update({
+        where: { id: v.id },
+        data: { manualStatus: null, manualStatusExpiresAt: null, status },
+      });
+      await this.realtime.emitToRelatedMany(v.id, [
+        [WS_EVENTS.PRESENCE_UPDATE, { userId: v.id, status }],
+        [WS_EVENTS.USER_UPDATED, toPublicUser(u, agora)],
+      ]);
+    }
+    return vencidos.length;
+  }
+
+  /**
    * Status escolhido pelo usuário. `null` volta ao automático. Se ele está
    * conectado, a presença efetiva muda na hora (OFFLINE manual = invisível).
    */
-  async updateStatus(meId: string, manualStatus: UserStatus | null): Promise<PublicUser> {
+  async updateStatus(
+    meId: string,
+    manualStatus: UserStatus | null,
+    duration: StatusDuration = "forever",
+  ): Promise<PublicUser> {
     const atual = await this.prisma.user.findUnique({ where: { id: meId } });
     if (!atual) throw new NotFoundException("Usuário não encontrado");
     // conectado = status efetivo diferente de OFFLINE ou já estava invisível
@@ -115,7 +148,12 @@ export class UsersService {
     const status: UserStatus = conectado ? (manualStatus ?? "ONLINE") : "OFFLINE";
     const u = await this.prisma.user.update({
       where: { id: meId },
-      data: { manualStatus, status },
+      data: {
+        manualStatus,
+        status,
+        // sem status manual não há o que expirar
+        manualStatusExpiresAt: manualStatus ? statusExpiry(duration, new Date()) : null,
+      },
     });
     const dto = toPublicUser(u);
     // presença e perfil vão para o mesmo público: uma consulta só

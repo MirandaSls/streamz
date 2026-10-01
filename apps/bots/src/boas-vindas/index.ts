@@ -5,7 +5,7 @@ import { COMANDOS } from "./comandos";
 import { ServicoDeBoasVindas, definirServico } from "./servico";
 
 /**
- * **Streamz Boas-vindas** — recebe quem chega no servidor.
+ * **Porteiro** — recebe quem chega no servidor.
  *
  * O nome e a arte são próprios. Os bots que fazem isto no Discord são serviços
  * de terceiros, de código fechado, que só falam com o `discord.com`: não dá
@@ -46,7 +46,8 @@ import { ServicoDeBoasVindas, definirServico } from "./servico";
  */
 
 const bot: Bot = {
-  nome: "Streamz Boas-vindas",
+  nome: "Porteiro",
+  nomesAnteriores: ["Streamz Boas-vindas"],
 
   // A descrição vai para o diretório e é contrato com quem instala: ela diz que
   // o bot nasce desligado e que cargo e DM dependem da instância — as duas

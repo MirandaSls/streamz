@@ -5,7 +5,7 @@ import { COMANDOS } from "./comandos";
 import { diretorio, drenar, esquecer } from "./estado";
 
 /**
- * **Streamz Moderação** — o bot oficial de moderação da instância.
+ * **Guarda** — o bot oficial de moderação da instância.
  *
  * O nome, o ícone e a descrição são próprios. Os bots que fazem isto no Discord
  * são serviços fechados de outras empresas, que só falam com o `discord.com`:
@@ -43,7 +43,8 @@ import { diretorio, drenar, esquecer } from "./estado";
  */
 
 const bot: Bot = {
-  nome: "Streamz Moderação",
+  nome: "Guarda",
+  nomesAnteriores: ["Streamz Moderação"],
 
   // Cabe em MAX_APP_DESCRIPTION (300) — há teste para isso, porque a fundação
   // quebrou uma vez por um caractere a mais. A descrição diz o que o bot

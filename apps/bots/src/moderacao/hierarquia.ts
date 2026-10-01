@@ -8,7 +8,7 @@
  * 1. quem chamou **tem a permissão** do comando (`BAN_MEMBERS` para `/banir`,
  *    `MODERATE_MEMBERS` para `/silenciar`, …);
  * 2. ninguém modera **a si mesmo**;
- * 3. ninguém modera **o bot** (um `/banir @Streamz Moderação` obedecido é o bot
+ * 3. ninguém modera **o bot** (um `/banir @Guarda` obedecido é o bot
  *    se expulsando do servidor a pedido de qualquer um com a permissão);
  * 4. ninguém modera **o dono** do servidor;
  * 5. ninguém modera quem tem **cargo igual ou mais alto** que o seu — e isto

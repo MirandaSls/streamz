@@ -33,15 +33,6 @@ export const MAX_SOUNDBOARD_DURACAO_MS = 5_500;
 export const MAX_SOUNDBOARD_POR_GUILD = 24;
 
 /**
- * Um som por segundo, por pessoa.
- *
- * O botão é um alto-falante na orelha de todo mundo da chamada: sem teto, um
- * clique repetido vira arma. O valor é o do Discord, e a conta é do servidor —
- * o cliente também segura o botão, mas isso é conforto, não defesa.
- */
-export const SOUNDBOARD_INTERVALO_MS = 1_000;
-
-/**
  * Nome de um som.
  *
  * Ao contrário do emoji, **aceita espaço e maiúscula**: aqui o nome é rótulo de

@@ -1,5 +1,5 @@
 /**
- * As mensagens do **Streamz Boas-vindas** — tudo função pura.
+ * As mensagens do **Porteiro** — tudo função pura.
  *
  * É a parte que dá para testar sem gateway, sem banco e sem servidor de pé, e
  * é onde mora o defeito clássico deste tipo de bot: a substituição de

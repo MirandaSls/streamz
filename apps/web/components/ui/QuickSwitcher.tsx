@@ -101,7 +101,7 @@ interface Detalhe {
   /** conversa 1-a-1 ou amigo: o avatar e a bolinha de status. */
   user?: PublicUser;
   /** grupo de conversa: mosaico dos participantes. */
-  grupo?: { iconUrl: string | null; members: PublicUser[] };
+  grupo?: { id: string; iconUrl: string | null; members: PublicUser[] };
   /** servidor: ícone próprio. */
   guild?: { name: string; iconUrl: string | null };
   /** servidor a que o canal pertence (a navegação troca de servidor por ele). */
@@ -236,7 +236,7 @@ export default function QuickSwitcher() {
         kind: "dm",
         variante: grupo ? "GROUP" : "",
         user: outro,
-        grupo: grupo ? { iconUrl: d.iconUrl, members: d.others } : undefined,
+        grupo: grupo ? { id: d.id, iconUrl: d.iconUrl, members: d.others } : undefined,
         // sem apelido o título já é o usuário: não repete o mesmo nome
         usuario: outro && dmTitle(d) !== outro.username ? outro.username : undefined,
         naoLido: isUnread(d),
@@ -750,6 +750,7 @@ function ItemIcon({
         <GroupAvatar
           iconUrl={detalhe.grupo.iconUrl}
           members={detalhe.grupo.members}
+          seed={detalhe.grupo.id}
           size="sm"
           className="shrink-0"
         />

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { caminhoDoInstalador } from "./arquivo";
 import {
@@ -9,6 +9,14 @@ import {
   type ManifestoMacosPublicado,
 } from "./publicacao";
 import { ehMaisNova } from "./versao";
+
+/**
+ * Interruptor do operador: se este arquivo existir em `UPDATE_DIR`, o macOS
+ * para de receber atualização (204). Liga com `touch`, desliga com `rm`, sem
+ * restart — serve para testar versões antigas do app no Mac sem ele se
+ * atualizar sozinho na abertura.
+ */
+const CONGELAR_MACOS = "congelar-macos";
 
 /**
  * O manifesto que o atualizador do Tauri espera. O formato é dele, não nosso —
@@ -257,6 +265,8 @@ export class UpdatesService {
     if (plataforma.startsWith("android-")) return this.manifestoDoAndroid(plataforma, atual);
     const alvo = this.alvoDoTauri(plataforma);
     if (!alvo || this.pacoteIncompativel(alvo, tipoDePacote)) return null;
+    // Checado a cada consulta (existsSync é barato) para o `rm` valer na hora.
+    if (alvo.prefixo === "MACOS" && existsSync(join(this.diretorio(), CONGELAR_MACOS))) return null;
     return this.manifestoDoDesktop(alvo, atual);
   }
 

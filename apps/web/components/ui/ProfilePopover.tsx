@@ -14,6 +14,7 @@ import {
 import { BotaoDeIcone, Button, Popout, Tooltip } from "@/components/ui/primitivos";
 import {
   Permission,
+  STATUS_DURATIONS,
   customStatusOf,
   displayNameOf,
   highestPosition,
@@ -21,12 +22,14 @@ import {
   type ComandoDeApp,
   type MemberRole,
   type RelationshipKind,
+  type StatusDuration,
   type UserProfile,
   type UserStatus,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import TagDeBot from "@/components/ui/TagDeBot";
+import UsernameCopiavel from "@/components/ui/UsernameCopiavel";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { CabecalhoDoPerfil } from "@/components/ui/perfil/CabecalhoDoPerfil";
 import { PainelDaMinhaConta } from "@/components/ui/perfil/PainelDaMinhaConta";
@@ -124,10 +127,9 @@ const FOLGA_DO_RODAPE = 6;
 
 /**
  * O submenu de status do Discord, medido no print `2026-09-03 180020`: 300 de
- * largura, nascendo à direita da linha de status. **Não há "por quanto
- * tempo"**: os chevrons de "Ausente", "Não perturbar" e "Invisível" existem no
- * desenho, mas o clique aplica o status na hora — por isso são `chevron`
- * (enfeite) e não `submenu`.
+ * largura, nascendo à direita da linha de status. Ausente, Não perturbar
+ * e Invisível abrem um submenu lateral com a duração (`STATUS_DURATIONS`);
+ * "Disponível" aplica na hora, sem prazo.
  */
 const OPCOES_DE_STATUS: {
   /** `null` = automático (o servidor devolve ONLINE). */
@@ -135,6 +137,7 @@ const OPCOES_DE_STATUS: {
   dot: UserStatus;
   label: string;
   description?: string;
+  /** abre o submenu de duração (`STATUS_DURATIONS`). */
   chevron?: boolean;
 }[] = [
   { value: null, dot: "ONLINE", label: "Disponível" },
@@ -154,6 +157,17 @@ const OPCOES_DE_STATUS: {
     chevron: true,
   },
 ];
+
+/** "até 14:30" (ou "até amanhã 14:30" fora do dia); `null` sem prazo. */
+function rotuloDoPrazo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString()
+    ? `até ${hora}`
+    : `até ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
+}
 
 /** Largura do submenu de status: 300 no print (x=298..597, borda inclusa). */
 const LARGURA_DO_SUBMENU = 300;
@@ -189,9 +203,9 @@ const DATA_MEMBRO_DESDE = new Intl.DateTimeFormat("pt-BR", {
  * mousedown cai fora dele), então quem termina o pedido não pode depender de o
  * `ProfilePopover` ainda estar montado.
  */
-async function aplicarStatus(value: UserStatus | null) {
+async function aplicarStatus(value: UserStatus | null, duracao?: StatusDuration) {
   try {
-    await definirStatusManual(value);
+    await definirStatusManual(value, duracao);
   } catch (e) {
     ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
   }
@@ -509,18 +523,32 @@ export default function ProfilePopoverHost() {
       direitaDoCartao - SOBREPOSICAO_DO_SUBMENU,
       r.top - TOPO_DO_SUBMENU,
       OPCOES_DE_STATUS.flatMap((o, i) => {
-        const item: MenuItem = {
-          label: o.label,
-          description: o.description,
-          chevron: o.chevron,
-          forte: true,
-          icon: (
-            <span className="block h-2.5 w-2.5">
-              <IconeDeStatus status={o.dot} className="h-full w-full" />
-            </span>
-          ),
-          onSelect: () => void aplicarStatus(o.value),
-        };
+        const icon = (
+          <span className="block h-2.5 w-2.5">
+            <IconeDeStatus status={o.dot} className="h-full w-full" />
+          </span>
+        );
+        // Ausente/Não perturbar/Invisível abrem o "por quanto tempo"; o item
+        // ativo com prazo mostra "até HH:MM" no lugar da descrição.
+        const ativo = o.value !== null && status === o.dot;
+        const ate = ativo ? rotuloDoPrazo(me?.manualStatusExpiresAt) : null;
+        const item: MenuItem = o.chevron
+          ? {
+              label: o.label,
+              description: ate ?? o.description,
+              icon,
+              submenu: STATUS_DURATIONS.map((d) => ({
+                label: d.label,
+                onSelect: () => void aplicarStatus(o.value, d.value),
+              })),
+            }
+          : {
+              label: o.label,
+              description: o.description,
+              forte: true,
+              icon,
+              onSelect: () => void aplicarStatus(o.value),
+            };
         // separador só depois de "Disponível", como no print
         return i === 1 ? [{ separator: true } as MenuItem, item] : [item];
       }),
@@ -892,7 +920,7 @@ export default function ProfilePopoverHost() {
               )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-text-sm text-text-default">
-              <span className="min-w-0 truncate">{user.username}</span>
+              <UsernameCopiavel username={user.username} className="min-w-0 truncate" />
               {perfil?.pronouns && (
                 <>
                   <span aria-hidden="true" className="text-text-muted">

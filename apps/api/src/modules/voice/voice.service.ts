@@ -397,6 +397,11 @@ export class VoiceService {
     canalSnowflake: string;
     /** nome do participante no LiveKit (o nome da aplicação). */
     nome: string;
+    /**
+     * cuid interno do usuário-bot. Vai no `metadata` do participante porque a
+     * identity é `bot:<snowflake>` e a web identifica falantes pelo userId.
+     */
+    botUserId?: string;
   }): Promise<{ token: string; tamanho: number; endpoint: string }> {
     const segredo = process.env.PONTE_VOZ_SEGREDO?.trim();
     if (!segredo) {
@@ -415,6 +420,7 @@ export class VoiceService {
       identity: identidade,
       name: dados.nome,
       ttl: TTL_DO_LIVEKIT_DA_PONTE,
+      ...(dados.botUserId ? { metadata: JSON.stringify({ userId: dados.botUserId }) } : {}),
     });
     lk.addGrant({
       room: sala,

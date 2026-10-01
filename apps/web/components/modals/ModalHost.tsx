@@ -87,6 +87,10 @@ const GroupSettingsModal = dynamic(() => import("@/components/modals/GroupSettin
   ssr: false,
   loading: () => null,
 });
+const EditarGrupoModal = dynamic(() => import("@/components/modals/EditarGrupoModal"), {
+  ssr: false,
+  loading: () => null,
+});
 const UserProfileModal = dynamic(() => import("@/components/modals/UserProfileModal"), {
   ssr: false,
   loading: () => null,
@@ -223,6 +227,8 @@ function renderModal(modal: Modal) {
       return <UserProfileModal userId={modal.userId} guildId={modal.guildId} aba={modal.aba} />;
     case "groupSettings":
       return <GroupSettingsModal channelId={modal.channelId} />;
+    case "editGroup":
+      return <EditarGrupoModal channelId={modal.channelId} />;
     case "addGroupMembers":
       return <AddGroupMembersModal channelId={modal.channelId} />;
     // ── g-emojis-midia ──

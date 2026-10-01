@@ -15,7 +15,10 @@ import { create } from "zustand";
  * sobrevive a um recarregamento da aba principal (ela morre junto).
  */
 
-export type TipoDeJanelaDeVoz = "usuario" | "tela";
+export type TipoDeJanelaDeVoz = "usuario" | "tela" | "chamada";
+
+/** Chave única da janela que leva a chamada inteira (só existe uma por vez). */
+export const CHAVE_DA_JANELA_DA_CHAMADA = "chamada";
 
 export type JanelaDeVoz = {
   win: Window;
@@ -27,6 +30,7 @@ export type JanelaDeVoz = {
 
 /** A chave é a do tile: `${userId}` para a pessoa, `${userId}:tela` para a transmissão. */
 export function chaveDaJanela(tipo: TipoDeJanelaDeVoz, userId: string): string {
+  if (tipo === "chamada") return CHAVE_DA_JANELA_DA_CHAMADA;
   return tipo === "tela" ? `${userId}:tela` : userId;
 }
 
@@ -116,3 +120,11 @@ export const useJanelasDeVoz = create<JanelasDeVozState>((set, get) => ({
     return true;
   },
 }));
+
+/** `true` enquanto a chamada inteira está numa janela solta (aba principal mostra um aviso no palco). */
+export function useChamadaEmJanela(): boolean {
+  return useJanelasDeVoz((s) => {
+    const j = s.janelas[CHAVE_DA_JANELA_DA_CHAMADA];
+    return !!j && !j.win.closed;
+  });
+}

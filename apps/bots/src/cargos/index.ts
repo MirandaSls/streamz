@@ -5,7 +5,7 @@ import { COMANDOS } from "./comandos";
 import { ServicoDeCargos, definirServico, obterServico } from "./servico";
 
 /**
- * **Streamz Cargos** — o bot oficial de cargos por reação.
+ * **Crachá** — o bot oficial de cargos por reação.
  *
  * Quem administra publica um painel (uma mensagem com uma lista de emojis);
  * quem lê reage e ganha o cargo; tira a reação e perde. É o padrão que todo
@@ -36,7 +36,8 @@ import { ServicoDeCargos, definirServico, obterServico } from "./servico";
  */
 
 const bot: Bot = {
-  nome: "Streamz Cargos",
+  nome: "Crachá",
+  nomesAnteriores: ["Streamz Cargos"],
 
   // ≤ 300 caracteres (`MAX_APP_DESCRIPTION`), conferido no `identidade.spec.ts`.
   // Diz o que ele **precisa** — o cargo acima — porque é a causa de quase toda

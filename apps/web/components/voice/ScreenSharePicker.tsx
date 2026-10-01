@@ -8,6 +8,7 @@ import { AppWindow, Lock, Monitor, MonitorUp } from "@/components/ui/icones";
 import { Button, Checkbox } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { capturarTelaNoNavegador, suportaCapturaDeTela } from "@/lib/captura-de-tela";
+import { lotesDeMiniaturas } from "@/lib/lotes-de-miniaturas";
 import {
   capacidadesDeTela,
   fontesDeTela,
@@ -418,6 +419,8 @@ function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
 const PAUSA_ENTRE_VARREDURAS_MS = 400;
 /** Relistar janelas (abertas e fechadas desde a última vez) a cada tanto. */
 const RELISTAR_MS = 3000;
+/** Janelas por chamada de miniaturas: o suficiente para pintar logo sem travar a captura. */
+const TAMANHO_DO_LOTE = 4;
 
 function GradeNativa({
   aba,
@@ -439,6 +442,10 @@ function GradeNativa({
 }) {
   const [fontes, setFontes] = useState<FonteDeTela[] | null>(null);
   const [miniaturas, setMiniaturas] = useState<Record<string, string>>({});
+  // Espelho síncrono do que já foi pintado: o laço precisa saber, a cada
+  // varredura, quais ids ainda estão sem miniatura (o estado ficaria velho
+  // dentro do closure).
+  const pintadas = useRef<Record<string, string>>({});
 
   useEffect(() => {
     // Parar de relistar enquanto a transmissão começa: enumerar janelas abre e
@@ -484,16 +491,25 @@ function GradeNativa({
     const lista = ids.split("\n");
     void (async () => {
       while (vivo) {
-        const resultado = await miniaturasDeTela(lista);
-        if (!vivo) return;
-        setMiniaturas((atual) => {
-          const proximo = { ...atual };
-          lista.forEach((id, i) => {
-            const m = resultado[i];
-            if (m) proximo[id] = m;
+        // Lotes em sequência, nunca em paralelo: o Rust serializa as capturas
+        // e o WGC não tolera sessões concorrentes. Cada lote pinta assim que
+        // volta, em vez de esperar a varredura inteira.
+        const lotes = lotesDeMiniaturas(lista, (id) => id in pintadas.current, TAMANHO_DO_LOTE);
+        for (const lote of lotes) {
+          const resultado = await miniaturasDeTela(lote);
+          if (!vivo) return;
+          lote.forEach((id, i) => {
+            if (resultado[i]) pintadas.current[id] = resultado[i];
           });
-          return proximo;
-        });
+          setMiniaturas((atual) => {
+            const proximo = { ...atual };
+            lote.forEach((id, i) => {
+              const m = resultado[i];
+              if (m) proximo[id] = m;
+            });
+            return proximo;
+          });
+        }
         await new Promise((r) => setTimeout(r, PAUSA_ENTRE_VARREDURAS_MS));
       }
     })();

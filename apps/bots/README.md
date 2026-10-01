@@ -1,5 +1,8 @@
 # `@streamz/bots` — os bots oficiais do Streamz
 
+> **Nome de exibição.** O nome de exibição é a chave com que o provisionamento acha a aplicação no diretório. Por isso, ao renomear um bot, o nome antigo vai em `nomesAnteriores` do `index.ts` — senão o provisionamento cria uma aplicação duplicada.
+> **Arte.** Ícone em `assets/<bot>.png`; banner em SVG (`assets/<nome>-banner.svg`). A aplicação ainda não tem campo de banner, então o SVG fica só versionado.
+
 Bots que **nós** escrevemos, com nome do Streamz, hospedados nesta instância, e
 que aparecem em "Descobrir aplicativos" como aplicativos oficiais.
 
@@ -12,13 +15,13 @@ dá para fazer é escrever os nossos, e é isto.
 | | |
 |---|---|
 | **Runtime comum** | `src/runtime/` — conexão, registro de comandos, roteamento de `/` e `!`, log, reconexão, desligamento |
-| **Bots** | `src/musica/` (**Streamz Música**), `src/boas-vindas/`, `src/moderacao/`, `src/niveis/`, `src/cargos/` (**Streamz Cargos**). Os próximos: tickets |
+| **Bots** | `src/musica/` (**Fone**), `src/boas-vindas/`, `src/moderacao/`, `src/niveis/`, `src/cargos/` (**Crachá**). Os próximos: tickets |
 | **Como acrescentar um** | [`CONTRATO.md`](./CONTRATO.md) |
 | **Deploy** | `docker-compose.yml`, profile `bots`: um container por bot, mais o `lavalink` |
 
 ---
 
-## Streamz Música
+## Fone
 
 Onze comandos, cada um com um apelido de prefixo:
 
@@ -52,7 +55,7 @@ que a voz ainda não está configurada — em vez de pendurar esperando um
 
 ---
 
-## Streamz Cargos
+## Crachá
 
 Cargos por reação: um painel, um emoji por cargo, e quem reage ganha o cargo.
 Quatro modos (`normal`, `unico`, `so-adicionar`, `travado`), estado em arquivo
@@ -79,7 +82,7 @@ BOTS_EMAIL=… BOTS_SENHA=… STREAMZ_API_URL=https://api.streamz.chat/api \
 docker compose --profile bots up -d --build lavalink bot-musica
 docker compose --profile bots up -d --build bot-cargos
 
-# a prova do Streamz Cargos, na bancada descartável (sobe e derruba tudo)
+# a prova do Crachá, na bancada descartável (sobe e derruba tudo)
 ./apps/bots/prova-cargos.sh
 ```
 
@@ -99,5 +102,5 @@ docker compose --profile bots up -d --build bot-cargos
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_SENHA` | `lavalink` / `2333` / `streamz` | o servidor de áudio |
 | `LAVALINK_BUSCA` | `ytsearch` | plataforma de busca padrão |
 | `MUSICA_VOLUME_PADRAO` | `60` | volume ao entrar |
-| `CARGOS_DIR` | `/dados` | onde o Streamz Cargos guarda os painéis (um JSON por servidor) |
+| `CARGOS_DIR` | `/dados` | onde o Crachá guarda os painéis (um JSON por servidor) |
 | `BOTS_EMAIL` / `BOTS_SENHA` / `BOTS_TOKEN` | — | só no `provisionar` |

@@ -24,7 +24,10 @@ vi.mock("@/stores/voiceDevices", () => ({
 import {
   JANELA_SEM_REPETIR_MS,
   esquecerToquesRecentes,
+  ATENUACAO_NO_MAC,
   ehAparelhoDeBolso,
+  ehMacDeMesa,
+  fatorNaPlataforma,
   fatorNoAparelho,
   tocarSom,
   volumeDoSom,
@@ -173,6 +176,57 @@ describe("um dono só do volume", () => {
     vi.advanceTimersByTime(1000);
     tocarSom("alguem-entrou"); // mesmo arquivo, outro nome
     expect(AudioFalso.tocados.map((t) => t.volume)).toEqual([0.2, 0.2]);
+  });
+});
+
+describe("Mac de mesa", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const comoMac = (ponteiroGrosso: boolean) => {
+    vi.stubGlobal("navigator", { platform: "MacIntel", userAgent: "Macintosh" });
+    vi.stubGlobal("matchMedia", (consulta: string) => ({
+      matches: ponteiroGrosso && consulta === "(pointer: coarse)",
+    }));
+  };
+
+  it("no Mac o fator cai a um terço", () => {
+    expect(fatorNaPlataforma(0.3, false, true)).toBeCloseTo(0.3 / 3);
+    expect(ATENUACAO_NO_MAC).toBeCloseTo(1 / 3);
+  });
+
+  it("fora do Mac é igual a fatorNoAparelho", () => {
+    expect(fatorNaPlataforma(0.08, false, false)).toBe(fatorNoAparelho(0.08, false));
+    expect(fatorNaPlataforma(0.08, true, false)).toBe(fatorNoAparelho(0.08, true));
+  });
+
+  it("bolso sem Mac usa a raiz", () => {
+    expect(fatorNaPlataforma(0.25, true, false)).toBeCloseTo(0.5);
+  });
+
+  it("nunca passa de 1", () => {
+    for (const f of [0, 0.08, 0.35, 1]) {
+      for (const bolso of [false, true]) {
+        for (const mac of [false, true]) {
+          expect(fatorNaPlataforma(f, bolso, mac)).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it("Macintosh com ponteiro fino é Mac de mesa; volumeDoSom cai a um terço", () => {
+    comoMac(false);
+    expect(ehMacDeMesa()).toBe(true);
+    expect(volumeDoSom("chamada")).toBeCloseTo(0.35 / 3);
+  });
+
+  it("Macintosh com ponteiro grosso (iPad) não é Mac de mesa", () => {
+    comoMac(true);
+    expect(ehMacDeMesa()).toBe(false);
+  });
+
+  it("Windows não é Mac de mesa", () => {
+    vi.stubGlobal("navigator", { platform: "Win32", userAgent: "Windows NT 10.0" });
+    expect(ehMacDeMesa()).toBe(false);
   });
 });
 

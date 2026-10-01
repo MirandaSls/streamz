@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Degrau, níveis e experiência">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#052e1c"/>
+      <stop offset="0.5" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#a3e635"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#bg)"/>
+  <!-- degraus ascendentes translúcidos -->
+  <g fill="#fff" fill-opacity="0.16">
+    <rect x="580" y="260" width="100" height="140" rx="10"/>
+    <rect x="690" y="210" width="100" height="190" rx="10"/>
+    <rect x="800" y="160" width="100" height="240" rx="10"/>
+    <rect x="910" y="110" width="100" height="290" rx="10"/>
+    <rect x="1020" y="60" width="100" height="340" rx="10"/>
+  </g>
+  <!-- barra de progresso -->
+  <rect x="580" y="330" width="540" height="26" rx="13" fill="#fff" fill-opacity="0.18"/>
+  <rect x="580" y="330" width="360" height="26" rx="13" fill="#ecfccb" fill-opacity="0.5"/>
+  <!-- estrela do nível -->
+  <path d="M1070 30 L1081 54 L1107 57 L1088 74 L1093 100 L1070 87 L1047 100 L1052 74 L1033 57 L1059 54 Z" fill="#ecfccb" fill-opacity="0.45"/>
+  <text x="70" y="230" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="150" font-weight="700" fill="#fff">Degrau</text>
+  <text x="76" y="290" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="36" fill="#ecfccb" fill-opacity="0.92">níveis e experiência</text>
+</svg>

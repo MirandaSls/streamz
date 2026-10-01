@@ -56,7 +56,7 @@ só gera erro em runtime. Para religar:
 
 Passo a passo em `apps/desktop/README.md`, seção "Auto-update".
 
-### Bots oficiais: falta a ponte de voz para o Streamz Música tocar
+### Bots oficiais: falta a ponte de voz para o Fone tocar
 O bot de música (`apps/bots/src/musica`) já **sobe, conecta, registra os onze
 comandos, aparece no diretório e responde a tudo** — o que ele não faz é emitir
 som. O caminho do áudio depende da ponte de voz (`apps/ponte-voz`), e a ponte

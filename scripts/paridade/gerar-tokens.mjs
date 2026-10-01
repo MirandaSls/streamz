@@ -81,6 +81,13 @@ const PREFIXOS_FORA = [
  * - `--plum-20`: a amostra do Dark na mesma grade (`.darkerIcon__36dee`) — as
  *   amostras são da paleta crua de propósito: iguais em qualquer tema ativo;
  * - `--green-360`: a dica verde;
+ * - `--green-new-38`/`--yellow-new-30`/`--red-new-46`/`--neutral-34`: as cores de
+ *   presença (online, ausente, não perturbe, offline). O selo de status do
+ *   Discord pinta com estas, da paleta nova, e não com os `--icon-status-*`
+ *   semânticos (#3d9e60/#ffcb6e/#dc4247/#9d9ea5): os prints sem desvio de
+ *   captura (`2026-08-31 101638` e `2026-09-03 180020`, botão #5865f2 lido
+ *   exato) dão
+ *   #45a366, #ffc04e, #da3e44 e #84858d, que são exatamente estas quatro;
  * - `--opacity-black-*`/`--opacity-white-*`: preto e branco com alfa, que é como
  *   o Discord faz véu de vídeo, capa de botão sobre mídia e máscara de recorte —
  *   o `--background-scrim` tem alfa fixo de 72% e não serve para isso.
@@ -90,7 +97,10 @@ const EXTRAS = [
   /^--primary-(230|330|600|700)$/,
   /^--plum-20$/,
   /^--green-360$/,
-  /^--opacity-(black|white)-\d+$/,
+  /^--(green-new-38|yellow-new-30|red-new-46|neutral-34)$/,
+  // green entra porque a pasta de servidores do rail usa o verde com alfa
+  // (`bg-opacity-green-28`, rgba(0,133,69,.28)), que não existe em preto/branco
+  /^--opacity-(black|white|green)-\d+$/,
 ];
 
 /**

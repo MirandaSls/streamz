@@ -98,6 +98,7 @@ function usuario(id: string, bot: boolean): PublicUser {
     status: "ONLINE",
     customStatusText: null,
     customStatusEmoji: null,
+    manualStatusExpiresAt: null,
     bot,
   };
 }

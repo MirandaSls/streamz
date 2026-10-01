@@ -125,7 +125,7 @@ function gravarToken(id: string, token: string) {
   log.info("token gravado", { caminho });
 }
 
-interface AppDaLista {
+export interface AppDaLista {
   id: string;
   name: string;
   description: string | null;
@@ -143,9 +143,24 @@ function lerIcone(bot: Bot): { nome: string; bytes: Buffer } | null {
   return { nome: caminho.split("/").pop() ?? "icone.png", bytes: readFileSync(caminho) };
 }
 
+/**
+ * Acha a aplicação do bot: pelo nome atual primeiro e, só se não houver, por
+ * um nome antigo. O atual vence mesmo que um antigo também exista, para um
+ * nome reaproveitado não sequestrar a aplicação de outro bot.
+ */
+export function acharAplicacao(
+  existentes: readonly AppDaLista[],
+  bot: Pick<Bot, "nome" | "nomesAnteriores">,
+): AppDaLista | undefined {
+  const atual = existentes.find((a) => a.name === bot.nome);
+  if (atual) return atual;
+  const antigos = bot.nomesAnteriores ?? [];
+  return existentes.find((a) => antigos.includes(a.name));
+}
+
 async function provisionarUm(id: string, acesso: string, existentes: AppDaLista[]) {
   const bot = carregarBot(id);
-  const jaExiste = existentes.find((a) => a.name === bot.nome);
+  const jaExiste = acharAplicacao(existentes, bot);
 
   let applicationId: string;
   if (!jaExiste) {
@@ -162,6 +177,9 @@ async function provisionarUm(id: string, acesso: string, existentes: AppDaLista[
     log.info("aplicativo criado", { bot: id, nome: bot.nome, applicationId });
   } else {
     applicationId = jaExiste.id;
+    if (jaExiste.name !== bot.nome) {
+      log.info("aplicativo renomeado", { bot: id, de: jaExiste.name, para: bot.nome });
+    }
     log.info("aplicativo já existia", { bot: id, nome: bot.nome, applicationId });
 
     const temArquivo = existsSync(caminhoDoToken(id));
@@ -256,7 +274,10 @@ async function principal() {
   log.info("pronto", { bots: feitos });
 }
 
-principal().catch((erro) => {
-  log.erro("o provisionamento falhou", { erro });
-  process.exit(1);
-});
+// Só roda como script: o spec importa `acharAplicacao` sem disparar chamadas à API.
+if (require.main === module) {
+  principal().catch((erro) => {
+    log.erro("o provisionamento falhou", { erro });
+    process.exit(1);
+  });
+}

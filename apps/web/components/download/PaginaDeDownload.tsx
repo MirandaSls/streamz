@@ -11,11 +11,7 @@ import { BotaoDaPagina, LinkDaPagina } from "@/components/download/BotaoDaPagina
 import { ComposicaoDoApp } from "@/components/download/ComposicaoDoApp";
 import EtapaDaSenha from "@/components/download/EtapaDaSenha";
 import FundoDoTopo from "@/components/download/FundoDoTopo";
-import {
-  ID_DO_TERMINAL_MAC,
-  InstalarPeloTerminal,
-  notaDeInstalacao,
-} from "@/components/download/InstalacaoNoSistema";
+import { notaDeInstalacao } from "@/components/download/InstalacaoNoSistema";
 import { SecaoDePlataformas } from "@/components/download/SecaoDePlataformas";
 import {
   dataDoInstalador,
@@ -301,18 +297,6 @@ function AcaoDoTopo({
             {formatBytes(disponivel.tamanho)}
             {data ? ` · atualizado em ${data}` : ""}
           </p>
-          {/* No Mac o Terminal é o caminho recomendado (sem o bloqueio do
-              Gatekeeper), mas o bloco com o comando mora na seção "computador":
-              no topo ele quebraria o desenho do Discord, e duas cópias dariam
-              dois ids iguais. Daqui só a âncora. */}
-          {disponivel.plataforma === "macos" ? (
-            <a
-              href={`#${ID_DO_TERMINAL_MAC}`}
-              className="mt-2 text-text-sm font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
-            >
-              Recomendado no Mac: instalar pelo Terminal
-            </a>
-          ) : null}
         </>
       );
     }
@@ -355,27 +339,23 @@ function AcaoDoTopo({
 }
 
 /**
- * O que vem abaixo dos botões da seção "computador": o comando do Terminal
- * (só com instalador de macOS publicado — o script baixa esse mesmo arquivo) e
- * a instrução de pós-download de cada sistema que tem instalador. As mesmas
- * instruções reaparecem no "O download começou" da `EtapaDaSenha`.
+ * O que vem abaixo dos botões da seção "computador": a instrução de
+ * pós-download de cada sistema que tem instalador. O comando do Terminal do
+ * Mac não aparece aqui de propósito: só existe depois da senha, na `EtapaDaSenha`.
+ * As mesmas instruções reaparecem no "O download começou" da `EtapaDaSenha`.
  */
 function InstrucoesDoComputador({ catalogo }: { catalogo: DownloadCatalogo | null }) {
-  const temMac = disponivelPara(catalogo, "macos") !== null;
   const notas = (["macos", "linux"] as const)
     .filter((p) => disponivelPara(catalogo, p) !== null)
     .map((p) => ({ plataforma: p, nota: notaDeInstalacao(p) }));
-  if (!temMac && notas.length === 0) return null;
+  if (notas.length === 0) return null;
   return (
     <div className="mt-8 flex w-full max-w-[560px] flex-col items-center gap-6 lg:items-start">
-      {temMac ? <InstalarPeloTerminal /> : null}
-      {notas.length > 0 ? (
-        <ul className="flex flex-col gap-2 text-text-sm text-text-muted">
-          {notas.map(({ plataforma, nota }) => (
-            <li key={plataforma}>{nota}</li>
-          ))}
-        </ul>
-      ) : null}
+      <ul className="flex flex-col gap-2 text-text-sm text-text-muted">
+        {notas.map(({ plataforma, nota }) => (
+          <li key={plataforma}>{nota}</li>
+        ))}
+      </ul>
     </div>
   );
 }

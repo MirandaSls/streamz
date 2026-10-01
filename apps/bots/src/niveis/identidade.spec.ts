@@ -11,8 +11,10 @@ import bot from "./index";
  * inteira morreu com um `400` cru. Descobrir aquilo custou subir a bancada;
  * aqui custa 5 ms.
  */
-describe("identidade do Streamz Níveis", () => {
+describe("identidade do Degrau", () => {
   it("o nome cabe no limite da API", () => {
+    expect(bot.nomesAnteriores).toEqual(["Streamz Níveis"]);
+    expect(bot.nome).toBe("Degrau");
     expect(bot.nome.length).toBeGreaterThanOrEqual(2);
     expect(bot.nome.length).toBeLessThanOrEqual(MAX_APP_NAME);
   });

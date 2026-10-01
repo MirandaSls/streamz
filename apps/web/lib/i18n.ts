@@ -206,6 +206,7 @@ const PT_BR = {
   "atalho.zoomMais": "Aumentar o zoom",
   "atalho.zoomMenos": "Diminuir o zoom",
   "atalho.zoomPadrao": "Zoom padrão",
+  "atalho.recarregar": "Recarregar o app",
 
   // ── idioma ──
   "idioma.escolha": "Idioma do app",
@@ -405,6 +406,7 @@ const EN_US: Dicionario = {
   "atalho.zoomMais": "Zoom in",
   "atalho.zoomMenos": "Zoom out",
   "atalho.zoomPadrao": "Reset zoom",
+  "atalho.recarregar": "Reload the app",
 
   "idioma.escolha": "App language",
   "idioma.selecione": "Select a language",

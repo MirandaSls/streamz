@@ -1,4 +1,4 @@
-// Prepara a bancada da prova do **Streamz Cargos**: os dois cargos e o segundo
+// Prepara a bancada da prova do **CrachÃ¡**: os dois cargos e o segundo
 // usuário.
 //
 // Roda num `docker run --rm node:22` na rede da bancada, **antes** de o

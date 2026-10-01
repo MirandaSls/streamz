@@ -3,9 +3,14 @@
 import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
 import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
+import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
+import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { levarAbaParaTextoEnquantoJanelaAberta } from "@/lib/chamada-em-janela-navegacao";
+import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
@@ -94,6 +99,7 @@ export default function VoicePanel({
 
   const conectado = aqui && status === "connected";
   const nome = channel.name ?? "voz";
+  const emJanela = useChamadaEmJanela();
   // O `useOcultarInativo` existe para tirar a moldura da frente do VÍDEO. Na
   // vista do canal não há vídeo nenhum — sumir com o nome do canal depois de 3s
   // parado seria esconder a única coisa que a tela tem a dizer, e a print
@@ -124,9 +130,9 @@ export default function VoicePanel({
         {...daMoldura}
         // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
         // filete nenhum cruzando o palco, e o brilho sobe por trás do nome.
-        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 transition-opacity duration-200 ${
+        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 ${
           aqui ? "border-b border-border-subtle shadow-elevation-low" : ""
-        } ${molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        } ${classeDaMoldura(molduraVisivel, "cima")}`}
       >
         <span className="flex min-w-0 items-center gap-2 font-semibold text-text-strong">
           <Volume2 size={24} className="shrink-0 text-text-muted" aria-hidden="true" />
@@ -234,7 +240,11 @@ export default function VoicePanel({
                 das entradas e de três segundos em 12%. Quem está conectando
                 aparece na barra "Conectando…" (`VoiceConnectedBar`), como no
                 Discord. */}
-            <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
+            {emJanela ? (
+              <AvisoChamadaEmJanela />
+            ) : (
+              <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
+            )}
           </div>
         ) : (
           // sem `p-4`: o degradê vai de borda a borda do palco, como na print
@@ -267,9 +277,7 @@ export default function VoicePanel({
               // (`FileiraDeControles`, grade `1fr auto 1fr`).
               <div
                 {...daMoldura}
-                className={`transition-opacity duration-200 ${
-                  visivel ? "opacity-100" : "pointer-events-none opacity-0"
-                }`}
+                className={classeDaMoldura(visivel, "baixo")}
               >
                 <BotaoDeIcone
                   rotulo="Convidar para voz"
@@ -295,6 +303,12 @@ export default function VoicePanel({
                 onTelaCheia={alternar}
                 visivel={visivel}
                 moldura={daMoldura}
+                emJanela={emJanela}
+                onAbrirEmJanela={() =>
+                  emJanela
+                    ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
+                    : abrirEmJanelaEIrParaTexto(nome, channel.id)
+                }
               />
             }
           />
@@ -342,4 +356,10 @@ function abrirMenuDeNotificacoes(
     })),
   ];
   ui.openContextMenu(r.left, r.bottom + 4, itens);
+}
+
+/** Abre a janela primeiro (gesto transitório) e só depois leva a aba ao texto. */
+function abrirEmJanelaEIrParaTexto(titulo: string, canalId: string): void {
+  abrirJanelaDaChamada(titulo);
+  levarAbaParaTextoEnquantoJanelaAberta(canalId);
 }

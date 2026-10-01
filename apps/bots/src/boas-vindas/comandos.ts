@@ -1,5 +1,5 @@
 /**
- * Os comandos do **Streamz Boas-vindas**.
+ * Os comandos do **Porteiro**.
  *
  * ## Por que `acao` é uma opção com escolhas, e não um subcomando
  *

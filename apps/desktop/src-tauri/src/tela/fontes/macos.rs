@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use objc2::rc::autoreleasepool;
 use objc2_app_kit::{NSApplicationActivationPolicy, NSRunningApplication};
+use objc2_core_foundation::CGRect;
 use objc2_screen_capture_kit::{SCDisplay, SCWindow};
 
 use crate::tela::captura::Alvo;
@@ -29,10 +30,11 @@ const LIMITE: Duration = Duration::from_secs(2);
 /// unidade é o ponto, que numa tela Retina vale dois pixels.
 const MINIMO_PT: f64 = 50.0;
 
-/// Apps do sistema cujas janelas de camada 0 não são "um aplicativo" para o
-/// usuário. A camada já tira a maior parte deles; o que sobra passa por aqui —
-/// o `WindowManager` (Stage Manager) e o agente do papel de parede, em
-/// especial, publicam janelas normais do tamanho da tela inteira.
+/// Apps do sistema cujas janelas não são "um aplicativo" para o usuário. A
+/// camada já tira a maior parte deles; o que sobra passa por aqui — o
+/// `WindowManager` (Stage Manager) e o agente do papel de parede, em especial,
+/// publicam janelas do tamanho da tela inteira, e por isso esta lista é
+/// conferida antes da exceção de tela cheia do `descrever_janela`.
 const APPS_DO_SISTEMA: &[&str] = &[
     "com.apple.dock",
     "com.apple.WindowManager",
@@ -126,9 +128,17 @@ pub fn janelas() -> Vec<Fonte> {
         };
         // SAFETY: getter sem efeito colateral de um SCShareableContent válido.
         let janelas = unsafe { conteudo.windows() }.to_vec();
+        // Os displays vêm do mesmo conteúdo para a regra de tela cheia do
+        // `descrever_janela` comparar frames no mesmo espaço de coordenadas.
+        // SAFETY: getters sem efeito colateral de SCShareableContent/SCDisplay válidos.
+        let telas: Vec<CGRect> = unsafe { conteudo.displays() }
+            .to_vec()
+            .iter()
+            .map(|d| unsafe { d.frame() })
+            .collect();
         janelas
             .iter()
-            .filter_map(|j| descrever_janela(j))
+            .filter_map(|j| descrever_janela(j, &telas))
             .collect::<Vec<Fonte>>()
     });
 
@@ -143,16 +153,9 @@ pub fn janelas() -> Vec<Fonte> {
     achadas
 }
 
-fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
+fn descrever_janela(j: &SCWindow, telas: &[CGRect]) -> Option<Fonte> {
     // SAFETY: getters sem efeito colateral de um SCWindow válido.
     unsafe {
-        // Camada 0 é a das janelas de documento. Menu bar, Dock, painéis
-        // flutuantes, cursores e overlays vivem em camadas acima — nenhuma
-        // delas é o que alguém quer transmitir.
-        if j.windowLayer() != 0 {
-            return None;
-        }
-
         let frame = j.frame();
         let largura_pt = frame.size.width;
         let altura_pt = frame.size.height;
@@ -161,32 +164,61 @@ fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
             return None;
         }
 
-        let titulo = j.title()?.to_string().trim().to_string();
-        if titulo.is_empty() {
-            return None;
-        }
-
         // Janela sem app dono é do próprio servidor de janelas — não há o que
         // mostrar como "de quem é", e nunca é algo que o usuário escolheria.
         // O próprio Streamz **entra**, como o Discord faz com ele mesmo: o
         // espelho infinito só existe ao transmitir a tela inteira, e aí quem
         // tira o Streamz do quadro é o filtro da captura (`sck::meu_app`).
+        // O dono vem antes da camada e do título porque as duas exceções
+        // abaixo dependem de saber se ele é um app "de Dock".
         let dono = j.owningApplication()?;
         let pid = dono.processID();
         let bundle = dono.bundleIdentifier().to_string();
+        // Antes da exceção de tela cheia, e independente dela: Dock, papel de
+        // parede e Stage Manager também publicam janelas do tamanho da tela.
         if APPS_DO_SISTEMA.contains(&bundle.as_str()) {
             return None;
         }
+        let regular = app_regular(pid);
+
+        // Camada 0 é a das janelas de documento. Menu bar, Dock, painéis
+        // flutuantes, cursores e overlays vivem em camadas acima — nenhuma
+        // delas é o que alguém quer transmitir. A exceção é o jogo em tela
+        // cheia (League of Legends, e qualquer um em Metal que toma a tela
+        // sem passar pelo Space de tela cheia do AppKit): ele sobe a janela
+        // para cima da barra de menus, e sem esta regra sumia da aba
+        // "Aplicativos". Cobrir um display inteiro **e** ser app de Dock é o
+        // que separa o jogo de um overlay; camada negativa (desktop, papel de
+        // parede) continua fora sempre.
+        let camada = j.windowLayer();
+        if camada < 0 || (camada > 0 && !(regular && cobre_um_display(frame, telas))) {
+            return None;
+        }
+
         // Fora da tela (outro Space, minimizada, app escondido) só a janela de
         // um app "de Dock". Agentes de barra de menus e serviços de fundo
         // guardam janelas de camada 0 com título que nunca aparecem — só na
         // tela elas eram cortadas de graça, e é aqui que continuam cortadas.
-        if !j.isOnScreen() && !app_regular(pid) {
+        if !j.isOnScreen() && !regular {
             return None;
         }
 
         let nome = dono.applicationName().to_string();
         let app = (!nome.trim().is_empty()).then(|| nome.trim().to_string());
+
+        // Jogo em Metal às vezes não dá título à janela. De app de Dock o nome
+        // do app serve de título (é o que o usuário procura na grade); de
+        // agente ou serviço de fundo, janela sem título continua sendo entulho.
+        let titulo = j
+            .title()
+            .map(|t| t.to_string().trim().to_string())
+            .filter(|t| !t.is_empty());
+        let titulo = match titulo {
+            Some(t) => t,
+            None if regular => app.clone()?,
+            None => return None,
+        };
+
         let icone = crate::tela::icone::do_pid(pid);
 
         // A escala que vale é a do display onde a janela está: é nela que a
@@ -204,6 +236,25 @@ fn descrever_janela(j: &SCWindow) -> Option<Fonte> {
             principal: false,
         })
     }
+}
+
+/// Folga, em pontos, para dizer que uma janela "é" a tela: o frame de um jogo
+/// em tela cheia pode vir com arredondamento de meio ponto em escalas não
+/// inteiras, e exigir igualdade exata o deixaria de fora por nada.
+const FOLGA_TELA_PT: f64 = 2.0;
+
+/// A janela ocupa exatamente algum display? `telas` são os `frame` dos
+/// `SCDisplay` do mesmo `SCShareableContent` — mesmo espaço global do frame
+/// da janela (origem no canto superior esquerdo do principal), então monitor
+/// de coordenada negativa também bate. NaN em qualquer lado dá `false`.
+fn cobre_um_display(janela: CGRect, telas: &[CGRect]) -> bool {
+    let perto = |a: f64, b: f64| (a - b).abs() <= FOLGA_TELA_PT;
+    telas.iter().any(|t| {
+        perto(janela.origin.x, t.origin.x)
+            && perto(janela.origin.y, t.origin.y)
+            && perto(janela.size.width, t.size.width)
+            && perto(janela.size.height, t.size.height)
+    })
 }
 
 /// O app é dos que têm ícone no Dock e janela de verdade (`Regular`), e não um

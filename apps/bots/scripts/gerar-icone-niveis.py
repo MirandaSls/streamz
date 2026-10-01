@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o ícone do bot **Streamz Níveis** — uma estrela sobre uma barra de
+"""Gera o ícone do bot **Degrau** — uma estrela sobre uma barra de
 progresso, na paleta do repositório.
 
 Arte própria, desenhada aqui com primitivas do Pillow: nada copiado de terceiro

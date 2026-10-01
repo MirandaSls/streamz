@@ -1,4 +1,3 @@
-import { z } from "zod";
 
 /**
  * Contratos compartilhados entre a API (NestJS) e o cliente (Next.js).
@@ -29,3 +28,5 @@ export * from "./mensagens-de-bot";
 export * from "./menus";
 // ── diagnóstico ── relatório de erro enviado pelo cliente
 export * from "./diagnostico";
+// ── pastas de servidores ── layout da barra lateral (pastas e ordem)
+export * from "./pastas";
