@@ -37,6 +37,34 @@ export function falantesDeIdentidades(identidades: readonly string[]): Set<strin
   return donos;
 }
 
+/**
+ * Dono (`userId` interno) de um participante do LiveKit.
+ *
+ * O bot de música entra como `bot:<snowflake>`, que não é userId nenhum; o
+ * servidor põe o userId interno no `metadata` justamente para o anel casar com
+ * a linha da lista. Qualquer metadata inesperado cai na identidade: nunca lança.
+ */
+export function donoDoParticipante(p: { identity: string; metadata?: string }): string {
+  if (p.identity.startsWith("bot:") && p.metadata) {
+    try {
+      const userId = (JSON.parse(p.metadata) as { userId?: unknown } | null)?.userId;
+      if (typeof userId === "string" && userId.length > 0) return userId;
+    } catch {
+      // JSON inválido: usa a identidade
+    }
+  }
+  return donoDaIdentidade(p.identity);
+}
+
+/** Como `falantesDeIdentidades`, mas resolvendo o dono pelo participante inteiro. */
+export function falantesDeParticipantes(
+  participantes: readonly { identity: string; metadata?: string }[],
+): Set<string> {
+  const donos = new Set<string>();
+  for (const p of participantes) donos.add(donoDoParticipante(p));
+  return donos;
+}
+
 /** Os dois conjuntos têm exatamente os mesmos ids? */
 export function mesmoConjunto(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   if (a === b) return true;

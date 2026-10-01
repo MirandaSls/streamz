@@ -119,7 +119,8 @@ import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import {
   NINGUEM,
   comFalante,
-  falantesDeIdentidades,
+  donoDoParticipante,
+  falantesDeParticipantes,
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
@@ -2405,13 +2406,13 @@ async function entrarNaSala(
     const eu = donoDaIdentidade(room.localParticipant.identity ?? "");
     // as minhas identidades ficam de fora: quem decide o meu anel é o detector
     // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
-    const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
-    const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    const outros = room.activeSpeakers.filter((p) => donoDoParticipante(p) !== eu);
+    const proximo = falantesDeParticipantes(outros);
     // reforço dos avisos por data message (ver `TOPICO_FALA`): quem saiu no
     // meio da frase não manda um "parei de falar", então tira daqui quem já
     // não está mais na sala antes de somar — senão o anel dele ficava preso
     const presentes = new Set(
-      Array.from(room.remoteParticipants.values()).map((p) => donoDaIdentidade(p.identity)),
+      Array.from(room.remoteParticipants.values()).map((p) => donoDoParticipante(p)),
     );
     for (const dono of falandoPorAviso) {
       if (presentes.has(dono)) proximo.add(dono);
@@ -2430,7 +2431,7 @@ async function entrarNaSala(
       // explícito, embora `recomporFalantes` já limpe quem não está mais na
       // sala: sem esperar o próximo recálculo para descartar o aviso de quem
       // acabou de sair
-      falandoPorAviso.delete(donoDaIdentidade(participant.identity));
+      falandoPorAviso.delete(donoDoParticipante(participant));
       recomporFalantes();
       rerender();
     })

@@ -6,7 +6,9 @@ import {
   NINGUEM,
   SOLTURA_DA_FALA_MS,
   comFalante,
+  donoDoParticipante,
   falantesDeIdentidades,
+  falantesDeParticipantes,
   mesmoConjunto,
   passoDeFala,
   proximoConjunto,
@@ -32,6 +34,37 @@ describe("falantesDeIdentidades", () => {
 
   it("ninguém falando é um conjunto vazio", () => {
     expect(falantesDeIdentidades([]).size).toBe(0);
+  });
+});
+
+describe("donoDoParticipante", () => {
+  it("bot com metadata válido vira o userId interno", () => {
+    expect(donoDoParticipante({ identity: "bot:123", metadata: '{"userId":"cuid1"}' })).toBe("cuid1");
+  });
+
+  it("bot com metadata inválido cai na identidade, sem lançar", () => {
+    expect(donoDoParticipante({ identity: "bot:123", metadata: "{nao-json" })).toBe("bot:123");
+    expect(donoDoParticipante({ identity: "bot:123", metadata: '{"userId":""}' })).toBe("bot:123");
+  });
+
+  it("bot sem metadata cai na identidade", () => {
+    expect(donoDoParticipante({ identity: "bot:123" })).toBe("bot:123");
+  });
+
+  it("usuário normal ignora o metadata", () => {
+    expect(donoDoParticipante({ identity: "u1", metadata: '{"userId":"x"}' })).toBe("u1");
+  });
+
+  it("#tela volta para o dono", () => {
+    expect(donoDoParticipante({ identity: identidadeDeTela("u1") })).toBe("u1");
+  });
+
+  it("falantesDeParticipantes junta bot e pessoa", () => {
+    const c = falantesDeParticipantes([
+      { identity: "bot:1", metadata: '{"userId":"cuid1"}' },
+      { identity: identidadeDeTela("u1") },
+    ]);
+    expect([...c]).toEqual(["cuid1", "u1"]);
   });
 });
 
