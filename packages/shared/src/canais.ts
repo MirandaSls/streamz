@@ -326,7 +326,11 @@ export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1080p60";
 /** Taxas de quadros que a câmera oferece (o seletor de fps). */
 export const CAMERA_FPS_OPCOES = [15, 24, 30, 60] as const;
 export type CameraFps = (typeof CAMERA_FPS_OPCOES)[number];
-export const CAMERA_FPS_PADRAO: CameraFps = 30;
+/**
+ * 60 fps (720p), alinhado ao padrão da tela: movimento fluido é o que se espera
+ * de uma câmera ligada na chamada. Quem quer poupar CPU/banda desce no seletor.
+ */
+export const CAMERA_FPS_PADRAO: CameraFps = 60;
 
 /** Captura e teto de encoding de uma camada de vídeo da câmera. */
 export interface CameraQualityPreset {
@@ -391,7 +395,7 @@ export const MEDIA_QUALITY = {
    */
   screenAudioBitrate: 160_000,
   /**
-   * Câmera no fps padrão (1080p30). Acima disso o encoder do navegador vira o
+   * Câmera no fps padrão (720p60). Acima disso o encoder do navegador vira o
    * gargalo; a escolha de fps de cada um mora em `CAMERA_QUALITY`.
    */
   camera: CAMERA_QUALITY[CAMERA_FPS_PADRAO],

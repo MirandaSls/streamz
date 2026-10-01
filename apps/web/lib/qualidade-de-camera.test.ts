@@ -17,9 +17,9 @@ import {
 } from "./qualidade-de-camera";
 
 describe("contrato da câmera", () => {
-  it("o padrão de 30 fps é o mesmo teto de `MEDIA_QUALITY.camera`", () => {
-    expect(CAMERA_FPS_PADRAO).toBe(30);
-    expect(MEDIA_QUALITY.camera).toEqual(CAMERA_QUALITY[30]);
+  it("o padrão de 60 fps é o mesmo teto de `MEDIA_QUALITY.camera`", () => {
+    expect(CAMERA_FPS_PADRAO).toBe(60);
+    expect(MEDIA_QUALITY.camera).toEqual(CAMERA_QUALITY[60]);
   });
 
   it("60 fps captura em 720p; o resto em 1080p", () => {
@@ -42,11 +42,11 @@ describe("contrato da câmera", () => {
 describe("preferências guardadas", () => {
   it("lê o fps guardado e cai no padrão com lixo", () => {
     for (const fps of CAMERA_FPS_OPCOES) expect(lerCameraFps(String(fps))).toBe(fps);
-    expect(lerCameraFps(null)).toBe(30);
-    expect(lerCameraFps("")).toBe(30);
-    expect(lerCameraFps("25")).toBe(30);
-    expect(lerCameraFps("abc")).toBe(30);
-    expect(lerCameraFps("\"60\"")).toBe(30);
+    expect(lerCameraFps(null)).toBe(60);
+    expect(lerCameraFps("")).toBe(60);
+    expect(lerCameraFps("25")).toBe(60);
+    expect(lerCameraFps("abc")).toBe(60);
+    expect(lerCameraFps("\"60\"")).toBe(60);
   });
 
   it("lê o preset de tela guardado e cai no padrão com lixo", () => {
