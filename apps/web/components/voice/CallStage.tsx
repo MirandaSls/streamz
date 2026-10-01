@@ -22,6 +22,7 @@ import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import AvisoChamadaEmJanela from "@/components/voice/AvisoChamadaEmJanela";
 import { abrirJanelaDaChamada } from "@/lib/janela-solta";
+import { levarAbaParaTextoEnquantoJanelaAberta } from "@/lib/chamada-em-janela-navegacao";
 import { CHAVE_DA_JANELA_DA_CHAMADA, useChamadaEmJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
@@ -668,7 +669,7 @@ export default function CallStage({
                   onAbrirEmJanela={() =>
                     emJanela
                       ? useJanelasDeVoz.getState().focar(CHAVE_DA_JANELA_DA_CHAMADA)
-                      : abrirJanelaDaChamada(titulo)
+                      : abrirEmJanelaEIrParaTexto(titulo, channelId)
                   }
                 />
               ) : undefined
@@ -848,4 +849,10 @@ function ConviteParaEntrar({
       </div>
     </div>
   );
+}
+
+/** Abre a janela primeiro (gesto transitório) e só depois leva a aba ao texto. */
+function abrirEmJanelaEIrParaTexto(titulo: string, canalId: string): void {
+  abrirJanelaDaChamada(titulo);
+  levarAbaParaTextoEnquantoJanelaAberta(canalId);
 }
