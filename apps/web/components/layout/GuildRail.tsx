@@ -48,6 +48,9 @@ import { ModalConfiguracoesDePasta } from "@/components/layout/ModalConfiguracoe
 import PastaDoRail from "@/components/layout/PastaDoRail";
 import { linhaNaPasta, linhaNoTopo, useArrastarRail } from "@/components/layout/useArrastarRail";
 
+/** Menu da pasta no print 02 do Discord: x=60..236, 176px (o do servidor tem 220). */
+const LARGURA_MENU_PASTA = 176;
+
 /** Iniciais de cada palavra, como o Discord faz com servidores sem ícone. */
 function acronym(name: string): string {
   return name
@@ -614,7 +617,7 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       { label: "Configurações de pasta", onSelect: () => setPastaEmEdicao(pastaId) },
       { label: "Fechar todas as pastas", onSelect: () => fecharTodas() },
     ];
-    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH_WIDE);
+    ui.openContextMenu(e.clientX, e.clientY, items, LARGURA_MENU_PASTA);
   }
 
   /**
