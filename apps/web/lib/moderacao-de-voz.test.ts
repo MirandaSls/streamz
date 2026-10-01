@@ -1,6 +1,7 @@
 import { Permission, type PermissionOverwrite, type Role } from "@streamz/shared";
 import { describe, expect, it } from "vitest";
 import {
+  podeDesconectarDaVoz,
   podeEnsurdecerNoServidor,
   podeSilenciarNoServidor,
   type MembroDeVoz,
@@ -165,5 +166,27 @@ describe("podeEnsurdecerNoServidor", () => {
     expect(podeEnsurdecerNoServidor(eu, alvo, roles)).toBe(true);
     // MUTE_MEMBERS não dá DEAFEN_MEMBERS de brinde
     expect(podeSilenciarNoServidor(eu, alvo, roles)).toBe(false);
+  });
+});
+
+describe("podeDesconectarDaVoz", () => {
+  it("sem MOVE_MEMBERS não deixa desconectar", () => {
+    const roles = [everyone, role("a", 2), role("b", 1)];
+    expect(podeDesconectarDaVoz(membro("eu", ["a"]), membro("alvo", ["b"]), roles)).toBe(false);
+  });
+
+  it("com o bit, só desconecta cargo mais baixo", () => {
+    const roles = [everyone, role("mod", 2, Permission.MOVE_MEMBERS), role("novato", 1), role("chefe", 3)];
+    const eu = membro("eu", ["mod"]);
+    expect(podeDesconectarDaVoz(eu, membro("alvo", ["novato"]), roles)).toBe(true);
+    expect(podeDesconectarDaVoz(eu, membro("alvo", ["chefe"]), roles)).toBe(false);
+  });
+
+  it("o bit pode vir do override do canal", () => {
+    const roles = [everyone, role("mod", 2), role("novato", 1)];
+    const regras: PermissionOverwrite[] = [
+      { roleId: "mod", userId: null, allow: Permission.MOVE_MEMBERS, deny: 0 },
+    ];
+    expect(podeDesconectarDaVoz(membro("eu", ["mod"]), membro("alvo", ["novato"]), roles, regras)).toBe(true);
   });
 });

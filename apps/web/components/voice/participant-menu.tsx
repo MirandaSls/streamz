@@ -17,6 +17,8 @@ import { mencionar as entregarMencao } from "@/lib/mencoes";
 import {
   alternarSilencioDoServidor,
   alternarSurdezDoServidor,
+  desconectarDaVoz,
+  podeDesconectarDaVoz,
   podeEnsurdecerNoServidor,
   podeSilenciarNoServidor,
   type MembroDeVoz,
@@ -268,9 +270,6 @@ export function abrirMenuDeParticipante(
     itens.push(cargos);
   }
 
-  // (mover e desconectar da voz entrariam no bloco de moderação acima — ainda
-  // não existem no app)
-
   ui.openContextMenu(x, y, itens, MENU_WIDTH_WIDE);
 }
 
@@ -397,9 +396,17 @@ function itensDeModeracaoDeVoz(guildId: string | null, channelId: string, alvoId
   // estreitamento do parâmetro em toda versão do TypeScript
   const servidor = guildId;
   const pode = moderacaoDeVozSobre(alvoId, servidor, channelId);
-  if (!pode.silenciar && !pode.ensurdecer) return [];
+  if (!pode.silenciar && !pode.ensurdecer && !pode.desconectar) return [];
   const { serverMute, serverDeaf } = silencioDoServidorDe(useVoice.getState().states, channelId, alvoId);
   const itens: MenuItem[] = [];
+  // acima dos checkboxes, como na seção vermelha do Discord
+  if (pode.desconectar) {
+    itens.push({
+      label: "Desconectar",
+      danger: true,
+      onSelect: () => void desconectarDaVoz(servidor, alvoId),
+    });
+  }
   if (pode.silenciar) {
     itens.push({
       label: "Silenciar no servidor",
@@ -437,8 +444,8 @@ function moderacaoDeVozSobre(
   alvoId: string,
   guildId: string,
   channelId: string,
-): { silenciar: boolean; ensurdecer: boolean } {
-  const NADA = { silenciar: false, ensurdecer: false };
+): { silenciar: boolean; ensurdecer: boolean; desconectar: boolean } {
+  const NADA = { silenciar: false, ensurdecer: false, desconectar: false };
   const meId = useAuth.getState().user?.id;
   const guildsState = useGuilds.getState();
   const permsState = usePermissions.getState();
@@ -457,6 +464,7 @@ function moderacaoDeVozSobre(
   return {
     silenciar: podeSilenciarNoServidor(eu, alvo, permsState.roles, regras),
     ensurdecer: podeEnsurdecerNoServidor(eu, alvo, permsState.roles, regras),
+    desconectar: podeDesconectarDaVoz(eu, alvo, permsState.roles, regras),
   };
 }
 

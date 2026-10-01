@@ -583,6 +583,33 @@ export class VoiceService {
     return { moved: userId, from: origem.channelId, to: channelId };
   }
 
+  /**
+   * Tira alguém do canal de voz em que está — o "Desconectar" do Discord.
+   *
+   * Mesma ordem do `move`: primeiro acha onde a pessoa está (400 se não está em
+   * voz neste servidor), depois autoriza com o canal de **origem**, porque um
+   * override de `MOVE_MEMBERS` naquele canal tem de valer. A hierarquia vem do
+   * `assertCanModerarVoz`, igual à moderação de voz: contra outro membro exige
+   * o bit **e** estar acima dele (dono e superiores nunca são desconectados);
+   * contra si mesmo basta o bit. Só depois mexe no estado, via `expulsarDaVoz`,
+   * que também derruba a conexão no LiveKit.
+   */
+  async desconectar(actorId: string, guildId: string, userId: string) {
+    const origem = await this.canalDeVozNoServidor(userId, guildId);
+    if (!origem) {
+      throw new BadRequestException("Esta pessoa não está em nenhum canal de voz do servidor");
+    }
+    await this.guilds.assertCanModerarVoz(
+      actorId,
+      guildId,
+      userId,
+      Permission.MOVE_MEMBERS,
+      origem.channelId,
+    );
+    await this.expulsarDaVoz(userId, origem.channelId);
+    return { disconnected: userId, from: origem.channelId };
+  }
+
   /** Em qual canal de voz **deste servidor** o usuário está agora (ou null). */
   private async canalDeVozNoServidor(userId: string, guildId: string) {
     const canais = await this.prisma.channel.findMany({
