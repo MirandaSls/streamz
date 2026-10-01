@@ -23,43 +23,33 @@ export const STATUS_LABEL: Record<UserStatus, string> = {
 const hashColor = corDoAvatar;
 
 /**
- * Fundo do selo, na cor da superfície onde o avatar está. É o par do `surface`
- * (que é a **borda** do selo): sem ele, os recortes vazados do `IconeDeStatus`
- * — o traço do "não perturbe", o furo do anel, a barriga da lua — deixariam
- * aparecer a foto do avatar por dentro. No Discord aparece a superfície: o
- * avatar tem um furo, e o selo mora dentro dele.
+ * Máscara que fura a foto embaixo do selo de status: o quadrado do avatar
+ * menos o círculo do selo com o anel (`fill-rule` evenodd), em SVG para o
+ * contorno sair antisserrilhado em qualquer densidade de tela. É como o
+ * Discord faz (`<mask>` com um círculo preto em 0,84375 × o lado): o anel e os
+ * recortes do `IconeDeStatus` mostram **o que está atrás** do avatar, seja a
+ * lista em repouso, a linha com hover ou a linha selecionada.
  *
- * Medido no print `2026-09-03 161607`: entre a foto e o disco há 3px da cor da
- * lista (`(26,26,30)`), e o traço do selo vermelho do "Peixoto" é exatamente
- * essa mesma cor — não é branco nem uma versão escura do vermelho.
+ * Pintar o anel com a cor da superfície, como antes, só acerta superfície
+ * opaca. As da linha com hover e selecionada são translúcidas (`#94949c1f`,
+ * `#9696a033`): na linha selecionada o anel (fundo + borda do selo, duas
+ * camadas a ~20%) deixava a foto aparecer por baixo e saía claro, (138,138,148)
+ * contra (78,78,85) da linha no print do app; no hover o anel ficava no
+ * `base-lowest` da lista, mais escuro que a linha acesa.
  */
-const FUNDO_DO_SELO: Record<string, string> = {
-  "border-background-base-lowest": "bg-background-base-lowest",
-  "border-background-base-lower": "bg-background-base-lower",
-  "border-background-base-low": "bg-background-base-low",
-  "border-background-surface-higher": "bg-background-surface-higher",
-  "border-input-background-default": "bg-input-background-default",
-  "border-chat-background-default": "bg-chat-background-default",
-  "border-interactive-background-selected": "bg-interactive-background-selected",
-  "border-interactive-background-hover": "bg-interactive-background-hover",
-  "border-message-background-hover": "bg-message-background-hover",
-  // `--black` (#000000): o palco de chamada é preto puro (`CallStage.tsx:111`)
-  // — opaco, recorta igual aos de cima.
-  "border-black": "bg-black",
-  // `--background-surface-high` (#242429): superfície do cartão de perfil
-  // (`CabecalhoDoPerfil.tsx`) — também opaco.
-  "border-background-surface-high": "bg-background-surface-high",
-  // `--background-mod-subtle` é TRANSLÚCIDO (`#94949c1f`, ~12%, ver
-  // `tokens.css`): pintar o disco com ele não dá um fundo opaco — os recortes
-  // do `IconeDeStatus` (a barriga da lua, o furo do anel, o traço do "não
-  // perturbe") deixariam a foto do avatar por baixo aparecer, não a
-  // superfície. Hoje ninguém combina `status`/`voz` com esta `surface`
-  // (`BanimentosTab.tsx:158` só usa a borda do anel do avatar, sem bolinha),
-  // então o defeito nunca chega a aparecer na tela — mas se algum chamador
-  // futuro precisar da bolinha aqui, falta um token opaco equivalente que a
-  // paleta ainda não tem (ver "faltando").
-  "border-background-mod-subtle": "bg-background-mod-subtle",
-};
+function mascaraDoSelo(lado: number, { centro, raio }: { centro: number; raio: number }) {
+  const d = `M0 0H${lado}V${lado}H0Z M${centro + raio} ${centro}A${raio} ${raio} 0 1 0 ${centro - raio} ${centro}A${raio} ${raio} 0 1 0 ${centro + raio} ${centro}Z`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${lado} ${lado}'><path fill-rule='evenodd' d='${d}'/></svg>`;
+  const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  return {
+    maskImage: url,
+    WebkitMaskImage: url,
+    maskSize: "100% 100%",
+    WebkitMaskSize: "100% 100%",
+    maskRepeat: "no-repeat",
+    WebkitMaskRepeat: "no-repeat",
+  } as const;
+}
 
 /**
  * Selo de status por tamanho de avatar. O Discord põe o **centro** do selo em
@@ -73,16 +63,50 @@ const FUNDO_DO_SELO: Record<string, string> = {
  * deslocamento negativo é o quanto a caixa passa da borda do avatar, arredondado
  * ao pixel (erro máximo de meio pixel contra o centro alvo).
  *
+ * `corte` é o furo que essa mesma caixa abre na foto (`mascaraDoSelo`), em px
+ * a partir do canto de cima à esquerda: `raio` = metade da caixa, `centro` =
+ * `lado` − metade da caixa + deslocamento. Mudou o `dot`, refaça a conta — o
+ * Tailwind só enxerga classe literal, então os dois não saem um do outro.
+ *
  * `glifo` é o lado do símbolo da marca (`Marca`, ver abaixo) desenhado sobre a
  * cor de hash quando não há foto — 60% do diâmetro do avatar, como o Discord
  * faz com o logo dele sobre a cor do usuário (arredondado ao pixel).
  */
 const SIZE = {
   /** 16px: reply preview, listas compactas, participantes de thread. */
-  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2.5 w-2.5 -bottom-[2px] -right-[2px] border-2", icone: 6, glifo: 10 },
-  sm: { box: "h-6 w-6 text-[10px]", dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2", icone: 8, glifo: 14 },
-  md: { box: "h-8 w-8 text-xs", dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]", icone: 9, glifo: 19 },
-  lg: { box: "h-10 w-10 text-sm", dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]", icone: 10, glifo: 24 },
+  xs: {
+    box: "h-4 w-4 text-[8px]",
+    dot: "h-2.5 w-2.5 -bottom-[2px] -right-[2px] border-2",
+    lado: 16,
+    corte: { centro: 13, raio: 5 },
+    icone: 6,
+    glifo: 10,
+  },
+  sm: {
+    box: "h-6 w-6 text-[10px]",
+    dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2",
+    lado: 24,
+    corte: { centro: 20, raio: 6 },
+    icone: 8,
+    glifo: 14,
+  },
+  /** O medido: furo de raio 8 centrado em (27, 27), o `r=.25` em `.84375` do Discord. */
+  md: {
+    box: "h-8 w-8 text-xs",
+    dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]",
+    lado: 32,
+    corte: { centro: 27, raio: 8 },
+    icone: 9,
+    glifo: 19,
+  },
+  lg: {
+    box: "h-10 w-10 text-sm",
+    dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]",
+    lado: 40,
+    corte: { centro: 34, raio: 9 },
+    icone: 10,
+    glifo: 24,
+  },
   /**
    * 48px: degrau que faltava entre `lg` (40) e `xl` (80) — cartão de
    * configurações (`SettingsModal`, outro cartão). **Não medido**: não há
@@ -91,10 +115,31 @@ const SIZE = {
    * 20 e anel de 3, o deslocamento que fecha essa conta é 10 − (48 − 40,5) =
    * 2,5, arredondado para 3px).
    */
-  lg48: { box: "h-12 w-12 text-base", dot: "h-[20px] w-[20px] -bottom-[3px] -right-[3px] border-[3px]", icone: 11, glifo: 29 },
-  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]", icone: 14, glifo: 48 },
+  lg48: {
+    box: "h-12 w-12 text-base",
+    dot: "h-[20px] w-[20px] -bottom-[3px] -right-[3px] border-[3px]",
+    lado: 48,
+    corte: { centro: 41, raio: 10 },
+    icone: 11,
+    glifo: 29,
+  },
+  xl: {
+    box: "h-20 w-20 text-2xl",
+    dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]",
+    lado: 80,
+    corte: { centro: 68, raio: 14 },
+    icone: 14,
+    glifo: 48,
+  },
   /** 120px: cartão de perfil completo e tela de chamada. */
-  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 -bottom-px -right-px border-[8px]", icone: 20, glifo: 72 },
+  xxl: {
+    box: "h-[120px] w-[120px] text-4xl",
+    dot: "h-10 w-10 -bottom-px -right-px border-[8px]",
+    lado: 120,
+    corte: { centro: 101, raio: 20 },
+    icone: 20,
+    glifo: 72,
+  },
 } as const;
 
 /** Estado de voz que o avatar mostra no lugar da bolinha de status. */
@@ -127,9 +172,8 @@ const VOZ_NO_AVATAR: Record<VozNoAvatar, { rotulo: string; Icone: typeof MicOff;
 /**
  * Avatar circular com a foto do usuário — ou, quando não há foto, o símbolo do
  * Streamz branco sobre a mesma cor de hash que antes ficava atrás das
- * iniciais — e, opcionalmente, a bolinha de status com a borda na cor da
- * superfície de fundo: é a borda que faz a bolinha parecer "recortada" do
- * avatar, como no Discord.
+ * iniciais — e, opcionalmente, a bolinha de status num furo da foto, como no
+ * Discord (ver `mascaraDoSelo`).
  *
  * O símbolo (não as iniciais) é o que o Discord faz com o próprio logo sobre a
  * cor do usuário sem foto: aqui é o mesmo `Marca` do rail/home, branco,
@@ -171,7 +215,11 @@ export default function Avatar({
    * online?" — quem está na chamada já está online.
    */
   voz?: VozNoAvatar | null;
-  /** classe de cor da borda da bolinha = cor do fundo onde o avatar está. */
+  /**
+   * Classe de cor da borda do selo de **voz** = cor do fundo onde o avatar
+   * está. O selo de status não a usa mais: ele fura a foto, e o anel mostra o
+   * fundo real mesmo quando ele é translúcido (hover, linha selecionada).
+   */
   surface?: string;
   className?: string;
 }) {
@@ -184,6 +232,9 @@ export default function Avatar({
   // removeu a foto tem `avatarUrl: null`, e um `??` aqui leria isso como
   // "não sei" e restauraria a foto que acabou de ser apagada
   const { avatarUrl } = vivo ?? user;
+  // só o selo de status fura a foto; o de voz continua pintando o anel com a
+  // `surface` (ver `voz`), e sem selo nenhum a foto fica inteira
+  const furo = status && !voz ? mascaraDoSelo(s.lado, s.corte) : undefined;
 
   return (
     <span className={`relative inline-block shrink-0 ${className}`}>
@@ -192,12 +243,13 @@ export default function Avatar({
         <img
           src={avatarUrl}
           alt=""
+          style={furo}
           className={`${s.box} rounded-full object-cover`}
         />
       ) : (
         <span
           aria-hidden="true"
-          style={{ backgroundColor: hashColor(user.id) }}
+          style={{ backgroundColor: hashColor(user.id), ...furo }}
           // fundo é uma cor arbitrária do hash (nunca sabemos se é clara ou
           // escura); o glifo é sempre branco por cima — mesmo caso do texto
           // sobre imagem/vídeo, por isso o token de overlay (branco
@@ -226,11 +278,13 @@ export default function Avatar({
         </span>
       ) : (
         status && (
-          // a borda é da cor da superfície: é ela que "recorta" a bolinha do avatar
+          // a caixa é a mesma de sempre, mas a borda (o anel) é transparente:
+          // o recorte já está na foto (`furo`), e o que aparece no anel é o
+          // fundo de verdade
           <span
             role="img"
             aria-label={STATUS_LABEL[status]}
-            className={`absolute rounded-full ${surface} ${FUNDO_DO_SELO[surface] ?? ""} ${s.dot}`}
+            className={`absolute rounded-full border-transparent ${s.dot}`}
           >
             <IconeDeStatus status={status} className="h-full w-full" />
           </span>

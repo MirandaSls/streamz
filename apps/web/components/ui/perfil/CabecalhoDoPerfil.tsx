@@ -33,8 +33,8 @@ import { BalaoDeStatus } from "./BalaoDeStatus";
  *   da borda da foto. No print, coluna x=1427: disco verde em y=252–267, quatro
  *   pixels acima da base da foto (271). É a geometria do `Avatar` `xl` — desenhada
  *   pelo próprio componente (`<Avatar status surface="border-background-surface-high">`),
- *   que já sabe o fundo do selo para essa superfície (`FUNDO_DO_SELO`, em
- *   `Avatar.tsx`).
+ *   que fura a foto embaixo do selo: o anel mostra o fundo da caixa, que é a
+ *   cor do cartão (`mascaraDoSelo`, em `Avatar.tsx`).
  * - Avatar clicável com véu `--opacity-black-40` no hover, que entra em 150ms
  *   `ease-out` (`.clickable__75742:hover .overlay__75742:after`).
  * - **Botão do banner**: 32 × 32 (`--custom-button-button-sm-height: 32px`,

@@ -150,11 +150,11 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
           >
             {/* `surface` é o fundo real da pílula (`--background-mod-subtle`,
                 `.bannedUser__4b8d8`). Esta linha não passa `status` nem `voz`,
-                então o `Avatar` não desenha selo e a borda/fundo do disco
-                nunca pinta — o valor só documenta a superfície. Se um dia a
-                lista ganhar status, atenção: o token é translúcido (`#94949c`
-                a 12%), então a borda e o `FUNDO_DO_SELO` deixariam a foto
-                aparecer por dentro do recorte em vez de "furar" o avatar. */}
+                então o `Avatar` não desenha selo e a borda do disco nunca
+                pinta — o valor só documenta a superfície. Status aqui já
+                funcionaria (o selo fura a foto, e o translúcido aparece
+                certo); selo de **voz** não, porque esse ainda pinta o anel
+                com a `surface`, e um token a 12% deixaria a foto aparecer. */}
             <Avatar user={b.user} size="sm" surface="border-background-mod-subtle" />
             <div className="min-w-0 flex-1 pl-2">
               <div className="truncate text-sm font-medium text-text-strong">{displayNameOf(b.user)}</div>
