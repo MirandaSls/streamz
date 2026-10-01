@@ -121,7 +121,7 @@ const CATEGORIAS: Categoria[] = [
   {
     titulo: "Diversos",
     icone: Settings,
-    acoes: ["busca", "configuracoes", "mostrarAtalhos", "zoomMais", "zoomMenos", "zoomPadrao"],
+    acoes: ["busca", "configuracoes", "mostrarAtalhos", "zoomMais", "zoomMenos", "zoomPadrao", "recarregar"],
   },
 ];
 

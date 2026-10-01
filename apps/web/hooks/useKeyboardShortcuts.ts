@@ -21,7 +21,7 @@ import { pedirPainelDoComposer } from "@/lib/eventos-do-composer";
  * qualquer handler de componente e não depende de onde está o foco. As duas
  * exceções são deliberadas — dentro de um campo de texto só passam
  * combinações com Ctrl/Alt/Meta (senão digitar viraria navegação), e com um
- * modal aberto só o zoom vale (Esc é do próprio modal, que sabe o que fechar).
+ * modal aberto só o zoom e o recarregar valem (Esc é do próprio modal, que sabe o que fechar).
  *
  * Mudo e surdo estão no registro, mas não são executados daqui: o dono é o
  * `VoiceHotkeys` (ver `ACOES_DE_VOZ`). Dois donos davam toggle duplo.
@@ -38,7 +38,10 @@ export function useKeyboardShortcuts(): void {
       if (!comModificador && estaDigitando(event.target)) return;
 
       const zoom = action === "zoomMais" || action === "zoomMenos" || action === "zoomPadrao";
-      if (!zoom && temCamadaAberta()) return;
+      // recarregar também é isento: é a saída de emergência quando a tela
+      // travou num modal
+      const isenta = zoom || action === "recarregar";
+      if (!isenta && temCamadaAberta()) return;
 
       // tela cheia conta como camada para o Esc: quem sai dela é o listener da
       // emulada, que só age se ninguém cancelou o evento antes
@@ -116,6 +119,10 @@ function executar(action: ShortcutAction): void {
       return;
     case "zoomPadrao":
       useSettings.getState().set({ zoom: ZOOM.default });
+      return;
+
+    case "recarregar":
+      window.location.reload();
       return;
 
     case "canalAnterior":
