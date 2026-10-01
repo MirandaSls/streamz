@@ -22,6 +22,7 @@ function membro(userId: string, extra: Partial<GuildMemberView> = {}): GuildMemb
       status: "ONLINE",
       customStatusText: null,
       customStatusEmoji: null,
+      manualStatusExpiresAt: null,
     },
     role: "MEMBER",
     roleIds: [],

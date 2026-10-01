@@ -29,6 +29,11 @@ export interface PublicUser {
   /** emoji do status personalizado. */
   customStatusEmoji: string | null;
   /**
+   * Quando o status manual (Ausente/Não perturbar/Invisível) expira, em ISO;
+   * null = para sempre ou sem status manual. Vencido já vem como null.
+   */
+  manualStatusExpiresAt: string | null;
+  /**
    * Conta de bot: a pílula "BOT" ao lado do nome, e as regras de produto que
    * caem dela. Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §11.
    *

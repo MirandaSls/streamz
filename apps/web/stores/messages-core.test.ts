@@ -22,6 +22,7 @@ const author: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
 };
 
 function message(id: string, extra: Partial<Message> = {}): Message {

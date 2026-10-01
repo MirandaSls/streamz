@@ -104,6 +104,7 @@ import type {
   ServidorComOApp,
   SessaoView,
   TokenCriado,
+  StatusDuration,
   UserStatus,
   VoiceModerarInput,
   VoiceMoveInput,
@@ -265,8 +266,10 @@ export const api = {
   // ── eu / usuários ──
   me: () => request<PublicUser>("/users/me"),
   updateProfile: (body: ProfileUpdate) => request<PublicUser>("/users/me", patch(body)),
-  updateStatus: (manualStatus: UserStatus | null) =>
-    request<PublicUser>("/users/me/status", patch({ manualStatus })),
+  // `duration` só importa para IDLE/DND/OFFLINE; o ausente automático e o
+  // "Disponível" não passam nada e caem em "forever" (sem prazo).
+  updateStatus: (manualStatus: UserStatus | null, duration: StatusDuration = "forever") =>
+    request<PublicUser>("/users/me/status", patch({ manualStatus, duration })),
   updateAvatar: (file: File) => {
     const form = new FormData();
     form.append("file", file);

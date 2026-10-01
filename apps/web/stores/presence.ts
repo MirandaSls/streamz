@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { IDLE_APOS_MS } from "@streamz/shared";
-import type { PublicUser, UserStatus } from "@streamz/shared";
+import type { PublicUser, StatusDuration, UserStatus } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 
@@ -127,11 +127,14 @@ let esquecerMarcaDoHook: (() => void) | null = null;
  * request para que nenhuma volta em voo encadeada ao ausente dispare depois.
  * Erros propagam — quem chama mostra o aviso.
  */
-export async function definirStatusManual(valor: UserStatus | null): Promise<PublicUser> {
+export async function definirStatusManual(
+  valor: UserStatus | null,
+  duracao?: StatusDuration,
+): Promise<PublicUser> {
   const userId = useAuth.getState().user?.id;
   if (userId) limparPostoArmazenado(userId);
   esquecerMarcaDoHook?.();
-  const atualizado = await api.updateStatus(valor);
+  const atualizado = duracao ? await api.updateStatus(valor, duracao) : await api.updateStatus(valor);
   useAuth.getState().setUser(atualizado);
   return atualizado;
 }

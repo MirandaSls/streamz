@@ -136,6 +136,40 @@ export interface UserBlockedEvent {
   user: PublicUser;
 }
 
+// ── Duração do status manual (Ausente / Não perturbar / Invisível) ──
+
+export type StatusDuration = "15m" | "1h" | "8h" | "24h" | "3d" | "forever";
+
+export const STATUS_DURATIONS: { value: StatusDuration; label: string }[] = [
+  { value: "15m", label: "Por 15 minutos" },
+  { value: "1h", label: "Por 1 hora" },
+  { value: "8h", label: "Por 8 horas" },
+  { value: "24h", label: "Por 24 horas" },
+  { value: "3d", label: "Por 3 dias" },
+  { value: "forever", label: "Para sempre" },
+];
+
+const MS_POR_DURACAO: Record<Exclude<StatusDuration, "forever">, number> = {
+  "15m": 15 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "8h": 8 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "3d": 3 * 24 * 60 * 60 * 1000,
+};
+
+/** Quando o status manual volta ao automático; `null` = nunca (para sempre). */
+export function statusExpiry(duration: StatusDuration, agora: Date): Date | null {
+  if (duration === "forever") return null;
+  return new Date(agora.getTime() + MS_POR_DURACAO[duration]);
+}
+
+/** PATCH /users/me/status. `manualStatus` null = automático; sem `duration` = para sempre. */
+export const statusUpdateSchema = z.object({
+  manualStatus: z.enum(["ONLINE", "IDLE", "DND", "OFFLINE"]).nullable(),
+  duration: z.enum(["15m", "1h", "8h", "24h", "3d", "forever"]).optional().default("forever"),
+});
+export type StatusUpdateInput = z.infer<typeof statusUpdateSchema>;
+
 // ── Status personalizado ─────────────────────────────────────
 
 export const MAX_CUSTOM_STATUS = 128;

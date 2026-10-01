@@ -123,6 +123,7 @@ function mensagem(over: Partial<Message> = {}): Message {
       status: "ONLINE",
       customStatusText: null,
       customStatusEmoji: null,
+      manualStatusExpiresAt: null,
       bot: false,
     },
     content: "oi",

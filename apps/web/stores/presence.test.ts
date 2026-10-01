@@ -56,6 +56,7 @@ const ONLINE: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
 };
 
 /** Stub de `window`/`document`: `EventTarget` de verdade (add/removeEventListener

@@ -26,8 +26,9 @@ import {
   MAX_DISPLAY_NAME,
   MAX_PRONOUNS,
   notaDeUsuarioSchema,
+  statusUpdateSchema,
 } from "@streamz/shared";
-import type { CustomStatusDuration, NotaDeUsuarioInput, UserStatus } from "@streamz/shared";
+import type { CustomStatusDuration, NotaDeUsuarioInput, StatusUpdateInput, UserStatus } from "@streamz/shared";
 import { UsersService } from "./users.service";
 import { cabecalhosDeImagemPublica } from "./imagem-de-perfil";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
@@ -73,15 +74,6 @@ class CustomStatusDto {
 
   @IsIn(DURATIONS)
   duration!: CustomStatusDuration;
-}
-
-const STATUSES: UserStatus[] = ["ONLINE", "IDLE", "DND", "OFFLINE"];
-
-class StatusDto {
-  // null = automático; OFFLINE = invisível
-  @IsOptional()
-  @IsIn(STATUSES)
-  manualStatus!: UserStatus | null;
 }
 
 @Controller("users")
@@ -194,8 +186,11 @@ export class UsersController {
 
   @UseGuards(JwtGuard)
   @Patch("me/status")
-  updateStatus(@CurrentUser() user: JwtPayload, @Body() dto: StatusDto) {
-    return this.users.updateStatus(user.sub, dto.manualStatus ?? null);
+  updateStatus(
+    @CurrentUser() user: JwtPayload,
+    @Body(zodBody(statusUpdateSchema)) dto: StatusUpdateInput,
+  ) {
+    return this.users.updateStatus(user.sub, dto.manualStatus, dto.duration);
   }
 
   @UseGuards(JwtGuard)

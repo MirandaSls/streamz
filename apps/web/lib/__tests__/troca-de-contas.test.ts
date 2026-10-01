@@ -22,6 +22,7 @@ function usuario(id: string): PublicUser {
     status: "ONLINE",
     customStatusText: null,
     customStatusEmoji: null,
+    manualStatusExpiresAt: null,
   };
 }
 

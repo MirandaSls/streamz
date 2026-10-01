@@ -179,6 +179,7 @@ const BOT_AC: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
   bot: true,
 };
 

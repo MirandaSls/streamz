@@ -69,6 +69,8 @@ model User {
   // status escolhido pelo usuário (Ausente, Não perturbe, Invisível=OFFLINE);
   // null = automático. Só vale enquanto ele está conectado.
   manualStatus          UserStatus?
+  /// quando o status manual expira; null = para sempre
+  manualStatusExpiresAt DateTime?
   createdAt             DateTime    @default(now())
   // ── d-social ──
   // Status personalizado: texto + emoji + quando deixa de valer (null = nunca).

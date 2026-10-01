@@ -26,6 +26,7 @@ function membro(
       status: "ONLINE",
       customStatusText: null,
       customStatusEmoji: null,
+      manualStatusExpiresAt: null,
     },
   };
 }

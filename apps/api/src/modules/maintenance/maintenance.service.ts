@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { UsersService } from "../users/users.service";
 
 /** Refresh token revogado/expirado só serve para auditoria de curto prazo. */
 const RETENCAO_REFRESH_TOKEN_DIAS = 30;
@@ -33,7 +34,22 @@ export class MaintenanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly users: UsersService,
   ) {}
+
+  /**
+   * Status manual com prazo vencido volta ao automático. Varredura por minuto
+   * (e não `setTimeout` por usuário) para sobreviver a restart; quem conectar
+   * depois é tratado no `markOnline` do gateway.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expirarStatusManuais(): Promise<void> {
+    try {
+      await this.users.expirarStatusManuais(new Date());
+    } catch (e) {
+      this.logger.warn(`expirar status manual falhou: ${e instanceof Error ? e.message : e}`);
+    }
+  }
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async faxinaDiaria(): Promise<void> {
