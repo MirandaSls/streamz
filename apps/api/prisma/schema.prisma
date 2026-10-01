@@ -114,6 +114,8 @@ model User {
   blocksMade          Block[]         @relation("Blocker")
   blocksReceived      Block[]         @relation("Blocked")
   hiddenChannels      DMHidden[]
+  // ── pastas de servidores ──
+  guildLayout         UserGuildLayout?
   // ── g-emojis-midia ──
   customEmojis     CustomEmoji[]   @relation("EmojiCreator")
   createdStickers  Sticker[]       @relation("StickerCreator")
@@ -1465,4 +1467,15 @@ model EphemeralMessage {
 
   @@index([expiresAt])
   @@index([interactionId, original])
+}
+
+/// Pastas e ordem da barra de servidores, por usuário. Um documento inteiro
+/// (`GuildLayout` de @streamz/shared) trocado de uma vez: Json e não tabelas
+/// de pasta/posição porque o último a gravar vence e ninguém consulta por item.
+model UserGuildLayout {
+  userId    String   @id
+  layout    Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
