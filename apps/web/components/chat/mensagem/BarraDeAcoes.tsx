@@ -52,7 +52,11 @@ function Acao({
       tamanho={28}
       fundo="hover"
       perigo={perigo}
-      className="rounded-[6px]"
+      // No Discord a lixeira é vermelha o tempo todo; o `perigo` do primitivo só
+      // tinge no hover. `!` porque a tinta de repouso do primitivo
+      // (`text-interactive-text-default`) tem a mesma especificidade e a ordem
+      // do CSS gerado decidiria quem vence.
+      className={`rounded-[6px] ${perigo ? "!text-icon-feedback-critical" : ""}`}
     />
   );
 }
