@@ -307,6 +307,14 @@ const GROUP_SIZE = {
 
 const GROUP_ICON = { xs: 10, sm: 14, md: 18, lg: 22, xl: 36, xxl: 56 } as const;
 
+/**
+ * Lado do símbolo da marca na célula do mosaico, em px: ~60% da célula, que
+ * tem ~58% do lado do avatar (ver `CaraDoGrupo` em `GroupAvatar`), ou seja
+ * ~35% do lado, arredondado ao pixel. Valores fixos porque `Marca` recebe
+ * `size` numérico, não porcentagem.
+ */
+const GROUP_GLIFO = { xs: 6, sm: 8, md: 11, lg: 14, xl: 28, xxl: 42 } as const;
+
 type MembroDoGrupo = { id: string; username: string; avatarUrl?: string | null };
 
 /** FNV-1a de 32 bits: simples, estável entre execuções e sem dependência. */
@@ -332,13 +340,28 @@ export function escolherCarasDoGrupo<T extends { id: string }>(seed: string, mem
     .map((x) => x.m);
 }
 
-function CaraDoGrupo({ m, className }: { m: MembroDoGrupo; className: string }) {
+function CaraDoGrupo({
+  m,
+  className,
+  glifo,
+}: {
+  m: MembroDoGrupo;
+  className: string;
+  glifo: number;
+}) {
   const base = `absolute rounded-full object-cover ring-2 ring-background-surface-high ${className}`;
   return m.avatarUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={m.avatarUrl} alt="" className={base} />
   ) : (
-    <span style={{ backgroundColor: hashColor(m.id) }} className={base} />
+    // Sem foto: mesma receita do `Avatar` normal (cor de hash + `Marca` branca
+    // centralizada). Só a cor deixava a célula anônima e sumia o símbolo.
+    <span
+      style={{ backgroundColor: hashColor(m.id) }}
+      className={`${base} grid place-items-center text-text-overlay-light`}
+    >
+      <Marca size={glifo} className="shrink-0" />
+    </span>
   );
 }
 
@@ -379,11 +402,11 @@ export function GroupAvatar({
         className={`${box} relative block shrink-0 overflow-hidden rounded-full bg-background-surface-high ${className}`}
       >
         {caras.length === 1 ? (
-          <CaraDoGrupo m={caras[0]} className="left-[18%] top-[18%] h-[64%] w-[64%]" />
+          <CaraDoGrupo m={caras[0]} className="left-[18%] top-[18%] h-[64%] w-[64%]" glifo={GROUP_GLIFO[size]} />
         ) : (
           <>
-            <CaraDoGrupo m={caras[0]} className="left-[4%] top-[4%] h-[58%] w-[58%]" />
-            <CaraDoGrupo m={caras[1]} className="bottom-[4%] right-[4%] h-[58%] w-[58%]" />
+            <CaraDoGrupo m={caras[0]} className="left-[4%] top-[4%] h-[58%] w-[58%]" glifo={GROUP_GLIFO[size]} />
+            <CaraDoGrupo m={caras[1]} className="bottom-[4%] right-[4%] h-[58%] w-[58%]" glifo={GROUP_GLIFO[size]} />
           </>
         )}
       </span>
