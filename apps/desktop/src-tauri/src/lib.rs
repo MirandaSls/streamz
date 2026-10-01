@@ -574,6 +574,10 @@ fn ambiente_de_atenuacao(app: &tauri::AppHandle) -> Option<atenuacao::Real> {
     })
 }
 
+/// Contador dos rótulos das janelas soltas (`janela-solta-<n>`).
+#[cfg(desktop)]
+static CONTADOR_JANELAS_SOLTAS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// Cria a janela `main` a partir da própria entrada dela no `tauri.conf.json`
 /// (que está com `"create": false`), acrescentando o tratador de `window.open`.
 ///
@@ -589,14 +593,18 @@ fn ambiente_de_atenuacao(app: &tauri::AppHandle) -> Option<atenuacao::Real> {
 /// o que o JSON diz (tamanho, sem decoração, invisível até a splash mostrar) —
 /// inclusive o que o `tauri.macos.conf.json` troca.
 ///
-/// **Por que `Allow`, e não `Create` com uma `WebviewWindow` nossa:** com
-/// `Allow` quem cria a janela é o próprio webview (o popup padrão do WebView2;
-/// no macOS e no Linux o wry monta a janela com a mesma configuração do
-/// webview que abriu), e o `Window` volta para a página já ligado ao opener,
-/// que é tudo o que o portal precisa. O `Create` pediria um rótulo único por
-/// janela, o mesmo ambiente do WebView2 e a mesma configuração do WKWebView —
-/// cada um é um jeito de o `SetNewWindow` falhar —, e a janela nova ganharia
-/// os scripts do Tauri sem ter nada a fazer com eles.
+/// **Por que `Create` com uma `WebviewWindow` nossa, e não `Allow`:** com
+/// `Allow` o WebView2 abre o popup padrão do Edge, que mostra a barra de
+/// endereço ("about:blank") — feio e sem sentido numa janela que só hospeda um
+/// portal. Com `Create` o popup é uma janela do Tauri, sem barra de endereço,
+/// e o wry liga o `Window` devolvido à página ao opener (a mesma entrega que o
+/// `Allow` fazia), então o `createPortal` continua valendo. O `window_features`
+/// herda tamanho/posição pedidos no `window.open` e o que cada plataforma exige
+/// para a janela ser parente do opener (ambiente do WebView2, configuração do
+/// WKWebView, `related_view` no WebKitGTK). Riscos: o rótulo precisa ser único
+/// por janela (contador atômico; rótulo repetido faz o `build` falhar), e se o
+/// `build` falhar a janela é negada — a web trata o `null` do `window.open`
+/// como "bloqueado". A janela nova carrega os scripts do Tauri sem usá-los.
 ///
 /// **Só `about:blank`:** é o único endereço que a web abre assim, e ele herda
 /// a origem da janela principal. Qualquer outro `window.open` continua negado,
@@ -620,12 +628,28 @@ fn criar_janela_principal<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Resu
     else {
         return Ok(());
     };
+    let app_handle = app.handle().clone();
     tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-        .on_new_window(|url, _| {
-            if url.as_str() == "about:blank" {
-                tauri::webview::NewWindowResponse::Allow
-            } else {
-                tauri::webview::NewWindowResponse::Deny
+        .on_new_window(move |url, features| {
+            if url.as_str() != "about:blank" {
+                return tauri::webview::NewWindowResponse::Deny;
+            }
+            let n = CONTADOR_JANELAS_SOLTAS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // Decorações nativas ligadas de propósito: a `main` é sem moldura
+            // (barra de título própria), mas o popup não tem esse chrome e
+            // precisa de botões de título do sistema.
+            let janela = tauri::WebviewWindowBuilder::new(
+                &app_handle,
+                format!("janela-solta-{n}"),
+                tauri::WebviewUrl::External("about:blank".parse().unwrap()),
+            )
+            .window_features(features)
+            .title("Streamz")
+            .decorations(true)
+            .build();
+            match janela {
+                Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                Err(_) => tauri::webview::NewWindowResponse::Deny,
             }
         })
         .build()?;
