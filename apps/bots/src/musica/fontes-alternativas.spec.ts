@@ -4,12 +4,30 @@ import {
   PREFIXOS_ALTERNATIVOS,
   consultasAlternativas,
   ehFonteAlternativa,
+  limparTitulo,
 } from "./fontes-alternativas";
+
+describe("consultasAlternativas sem duplicar autor", () => {
+  it("não repete o autor quando o título já o contém e tira o ruído", () => {
+    const consultas = consultasAlternativas({
+      title: "Trapt - Headstrong (Official Music Video)",
+      author: "Trapt",
+    });
+    expect(consultas).toEqual(["scsearch:Trapt - Headstrong", "jssearch:Trapt - Headstrong"]);
+    expect(consultas.some((c) => c.includes("Trapt Trapt"))).toBe(false);
+  });
+
+  it("limparTitulo remove ruído", () => {
+    expect(limparTitulo("Song (Official Video) [4K]")).toBe("Song");
+  });
+});
 
 describe("consultasAlternativas", () => {
   it("gera uma consulta por prefixo", () => {
     const consultas = consultasAlternativas({ title: "Song", author: "Band" });
-    expect(consultas).toEqual(PREFIXOS_ALTERNATIVOS.map((p) => `${p}:Band Song`));
+    expect(consultas.slice(0, 2)).toEqual(PREFIXOS_ALTERNATIVOS.map((p) => `${p}:Band Song`));
+    // variante só com o título, depois das completas
+    expect(consultas.slice(2)).toEqual(PREFIXOS_ALTERNATIVOS.map((p) => `${p}:Song`));
   });
 
   it("tira (Official Video) e (Official 4K Video)", () => {

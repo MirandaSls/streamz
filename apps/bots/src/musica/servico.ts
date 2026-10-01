@@ -6,6 +6,7 @@ import {
   MemoriaDeBloqueio,
   consultasAlternativas,
   ehFonteAlternativa,
+  limparTitulo,
 } from "./fontes-alternativas";
 import { idDePlaylistDoSpotify, buscarPlaylistPeloEmbed } from "./spotify-embed";
 import { resolverEmOrdem } from "./playlist-spotify";
@@ -505,7 +506,16 @@ export class ServicoDeMusica {
     if (!embed || embed.faixas.length === 0) return resultado;
 
     const { achadas, puladas } = await resolverEmOrdem(embed.faixas, async (f) => {
-      const r = await this.buscarSimples(jogador, `${f.titulo} ${f.artista}`, quemPediu);
+      // SoundCloud/JioSaavn primeiro: `buscarSimples` só evita o YouTube depois
+      // de o bloqueio ser marcado, e na 1ª rodada as faixas viravam ytsearch
+      // e não tocavam (o YouTube barra o IP).
+      const titulo = limparTitulo(f.titulo);
+      const consulta = `${f.artista} ${titulo}`.trim();
+      for (const source of ["scsearch", "jssearch"]) {
+        const alt = (await jogador.search({ query: consulta, source: source as never }, quemPediu)) as SearchResult;
+        if (alt.tracks?.length) return alt.tracks[0] ?? null;
+      }
+      const r = await this.buscarSimples(jogador, consulta, quemPediu);
       return r.tracks?.[0] ?? null;
     });
     this.ctx.log.info("playlist do spotify resolvida pelo embed", {

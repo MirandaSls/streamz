@@ -20,6 +20,11 @@ function limpar(texto: string): string {
   return texto.replace(RUIDO, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Título sem ruído de upload; usado também nas consultas vindas do embed do Spotify. */
+export function limparTitulo(texto: string): string {
+  return limpar(texto);
+}
+
 /** Uma consulta por fonte alternativa; `[]` quando a faixa não tem título. */
 export function consultasAlternativas(faixa: {
   title?: string | null;
@@ -28,8 +33,15 @@ export function consultasAlternativas(faixa: {
   const titulo = limpar(faixa.title ?? "");
   if (!titulo) return [];
   const autor = limpar(faixa.author ?? "");
-  const busca = `${autor} ${titulo}`.trim();
-  return PREFIXOS_ALTERNATIVOS.map((prefixo) => `${prefixo}:${busca}`);
+  // Muito título de upload já traz o autor ("Trapt - Headstrong"): prefixar de
+  // novo gera "Trapt Trapt - Headstrong", que não acha nada na outra fonte.
+  const jaTemAutor = autor !== "" && titulo.toLowerCase().includes(autor.toLowerCase());
+  const completa = jaTemAutor ? titulo : `${autor} ${titulo}`.trim();
+  // Segunda variante só com o título: o autor do YouTube costuma ser o canal
+  // ("TraptVEVO"), que atrapalha. Ordem preservada: scsearch antes de jssearch.
+  const comPrefixo = (v: string) => PREFIXOS_ALTERNATIVOS.map((prefixo) => `${prefixo}:${v}`);
+  // As completas vêm primeiro (sc, js); as só-título depois, como reserva.
+  return completa === titulo ? comPrefixo(completa) : [...comPrefixo(completa), ...comPrefixo(titulo)];
 }
 
 /**
