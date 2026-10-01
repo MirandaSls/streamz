@@ -6,6 +6,13 @@ import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { zodBody } from "../../common/zod.pipe";
 
+/** Corpo de `POST /guilds/:id/voice/desconectar` (contrato `VoiceDesconectarInput`). */
+class DesconectarVoiceDto {
+  @IsString()
+  @Length(1, 64)
+  userId!: string;
+}
+
 /** Corpo de `POST /guilds/:id/voice/move` (contrato `VoiceMoveInput`). */
 class MoveVoiceDto {
   @IsString()
@@ -63,6 +70,19 @@ export class VoiceController {
     @Body() body: MoveVoiceDto,
   ) {
     return this.voice.move(user.sub, guildId, body.userId, body.channelId);
+  }
+
+  /**
+   * Desconecta alguém do canal de voz em que está. REST pelo mesmo motivo do
+   * `move`: quem age precisa saber se foi recusado (sem bit, alvo acima dele).
+   */
+  @Post("guilds/:guildId/voice/desconectar")
+  desconectar(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Body() body: DesconectarVoiceDto,
+  ) {
+    return this.voice.desconectar(user.sub, guildId, body.userId);
   }
 
   /**

@@ -81,6 +81,31 @@ export function podeEnsurdecerNoServidor(
 }
 
 /**
+ * Posso desconectar esta pessoa da voz do servidor? (`MOVE_MEMBERS` + hierarquia,
+ * como `GuildsService.assertCanModerarVoz` do lado da API.)
+ *
+ * `regras` = overrides que me valem no canal de voz do alvo — ver
+ * `podeSilenciarNoServidor`.
+ */
+export function podeDesconectarDaVoz(
+  eu: MembroDeVoz,
+  alvo: MembroDeVoz,
+  roles: readonly Role[],
+  regras: readonly PermissionOverwrite[] = [],
+): boolean {
+  return podeModerarVozBit(eu, alvo, roles, Permission.MOVE_MEMBERS, regras);
+}
+
+/** Desconecta alguém da voz (`POST /guilds/:id/voice/desconectar`); erro vira toast. */
+export async function desconectarDaVoz(guildId: string, userId: string): Promise<void> {
+  try {
+    await api.desconectarDaVoz(guildId, userId);
+  } catch (e) {
+    ui.toast(errorMessage(e, "Não foi possível desconectar esta pessoa"), "error");
+  }
+}
+
+/**
  * Alterna o mute de servidor de alguém (`POST /guilds/:id/voice/moderar`).
  *
  * Não toca em estado local: quem redesenha o checkbox/ícone é o `voice.state`

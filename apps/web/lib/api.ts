@@ -105,6 +105,7 @@ import type {
   TokenCriado,
   UserStatus,
   VoiceModerarInput,
+  VoiceDesconectarInput,
   VoiceMoveInput,
   VoiceStateEvent,
 } from "@streamz/shared";
@@ -545,6 +546,16 @@ export const api = {
     request<{ moved: string; from: string; to: string }>(
       `/guilds/${guildId}/voice/move`,
       json({ userId, channelId } satisfies VoiceMoveInput),
+    ),
+  /**
+   * Tira alguém da voz do servidor (`MOVE_MEMBERS` + hierarquia). Recusa com
+   * 403 sem o bit e com 400 quando o alvo não está em voz — quem chama mostra
+   * o erro no toast.
+   */
+  desconectarDaVoz: (guildId: string, userId: string) =>
+    request<{ disconnected: string; from: string }>(
+      `/guilds/${guildId}/voice/desconectar`,
+      json({ userId } satisfies VoiceDesconectarInput),
     ),
   /**
    * Silencia/dessilencia (áudio) alguém no servidor — o mute/deafen de

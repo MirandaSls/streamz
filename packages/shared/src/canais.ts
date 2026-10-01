@@ -186,6 +186,11 @@ export interface VoiceMoveInput {
   channelId: string;
 }
 
+/** Corpo de `POST /guilds/:id/voice/desconectar`. */
+export interface VoiceDesconectarInput {
+  userId: string;
+}
+
 /**
  * Corpo de moderação de voz do servidor (mute/deafen por um moderador).
  *
