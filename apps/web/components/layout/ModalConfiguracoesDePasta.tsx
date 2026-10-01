@@ -31,12 +31,12 @@ export interface ModalConfiguracoesDePastaProps {
 
 const COR_HEX = /^#[0-9a-fA-F]{6}$/;
 
-/** Nomes das 20 cores de `GUILD_FOLDER_COLORS` (mesma ordem), para o leitor de tela. */
+/** Nomes das 20 cores de `GUILD_FOLDER_COLORS`, na mesma ordem (duas linhas de 10), para o leitor de tela. */
 const NOMES_DAS_CORES = [
-  "Turquesa", "Verde", "Azul", "Roxo", "Rosa",
-  "Amarelo", "Laranja", "Vermelho", "Cinza claro", "Cinza azulado",
-  "Turquesa escuro", "Verde escuro", "Azul escuro", "Roxo escuro", "Rosa escuro",
-  "Dourado", "Laranja escuro", "Vermelho escuro", "Cinza", "Ardósia",
+  "Ciano", "Verde-menta", "Azul-claro", "Rosa-lilás", "Rosa",
+  "Amarelo", "Amarelo-ouro", "Salmão", "Branco", "Azul-acinzentado-claro",
+  "Turquesa", "Verde", "Azul", "Roxo", "Rosa-escuro",
+  "Âmbar", "Laranja", "Vermelho", "Branco-gelo", "Cinza-azulado",
 ];
 
 function mesmaCor(a: string | null, b: string | null): boolean {
@@ -69,8 +69,6 @@ function Conteudo({
     onSalvar(rascunhoParaSaida(nome, cor));
     onFechar();
   }
-
-  const personalizada = cor !== null && !GUILD_FOLDER_COLORS.some((c) => mesmaCor(c, cor));
 
   return (
     <Modal aoFechar={concluir} titulo="Configurações de pasta" tamanho="medio" classeDoCorpo="flex flex-col gap-4">
@@ -110,21 +108,23 @@ function Conteudo({
               <label
                 aria-label="Cor personalizada"
                 className="relative flex h-[50px] w-[70px] cursor-pointer items-center justify-center rounded-[3px] border border-border-subtle focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-text-link"
-                style={personalizada ? { backgroundColor: cor ?? undefined } : undefined}
+                style={cor !== null ? { backgroundColor: cor } : undefined}
               >
                 <input
                   type="color"
-                  value={personalizada && cor && COR_HEX.test(cor) ? cor.toLowerCase() : "#9be31f"}
+                  value={cor && COR_HEX.test(cor) ? cor.toLowerCase() : "#9be31f"}
                   onChange={(e) => {
                     if (COR_HEX.test(e.target.value)) setCor(e.target.value.toLowerCase());
                   }}
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   aria-label="Escolher cor personalizada"
                 />
-                {personalizada ? (
-                  <Check width={24} height={24} aria-hidden className="text-white" />
-                ) : null}
-                <Pencil width={14} height={14} aria-hidden className="absolute right-1 top-1 text-text-normal" />
+                <Pencil
+                  width={14}
+                  height={14}
+                  aria-hidden
+                  className={`absolute right-1 top-1 ${cor !== null ? "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" : "text-text-normal"}`}
+                />
               </label>
             </div>
 
