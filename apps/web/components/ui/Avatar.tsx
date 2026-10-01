@@ -322,7 +322,7 @@ export function GroupAvatar({
     return (
       <span
         aria-hidden="true"
-        className={`${box} relative shrink-0 overflow-hidden rounded-full bg-background-surface-high ${className}`}
+        className={`${box} relative block shrink-0 overflow-hidden rounded-full bg-background-surface-high ${className}`}
       >
         {caras.length === 1 ? (
           <CaraDoGrupo m={caras[0]} className="left-[18%] top-[18%] h-[64%] w-[64%]" />
