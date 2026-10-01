@@ -12,7 +12,6 @@ import MessageList, { BotaoBoasVindas } from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import FriendsPage from "@/components/friends/FriendsPage";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/primitivos";
@@ -351,8 +350,6 @@ export default function DMView({
             // sem o destino, o overlay de arrastar caía no fallback e
             // escrevia "em esta conversa"
             destino={group ? title : `@${title}`}
-            // ↑ no campo vazio também edita a última mensagem minha aqui
-            ultimaMinhaMensagem={() => ultimaMinhaMensagem(slice.items, user.id)}
             onSend={(content, attachments, sticker) =>
               send({ channelId: active.id, author: user, content, attachments, sticker })
             }

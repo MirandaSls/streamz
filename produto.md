@@ -450,8 +450,8 @@ modera sua comunidade.
 - **GIF:** busca por categorias e por termo (Giphy). Sem `GIPHY_API_KEY` a busca
   responde `503` claro e o resto do app segue funcionando.
 - **Composer:** autocomplete de `:emoji`, `@membro`, `@cargo`, `#canal` e
-  `/comando`, rascunho por canal, anexo com prévia e progresso, colar imagem,
-  spoiler de anexo e `↑` no campo vazio para editar a última mensagem.
+  `/comando`, rascunho por canal, anexo com prévia e progresso, colar imagem
+  e spoiler de anexo.
 - **Mídia na mensagem:** imagens em grade com galeria navegável, vídeo do
   YouTube vira player, imagem direta vira a própria imagem, e "remover prévia"
   desliga o card de link daquela mensagem (autor ou moderação). A coluna 4 tem a

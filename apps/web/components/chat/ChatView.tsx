@@ -15,7 +15,6 @@ import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
 import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { Button, Tooltip } from "@/components/ui/primitivos";
 import { useSlowmode } from "@/hooks/useSlowmode";
@@ -368,8 +367,6 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
                     }
                   : undefined
               }
-              // ↑ no campo vazio reabre a última mensagem minha para editar
-              ultimaMinhaMensagem={() => ultimaMinhaMensagem(slice.items, user.id)}
               onCreatePoll={() => ui.openModal({ kind: "createPoll", channelId: channel.id })}
               onSend={(content, attachments, sticker) => {
                 // a API recusaria com 429; barrar aqui evita a mensagem otimista
