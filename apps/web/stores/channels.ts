@@ -359,13 +359,19 @@ export const useChannels = create<ChannelsState>((set, get) => {
     markGuildRead: async (guildId) => {
       const agora = new Date().toISOString();
       const antes = get().channels;
-      set({
-        channels: antes.map((c) => ({ ...c, lastReadAt: agora, mentionCount: 0 })),
-      });
+      // só os canais do servidor ativo estão na store: para outro servidor
+      // (ex.: "marcar pasta como lida") não há o que atualizar aqui, e mexer
+      // na lista do ativo apagaria o não-lido errado; o WS/recarga cobre o resto
+      const ehAtivo = get().guildId === guildId;
+      if (ehAtivo) {
+        set({
+          channels: antes.map((c) => ({ ...c, lastReadAt: agora, mentionCount: 0 })),
+        });
+      }
       try {
         await api.markGuildRead(guildId);
       } catch (e) {
-        set({ channels: antes });
+        if (ehAtivo) set({ channels: antes });
         ui.toast(errorMessage(e, "Não foi possível marcar como lido"), "error");
       }
     },
