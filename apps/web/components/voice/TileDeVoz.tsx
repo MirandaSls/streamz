@@ -32,7 +32,7 @@ import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useZoomDaTransmissao } from "@/components/voice/useZoomDaTransmissao";
 import { useCorDominante } from "@/lib/cor-dominante";
 import { chaveDaJanela, useJanelasDeVoz } from "@/stores/janelas-de-voz";
-import { resolveStatus, usePresence } from "@/stores/presence";
+import { usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
 
 /**
@@ -173,10 +173,6 @@ export function AvatarDeChamada({
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
-  const statuses = usePresence((s) => s.statuses);
-  const status = resolveStatus(statuses, state.user);
-  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
-  const ausente = status === "IDLE" && !ativo;
 
   return (
     <Tooltip label={nome}>
@@ -188,7 +184,7 @@ export function AvatarDeChamada({
           abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
         }}
         className={`relative inline-grid rounded-full transition ${
-          state.reconnecting ? "opacity-50" : ausente ? "opacity-60" : ""
+          state.reconnecting ? "opacity-50" : ""
         }`}
       >
         <Avatar
@@ -198,8 +194,7 @@ export function AvatarDeChamada({
           // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
           surface="border-black"
           // sem bolinha de presença: quem está na chamada já está online, o
-          // selo seria ruído (como no Discord) — ausência ainda esmaece
-          // (`ausente` logo acima).
+          // selo seria ruído (como no Discord).
           // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
           // um moderador mostra o selo "-servidor" mesmo que também tenha se
           // silenciado sozinho (ver `useSilencioDoServidor.ts`)
@@ -377,11 +372,6 @@ export function VoiceTile({
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
   // duas divergências (palco aceso e lista apagada; palco piscando).
   const ativo = !state.muted && falando.has(state.user.id);
-  const statuses = usePresence((s) => s.statuses);
-  const status = resolveStatus(statuses, state.user);
-  // ausente esmaece; falar prova presença e desfaz o esmaecido na hora.
-  // Nunca entra no vídeo — só no avatar (câmera desligada) e no rótulo.
-  const ausente = status === "IDLE" && !ativo;
   const nome = displayNameOf(state.user);
   // a foto ao vivo, pelo mesmo caminho do `Avatar`: quem troca a foto troca
   // também a cor do tile, sem F5
@@ -599,9 +589,7 @@ export function VoiceTile({
               (medido em `203909`: ~68px num tile de 188×106 — o avatar do
               Discord é quase constante, não uma fração do tile). */}
           <span
-            className={`relative inline-grid rounded-full transition-opacity ${
-              ausente ? "opacity-60" : ""
-            }`}
+            className="relative inline-grid rounded-full transition-opacity"
           >
             <Avatar
               user={state.user}
@@ -815,9 +803,6 @@ export function VoiceTile({
               }`
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
-        } ${
-          // câmera e tela nunca esmaecem — só o rótulo do avatar parado
-          ausente && !video && !tela ? "opacity-60" : ""
         }`}
       >
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
