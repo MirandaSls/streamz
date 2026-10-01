@@ -77,9 +77,12 @@ export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number
 export function MedidorSegmentado({
   nivel,
   segmentos = 24,
+  preencher = false,
 }: {
   nivel: number;
   segmentos?: number;
+  /** barrinhas dividem a largura do pai (flex-1) em vez de ter 4px fixos: o menu do microfone tem 40. */
+  preencher?: boolean;
 }) {
   const n = Math.max(1, segmentos);
   const valor = Math.min(1, Math.max(0, nivel));
@@ -91,7 +94,7 @@ export function MedidorSegmentado({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(valor * 100)}
-      className="flex h-4 items-center gap-[3px]"
+      className={`flex h-4 items-center ${preencher ? "w-full gap-[4px]" : "gap-[3px]"}`}
     >
       {Array.from({ length: n }, (_, i) => {
         const pos = i / n;
@@ -101,7 +104,7 @@ export function MedidorSegmentado({
           <span
             key={i}
             aria-hidden="true"
-            className={`h-4 w-1 shrink-0 rounded-full ${i < acesos ? cor : "bg-border-normal"}`}
+            className={`h-4 rounded-full ${preencher ? "min-w-0 flex-1" : "w-1 shrink-0"} ${i < acesos ? cor : "bg-slider-track-background"}`}
           />
         );
       })}
@@ -147,39 +150,46 @@ export function Chave({
   );
 }
 
-/** Slider de volume 0–200% com o valor ao lado.
+/**
+ * Slider de volume 0–200%. O rótulo usa o texto normal do menu (`text-sm
+ * font-semibold text-text-strong`), como "Dispositivo de entrada" no menu de
+ * áudio.
  *
- * O rótulo era caixa alta pequena (`text-xs uppercase tracking-[0.02em]`,
- * cor `text-text-muted`) — a print `2026-09-03 201137` mostra "Volume de
- * entrada" no texto normal do menu, sem versalete nem tracking. Uso a mesma
- * classe das outras linhas do menu de áudio (`titulo` em
- * `menus-de-audio.tsx:300`, ex. "Dispositivo de entrada"): `text-sm
- * font-semibold text-text-strong`. É usado nos dois menus que têm este
- * slider — `MenuDeEntrada` e `MenuDeSaida` (`menus-de-audio.tsx:485` e
- * `:527`) — então a mudança vale para os dois de uma vez. */
+ * O trilho é desenhado à mão (`appearance-none`) porque o do navegador não
+ * preenche até a bolinha nem aceita o cinza escuro sem borda do Discord: o
+ * preenchimento é um gradiente no próprio input, calculado pelo valor.
+ * `mostrarValor={false}` esconde o "100%": o menu de áudio do Discord só mostra
+ * o rótulo; os outros usos (aba de voz) continuam com o número.
+ */
 export function SliderDeVolume({
   label,
   valor,
   onChange,
+  mostrarValor = true,
 }: {
   label: string;
   valor: number;
   onChange: (v: number) => void;
+  mostrarValor?: boolean;
 }) {
+  const pct = Math.round(valor * 100);
   return (
     <label className="block">
-      <span className="mb-1 flex items-center justify-between text-sm font-semibold text-text-strong">
+      <span className="mb-2 flex items-center justify-between text-sm font-semibold text-text-strong">
         {label}
-        <span className="tabular-nums">{Math.round(valor * 100)}%</span>
+        {mostrarValor && <span className="tabular-nums">{pct}%</span>}
       </span>
       <input
         type="range"
         min={0}
         max={200}
-        value={Math.round(valor * 100)}
+        value={pct}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
         aria-label={label}
-        className="w-full accent-brand-500"
+        style={{
+          backgroundImage: `linear-gradient(to right, var(--brand-500) ${pct / 2}%, transparent ${pct / 2}%)`,
+        }}
+        className="block h-1 w-full cursor-pointer appearance-none rounded-full bg-slider-track-background bg-no-repeat focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-border-focus [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
       />
     </label>
   );
