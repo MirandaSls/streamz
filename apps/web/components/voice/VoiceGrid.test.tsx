@@ -42,6 +42,8 @@ const falsas = vi.hoisted(() => {
     tick: 0,
     falando: new Set<string>(),
     focado: null as string | null,
+    membrosOcultos: false,
+    alternarMembrosOcultos: vi.fn(),
     focoAutomatico: true,
     assistindo: new Set<string>(),
     volumes: {} as Record<string, number>,

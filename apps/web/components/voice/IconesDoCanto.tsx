@@ -3,6 +3,7 @@
 import { ExternalLink, Maximize, Minimize } from "@/components/ui/icones";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { podeAbrirJanelaSolta } from "@/lib/janela-solta";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 
 /**
@@ -56,9 +57,7 @@ export default function IconesDoCanto({
   return (
     <div
       {...moldura}
-      className={`flex items-center gap-4 transition-opacity duration-200 ${
-        visivel ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={`flex items-center gap-4 ${classeDaMoldura(visivel, "baixo")}`}
     >
       {podeAbrirJanelaSolta() && (
         <BotaoDeIcone

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as PonteiroDoReact } from "react";
+import { saidaEscondeAMoldura } from "@/components/voice/moldura-animada";
 
 /** Tempo de mouse parado antes de o palco ficar só com as pessoas. */
 const INATIVO_MS = 3000;
@@ -131,6 +132,16 @@ export function useOcultarInativo(ms = INATIVO_MS) {
   const doPalco = {
     onPointerMove: acordar,
     onPointerDown: acordar,
+    // O mouse saiu do palco: a moldura some já, sem esperar os três segundos —
+    // é o que o Discord faz, e o que deixa a saída tão legível quanto a entrada.
+    // Menu ou lista abertos pela cápsula nascem em portal, mas continuam filhos
+    // do palco na árvore React, que é a que o `leave` sintético consulta: passar
+    // o mouse para eles não chega aqui.
+    onPointerLeave: (e: PonteiroDoReact) => {
+      if (!saidaEscondeAMoldura(e.pointerType)) return;
+      window.clearTimeout(timer.current);
+      setVisivel(false);
+    },
   };
 
   /** Props para a moldura que não pode sumir sob o cursor. */

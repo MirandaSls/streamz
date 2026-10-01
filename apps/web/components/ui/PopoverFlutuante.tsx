@@ -43,6 +43,7 @@ export default function PopoverFlutuante({
   largura = 300,
   denso = false,
   semRespiro = false,
+  respiroGrande = false,
   children,
 }: {
   /** o botão que abriu — a caixa se posiciona por ele. */
@@ -65,6 +66,8 @@ export default function PopoverFlutuante({
    * respeitar o raio da caixa.
    */
   semRespiro?: boolean;
+  /** respiro de 16 em vez de 12 (o cartão do popover de ruído, igual ao Discord). */
+  respiroGrande?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -79,10 +82,10 @@ export default function PopoverFlutuante({
       rotulo={rotulo}
       // o respiro é o de antes, não os 16 do `semRespiro={false}` do Popout
       semRespiro
-      className={semRespiro ? "overflow-hidden" : denso ? "p-1.5" : "p-3"}
+      className={semRespiro ? "overflow-hidden" : denso ? "p-1.5" : respiroGrande ? "p-4" : "p-3"}
       // a folha de antes não tinha o respiro denso: 12 dos lados e embaixo,
       // e o conteúdo começando 40 abaixo do topo (28 da alça + 12)
-      classeNaFolha={semRespiro ? "" : "p-3"}
+      classeNaFolha={semRespiro ? "" : respiroGrande ? "p-4" : "p-3"}
     >
       {children}
     </Popout>

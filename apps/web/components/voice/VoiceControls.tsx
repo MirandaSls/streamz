@@ -17,6 +17,7 @@ import { LarguraDaFileira, nivelDaBarra } from "@/components/voice/compactacao-d
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import type { PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { ehNo, janelaDe } from "@/lib/outra-janela";
@@ -228,9 +229,7 @@ export default function VoiceControls({
     // encavalavam em janela estreita. Aqui dentro ela é só um item em fluxo.
     <div
       {...moldura}
-      className={`flex items-center ${nivel >= 2 ? "gap-2" : "gap-3"} transition-opacity duration-200 ${
-        escondida ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
+      className={`flex items-center ${nivel >= 2 ? "gap-2" : "gap-3"} ${classeDaMoldura(!escondida, "baixo")}`}
     >
       {/* Nível 2: tela e sons saem da barra porque também vivem no painel
           "Voz conectada" do rodapé (`VoiceConnectedBar`). O "Mais" entra na
