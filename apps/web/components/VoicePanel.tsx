@@ -6,6 +6,7 @@ import { Permission, type Channel, type NotificationLevel } from "@streamz/share
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import FileiraDeControles from "@/components/voice/FileiraDeControles";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
@@ -124,9 +125,9 @@ export default function VoicePanel({
         {...daMoldura}
         // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
         // filete nenhum cruzando o palco, e o brilho sobe por trás do nome.
-        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 transition-opacity duration-200 ${
+        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 ${
           aqui ? "border-b border-border-subtle shadow-elevation-low" : ""
-        } ${molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        } ${classeDaMoldura(molduraVisivel, "cima")}`}
       >
         <span className="flex min-w-0 items-center gap-2 font-semibold text-text-strong">
           <Volume2 size={24} className="shrink-0 text-text-muted" aria-hidden="true" />
@@ -267,9 +268,7 @@ export default function VoicePanel({
               // (`FileiraDeControles`, grade `1fr auto 1fr`).
               <div
                 {...daMoldura}
-                className={`transition-opacity duration-200 ${
-                  visivel ? "opacity-100" : "pointer-events-none opacity-0"
-                }`}
+                className={classeDaMoldura(visivel, "baixo")}
               >
                 <BotaoDeIcone
                   rotulo="Convidar para voz"

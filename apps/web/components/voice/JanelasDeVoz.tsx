@@ -198,10 +198,7 @@ function ConteudoDaJanela({
             </span>
           )
         )}
-        <span className="truncate">
-          {nome}
-          {sou && !tela && " (você)"}
-        </span>
+        <span className="truncate">{nome}</span>
       </span>
     </div>
   );

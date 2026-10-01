@@ -24,6 +24,7 @@ import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { useTelaCheia } from "@/components/voice/fullscreen";
+import { classeDaMoldura } from "@/components/voice/moldura-animada";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useOcultarInativo, type PropsDaMoldura } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -441,9 +442,7 @@ export default function CallStage({
           continuam valendo: o React os propaga a partir dos filhos. */}
       <div
         {...daMoldura}
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 transition-opacity duration-200 ${
-          molduraVisivel ? "opacity-100" : "opacity-0"
-        }`}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 ${classeDaMoldura(molduraVisivel, "cima")}`}
       >
         {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
             que mantém o título de fato centralizado — os dois lados dividem a
@@ -709,9 +708,7 @@ function BotaoDeExpandir({
   return (
     <div
       {...moldura}
-      className={`transition-opacity duration-200 ${
-        visivel ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={classeDaMoldura(visivel, "baixo")}
     >
       <BotaoDeIcone
         rotulo={expandido ? "Recolher o palco" : "Expandir o palco"}

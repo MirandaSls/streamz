@@ -854,10 +854,7 @@ export function VoiceTile({
             </span>
           )
         )}
-        <span className="truncate">
-          {nome}
-          {sou && !tela && " (você)"}
-        </span>
+        <span className="truncate">{nome}</span>
         {/* ── j-bots ── depois do nome, dentro do mesmo rótulo: um bot de música
             no palco é um tile como os outros, e sem a pílula ele se passaria por
             gente.
