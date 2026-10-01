@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Clock, PhoneCall, Pencil, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
+import { Clock, PhoneCall, Pencil, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
 import { isGroupChannel, MAX_DM_GROUP_INVITEES, type Message } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
@@ -421,9 +421,10 @@ export default function DMView({
         tools={
           // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
           <>
+            {/* com chamada em andamento aqui o Discord esconde ligar e vídeo */}
             {/* bloqueado não recebe chamada: a API recusa, e oferecer o botão
                 só para o clique falhar é pior que não ter o botão */}
-            {!bloqueado && (
+            {!bloqueado && !emChamada && naChamada !== active.id && (
               <>
                 <HeaderIcon
                   label="Iniciar chamada de voz"
@@ -447,20 +448,12 @@ export default function DMView({
             {/* em conversa direta não há moderação: qualquer participante fixa */}
             <PinsPopover channelId={active.id} guildId={null} canPin />
             {group && (
-              <>
-                <HeaderIcon
-                  label="Adicionar pessoas"
-                  onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: active.id })}
-                >
-                  <UserPlus size={20} />
-                </HeaderIcon>
-                <HeaderIcon
-                  label="Configurações do grupo"
-                  onClick={() => ui.openModal({ kind: "editGroup", channelId: active.id })}
-                >
-                  <Settings size={20} />
-                </HeaderIcon>
-              </>
+              <HeaderIcon
+                label="Adicionar pessoas"
+                onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: active.id })}
+              >
+                <UserPlus size={20} />
+              </HeaderIcon>
             )}
             {/* só em 1:1: no grupo o "adicionar pessoas" já existe acima */}
             {!group && !bloqueado && (

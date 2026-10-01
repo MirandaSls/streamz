@@ -5,6 +5,7 @@ import {
   LARGURA_MIN,
   LARGURA_PADRAO,
   PALCO_MIN,
+  PROPORCAO_PADRAO,
   RESERVA_CHAT_MIN,
   alturaDoPalco,
   larguraDoChat,
@@ -43,11 +44,16 @@ describe("reserva da conversa", () => {
 });
 
 describe("altura do palco", () => {
-  it("a faixa abre com a altura medida na print, não com uma fração da coluna", () => {
-    // é o que os quatro prints de DM mostram: 199px em janelas de 714 a 914
+  it("a faixa abre com ~50% da coluna, como o Discord do print de 2026-10-01", () => {
+    expect(PROPORCAO_PADRAO).toBe(0.5);
+    expect(proporcaoPadrao(810)).toBe(0.5);
+    expect(alturaDoPalco(proporcaoPadrao(810), 810)).toBeCloseTo(405, 5);
+    expect(alturaDoPalco(proporcaoPadrao(914), 914)).toBeCloseTo(457, 5);
+  });
+
+  it("em coluna curta o padrão cai no piso de 199px", () => {
     expect(ALTURA_PADRAO).toBe(199);
-    expect(alturaDoPalco(proporcaoPadrao(714), 714)).toBeCloseTo(ALTURA_PADRAO, 5);
-    expect(alturaDoPalco(proporcaoPadrao(914), 914)).toBeCloseTo(ALTURA_PADRAO, 5);
+    expect(alturaDoPalco(proporcaoPadrao(300), 300)).toBe(ALTURA_MIN);
   });
 
   it("cresce junto com a coluna quando a preferência é proporção", () => {
