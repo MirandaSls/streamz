@@ -271,6 +271,18 @@ export class DMsService {
     for (const id of ids) {
       this.realtime.emitToUser(id, WS_EVENTS.CHANNEL_UPDATED, this.toView(channel, id));
     }
+    // paridade Discord: criar o grupo já com gente mostra "X adicionou Y ao
+    // grupo." na timeline, um aviso por convidado. Em sequência e na ordem de
+    // `userIds` para os createdAt saírem ordenados; mesmo caminho do addGroupMember.
+    const convidados = await this.prisma.user.findMany({
+      where: { id: { in: ids.filter((id) => id !== meId) } },
+      select: { id: true, username: true },
+    });
+    const usernamePorId = new Map(convidados.map((u) => [u.id, u.username]));
+    for (const id of ids) {
+      if (id === meId) continue;
+      await this.avisoDeSistema(channel.id, meId, "SYSTEM_MEMBER_ADDED", usernamePorId.get(id) ?? "");
+    }
     return this.toView(channel, meId);
   }
 

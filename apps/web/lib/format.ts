@@ -38,11 +38,12 @@ export function horaCompleta(iso: string, agora = new Date()): string {
   return `${DATA_CURTA.format(new Date(iso))} ${hora(iso)}`;
 }
 
-/** Rótulo do divisor de data entre grupos de mensagens. */
-export function rotuloDoDia(iso: string, agora = new Date()): string {
-  const dias = diasAtras(iso, agora);
-  if (dias === 0) return "Hoje";
-  if (dias === 1) return "Ontem";
+/**
+ * Rótulo do divisor de data entre grupos de mensagens. Sempre a data por
+ * extenso, nunca "Hoje"/"Ontem": paridade com o Discord, cujo divisor da
+ * timeline não usa datas relativas (isso fica só em `horaCompleta`).
+ */
+export function rotuloDoDia(iso: string): string {
   return DATA_LONGA.format(new Date(iso));
 }
 
