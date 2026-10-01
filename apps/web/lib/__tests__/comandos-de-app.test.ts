@@ -23,6 +23,7 @@ const BOT: PublicUser = {
   status: "ONLINE",
   customStatusText: null,
   customStatusEmoji: null,
+  manualStatusExpiresAt: null,
   bot: true,
 };
 

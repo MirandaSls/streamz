@@ -14,6 +14,7 @@ function estado(userId: string, channelId: string, extra: Partial<VoiceStateEven
       status: "ONLINE",
       customStatusText: null,
       customStatusEmoji: null,
+      manualStatusExpiresAt: null,
     },
     connected: true,
     muted: false,
