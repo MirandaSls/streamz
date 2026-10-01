@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AuthTokens, PublicUser } from "@streamz/shared";
 import { api } from "@/lib/api";
+import { useGuildLayout } from "@/stores/guild-layout";
 import { useAdmin } from "@/stores/admin";
 import { useConta } from "@/stores/conta";
 import { disconnectSocket } from "@/lib/socket";
@@ -71,6 +72,8 @@ export const useAuth = create<AuthState>((set) => ({
     // a conta (e-mail, 2FA) é da sessão que acabou: entrar com outra na mesma
     // aba não pode herdar a anterior
     useConta.getState().clear();
+    // pastas de servidor são da conta, não do aparelho
+    useGuildLayout.getState().limpar();
     set({ user: null });
   },
 }));

@@ -1,4 +1,5 @@
 import type {
+  GuildLayout,
   ApelidoDeAmigoEvent,
   ConversaFixadaEvent,
   MinhaAssociacaoEditarInput,
@@ -905,6 +906,12 @@ export const api = {
   /** Desafixar (idempotente; responde `fixadaEm: null`). */
   desafixarDM: (channelId: string) =>
     request<ConversaFixadaEvent>(`/dms/${channelId}/pin`, del()),
+
+  /** Pastas e ordem da barra de servidores (por conta, sincronizado entre aparelhos). */
+  guildLayout: {
+    get: () => request<GuildLayout>("/users/me/guild-layout"),
+    put: (layout: GuildLayout) => request<GuildLayout>("/users/me/guild-layout", put(layout)),
+  },
 
   /** Todas as minhas notas (carregar uma vez no boot, junto de `friends`). */
   minhasNotas: () => request<NotasDeUsuario>("/users/me/notes"),
