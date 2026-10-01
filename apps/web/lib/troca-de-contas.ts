@@ -60,14 +60,18 @@ export function planoDeTroca(cofre: Cofre, userId: string): PlanoDeTroca {
  * Assume a sessão que os tokens representam: grava tokens, cofre e retrato, e
  * recarrega o app.
  *
- * A ordem importa. Os tokens vão primeiro porque `usuarioDoToken` já rodou e o
- * que vem depois só grava; o cofre vem antes do retrato para que, se a página
- * morrer no meio, o próximo carregamento leia um cofre coerente; e a navegação
- * é a última linha, porque é ela que descarta tudo que está em memória.
+ * A ordem importa. O cofre vai primeiro porque `salvarTokens` espelha o refresh
+ * novo na entrada de `cofre.ativa`: se ele rodasse antes de `guardarConta` (que
+ * é quem passa a ativa para a conta nova), gravaria o refresh da conta nova na
+ * entrada da conta antiga, e a antiga "expiraria" em minutos. Os tokens vêm
+ * logo depois, já com a ativa certa; o cofre vem antes do retrato para que, se
+ * a página morrer no meio, o próximo carregamento leia um cofre coerente; e a
+ * navegação é a última linha, porque é ela que descarta tudo que está em
+ * memória.
  */
 export function assumirSessao(user: PublicUser, tokens: AuthTokens): void {
-  salvarTokens(tokens);
   mudarCofre((cofre) => guardarConta(cofre, user, tokens.refreshToken));
+  salvarTokens(tokens);
   salvarUsuarioGuardado(user);
   if (typeof window !== "undefined") window.location.replace("/app");
 }
