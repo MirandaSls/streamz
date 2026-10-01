@@ -2,8 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
@@ -15,7 +13,6 @@ import {
   MAX_SOUNDBOARD_POR_GUILD,
   MAX_SOUNDBOARD_SIZE,
   Permission,
-  SOUNDBOARD_INTERVALO_MS,
   WS_EVENTS,
   hasPermission,
   soundboardEmojiSchema,
@@ -29,10 +26,8 @@ import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { StorageService } from "../storage/storage.service";
 import { VoiceService } from "../voice/voice.service";
-import { redisClient } from "../realtime/redis";
 import { toPublicUser } from "../../common/dto";
 import { extensaoDeAudio, validarAudio } from "./audio";
-import { intervaloRespeitado } from "./intervalo";
 import { toSoundDTO, volumeDoEnvio } from "./dto";
 
 /** O que o multer entrega ao controller (o mesmo formato do envio de emoji). */
@@ -49,25 +44,18 @@ export interface ArquivoDeSom {
  * permissão `MANAGE_EMOJIS`, evento de lista). A parte nova é o **disparo**, e
  * ela tem uma regra que não existe em nenhum outro lugar do app: o efeito de
  * apertar o botão não é uma escrita, é um som na orelha de outras pessoas. Daí
- * as três guardas de `play`:
+ * as duas guardas de `play` (sem teto de frequência, de propósito):
  *
  * 1. **quem aperta está na chamada** — não basta enxergar o canal. Sem isso,
  *    qualquer membro do servidor faria barulho numa sala em que não está;
  * 2. **o som é daquele servidor** (ou um dos padrão) — senão o id de um som de
  *    outro servidor viraria um jeito de tocar o que a sala não conhece;
- * 3. **um som por segundo, por pessoa** — ver `intervalo.ts`.
  *
  * E o destino do evento não é a sala do servidor, é **quem está no canal de
  * voz**: quem está lendo um canal de texto ao lado não ouve nada.
  */
 @Injectable()
 export class SoundboardService {
-  /**
-   * Último disparo por usuário, quando não há Redis. É estado efêmero como o de
-   * voz: um restart soltar o teto de uma pessoa por um segundo não é problema.
-   */
-  private readonly ultimoLocal = new Map<string, number>();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
@@ -224,14 +212,6 @@ export class SoundboardService {
     }
 
     const sound = await this.resolverSom(soundId, channel.guildId, userId);
-    if (!(await this.podeTocarAgora(userId))) {
-      // 429 e não 400: o pedido está certo, só chegou cedo demais — é o que
-      // deixa o cliente distinguir "espere" de "não pode" (ver `PainelDeSons`)
-      throw new HttpException(
-        "Espere um segundo antes de tocar outro som",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException("Usuário não encontrado");
@@ -274,37 +254,6 @@ export class SoundboardService {
       if (!membro) throw new NotFoundException("Este som não é de um servidor seu");
     }
     return toSoundDTO(row);
-  }
-
-  /**
-   * O teto de um som por segundo. Com `REDIS_URL` o contador é compartilhado
-   * entre instâncias (um `SET NX PX` resolve tudo numa viagem); sem ele, cai no
-   * mapa em memória — que é o mesmo desenho do estado de voz.
-   */
-  private async podeTocarAgora(userId: string): Promise<boolean> {
-    const redis = redisClient();
-    if (redis) {
-      const ok = await redis.set(
-        `soundboard:${userId}`,
-        "1",
-        "PX",
-        SOUNDBOARD_INTERVALO_MS,
-        "NX",
-      );
-      return ok === "OK";
-    }
-    const agora = Date.now();
-    if (!intervaloRespeitado(this.ultimoLocal.get(userId), agora, SOUNDBOARD_INTERVALO_MS)) {
-      return false;
-    }
-    this.ultimoLocal.set(userId, agora);
-    // o mapa não pode crescer para sempre: quem não toca há uma janela sai
-    if (this.ultimoLocal.size > 1000) {
-      for (const [id, quando] of this.ultimoLocal) {
-        if (agora - quando > SOUNDBOARD_INTERVALO_MS) this.ultimoLocal.delete(id);
-      }
-    }
-    return true;
   }
 
   /** Lista crua de um servidor, sem checar associação (uso interno). */

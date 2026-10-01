@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { extensaoDeAudio, sniffAudio, validarAudio } from "./audio";
-import { intervaloRespeitado } from "./intervalo";
 
 /** MP3 com tag ID3 na frente — o caso comum de um arquivo exportado. */
 function mp3ComId3(bytes = 128): Buffer {
@@ -79,21 +78,5 @@ describe("extensaoDeAudio", () => {
     expect(extensaoDeAudio("audio/mpeg")).toBe("mp3");
     expect(extensaoDeAudio("audio/ogg")).toBe("ogg");
     expect(extensaoDeAudio("audio/wav")).toBe("wav");
-  });
-});
-
-describe("intervaloRespeitado", () => {
-  it("deixa passar o primeiro som", () => {
-    expect(intervaloRespeitado(undefined, 1_000, 1_000)).toBe(true);
-  });
-
-  it("segura o segundo dentro da janela e libera depois dela", () => {
-    expect(intervaloRespeitado(1_000, 1_500, 1_000)).toBe(false);
-    expect(intervaloRespeitado(1_000, 1_999, 1_000)).toBe(false);
-    expect(intervaloRespeitado(1_000, 2_000, 1_000)).toBe(true);
-  });
-
-  it("relógio que andou para trás não vira passe livre nem bloqueio eterno", () => {
-    expect(intervaloRespeitado(5_000, 1_000, 1_000)).toBe(true);
   });
 });

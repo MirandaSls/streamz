@@ -32,7 +32,7 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  *
  * O que **não** é: a guarda de 300 ms do `ringtone`. Lá ela existe para o mesmo
  * aviso não se sobrepor a si mesmo; aqui, apertar o mesmo som de novo é
- * justamente a intenção — o teto é do servidor (um por segundo, por pessoa).
+ * justamente a intenção — não há teto de frequência, nem aqui nem no servidor.
  */
 
 /** Elementos reaproveitados por URL. */
