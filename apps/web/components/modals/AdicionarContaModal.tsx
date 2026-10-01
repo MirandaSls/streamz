@@ -145,10 +145,10 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
             <Button
               variante="primario"
               tamanho="md"
-              type="button"
+              type="submit"
+              form="form-adicionar-conta-mfa"
               disabled={!code.trim()}
               carregando={enviando}
-              onClick={() => void enviarCodigo()}
               className="celular:h-[44px]"
             >
               Continuar
@@ -164,7 +164,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
           </>
         }
       >
-        <form onSubmit={enviarCodigo} noValidate>
+        <form id="form-adicionar-conta-mfa" onSubmit={enviarCodigo} noValidate>
           <FieldLabel htmlFor="conta-code" invalid={!!erro} hint={erro ?? undefined}>
             Código de autenticação
           </FieldLabel>
@@ -196,9 +196,9 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
           <Button
             variante="primario"
             tamanho="md"
-            type="button"
+            type="submit"
+            form="form-adicionar-conta"
             carregando={enviando}
-            onClick={() => void entrar()}
             className="celular:h-[44px]"
           >
             Continuar
@@ -214,10 +214,11 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
       }
     >
       {/*
-        O `<form>` fica só pelo Enter: quem dispara é o "Continuar" do rodapé,
-        que a `Dialog` renderiza fora daqui.
+        O "Continuar" do rodapé é `type="submit" form="form-adicionar-conta"`: a
+        `Dialog` o renderiza fora deste `<form>`, e sem um submit ligado a ele o
+        Enter nos campos não faz envio implícito (são dois campos de texto).
       */}
-      <form onSubmit={entrar} noValidate>
+      <form id="form-adicionar-conta" onSubmit={entrar} noValidate>
         <FieldLabel htmlFor="conta-identificador" invalid={!!erro} hint={erro ?? undefined}>
           E-mail ou usuário
         </FieldLabel>
