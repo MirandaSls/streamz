@@ -32,7 +32,7 @@ import {
 } from "./servico";
 
 /**
- * Os comandos do **Streamz Moderação**.
+ * Os comandos do **Guarda**.
  *
  * Todo comando que age sobre alguém segue o mesmo roteiro, na mesma ordem, e
  * essa repetição é de propósito — é a forma de nenhum deles esquecer um passo:

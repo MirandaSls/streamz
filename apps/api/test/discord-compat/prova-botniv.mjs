@@ -1,4 +1,4 @@
-// A prova do **Streamz Níveis** rodando contra a bancada descartável.
+// A prova do **Degrau** rodando contra a bancada descartável.
 //
 // Entrada (variáveis de ambiente):
 //   SEMENTE   JSON de `semear.mjs` (dono, servidor, canal de texto)

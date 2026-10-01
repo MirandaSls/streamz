@@ -9,9 +9,10 @@ import bot from "./index";
  * `appEditarSchema`. Uma descrição de 301 caracteres já custou uma bancada
  * inteira ao bot de música; aqui custa 5 ms.
  */
-describe("identidade do Streamz Boas-vindas", () => {
+describe("identidade do Porteiro", () => {
   it("o nome cabe no limite da API e é nosso", () => {
-    expect(bot.nome).toBe("Streamz Boas-vindas");
+    expect(bot.nomesAnteriores).toEqual(["Streamz Boas-vindas"]);
+    expect(bot.nome).toBe("Porteiro");
     expect(bot.nome.length).toBeLessThanOrEqual(MAX_APP_NAME);
   });
 

@@ -1,4 +1,7 @@
-# Streamz Cargos
+# Crachá
+
+> **Nome de exibição.** O nome de exibição é a chave com que o provisionamento acha a aplicação no diretório. Por isso, ao renomear um bot, o nome antigo vai em `nomesAnteriores` do `index.ts` — senão o provisionamento cria uma aplicação duplicada.
+> **Arte.** Ícone em `assets/<bot>.png`; banner em SVG (`assets/<nome>-banner.svg`). A aplicação ainda não tem campo de banner, então o SVG fica só versionado.
 
 O bot oficial de **cargos por reação** da instância. Uma pasta, como manda o
 [`CONTRATO.md`](../../CONTRATO.md) — nada fora daqui, além do ícone

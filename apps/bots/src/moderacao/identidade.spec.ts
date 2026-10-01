@@ -10,11 +10,12 @@ import bot from "./index";
  * A fundação já morreu uma vez com um `400` cru porque a descrição tinha 301
  * caracteres. Descobrir aquilo custou subir a bancada inteira; aqui custa 5 ms.
  */
-describe("identidade do Streamz Moderação", () => {
+describe("identidade do Guarda", () => {
   it("o nome cabe no limite da API e é próprio do Streamz", () => {
+    expect(bot.nomesAnteriores).toEqual(["Streamz Moderação"]);
     expect(bot.nome.length).toBeGreaterThanOrEqual(2);
     expect(bot.nome.length).toBeLessThanOrEqual(MAX_APP_NAME);
-    expect(bot.nome).toMatch(/^Streamz /);
+    expect(bot.nome).toBe("Guarda");
     // Nome de bot de terceiro não entra neste repositório, nem em dado de teste.
     expect(bot.nome).not.toMatch(/dyno|carl|mee6|probot|vortex/i);
   });

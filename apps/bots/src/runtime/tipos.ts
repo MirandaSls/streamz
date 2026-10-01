@@ -180,4 +180,10 @@ export interface Bot {
   permissoesPadrao?: number;
   /** Caminho do PNG do ícone, relativo à raiz de `apps/bots`. */
   icone?: string;
+  /**
+   * Nomes que este bot já teve. O provisionamento os usa para reencontrar a
+   * aplicação existente (a chave é o nome) e o PATCH já a renomeia; sem isso,
+   * renomear criaria uma aplicação nova, com token novo e sem as instalações.
+   */
+  readonly nomesAnteriores?: readonly string[];
 }

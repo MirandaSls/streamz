@@ -1,4 +1,4 @@
-// A prova do **Streamz Boas-vindas** contra a bancada descartável.
+// A prova do **Porteiro** contra a bancada descartável.
 //
 // Entrada (variáveis de ambiente):
 //   SEMENTE   JSON de `semear.mjs` (dono, servidor, canal de texto)

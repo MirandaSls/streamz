@@ -11,8 +11,10 @@ import bot from "./index";
  * cru: a descrição tinha **301** caracteres, um a mais que `MAX_APP_DESCRIPTION`.
  * Descobrir isso custou subir a bancada inteira; aqui custa 5 ms.
  */
-describe("identidade do Streamz Música", () => {
+describe("identidade do Fone", () => {
   it("o nome cabe no limite da API", () => {
+    expect(bot.nomesAnteriores).toEqual(["Streamz Música"]);
+    expect(bot.nome).toBe("Fone");
     expect(bot.nome.length).toBeGreaterThanOrEqual(2);
     expect(bot.nome.length).toBeLessThanOrEqual(MAX_APP_NAME);
   });

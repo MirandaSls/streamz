@@ -1,5 +1,5 @@
 /**
- * O serviço do **Streamz Níveis**: o que roda entre as mensagens e o disco.
+ * O serviço do **Degrau**: o que roda entre as mensagens e o disco.
  *
  * Tudo que dá para separar em função pura já está separado (`curva.ts`,
  * `ganho.ts`, `ranking.ts`, `formatar.ts`); o que sobra aqui é o que precisa do
@@ -207,7 +207,7 @@ export class ServicoDeNiveis {
     for (const cargoId of cargos) {
       if (membro.roles.cache.has(cargoId)) continue;
       try {
-        await membro.roles.add(cargoId, "cargo por nível (Streamz Níveis)");
+        await membro.roles.add(cargoId, "cargo por nível (Degrau)");
         this.ctx.log.info("cargo por nível entregue", { servidor: guildId, usuario: usuarioId, cargo: cargoId });
       } catch (erro) {
         faltouRota = true;

@@ -1,4 +1,4 @@
-// A prova do **Streamz Moderação** rodando contra a bancada descartável.
+// A prova do **Guarda** rodando contra a bancada descartável.
 //
 // Entrada (variáveis de ambiente):
 //   SEMENTE   JSON de `semear.mjs` (dono, servidor, canal)

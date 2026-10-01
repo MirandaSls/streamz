@@ -14,7 +14,7 @@ function retrato(parcial: Partial<Retrato> & { id: string }): Retrato {
   };
 }
 
-const EU = retrato({ id: "bot", nome: "Streamz Moderação", posicaoMaisAlta: 50 });
+const EU = retrato({ id: "bot", nome: "Guarda", posicaoMaisAlta: 50 });
 
 function cena(ator: Partial<Retrato>, alvo: Partial<Retrato>, bot: Partial<Retrato> = {}) {
   return avaliar({
@@ -47,7 +47,7 @@ describe("as seis linhas, na ordem", () => {
   });
 
   it("3. ninguém manda o bot se moderar", () => {
-    // Sem esta linha, `/banir @Streamz Moderação` é o bot saindo do servidor a
+    // Sem esta linha, `/banir @Guarda` é o bot saindo do servidor a
     // pedido de qualquer um que tenha a permissão.
     const v = cena({ permissoes: ADMINISTRADOR }, { id: "bot" });
     expect(v).toMatchObject({ pode: false, motivo: "euMesmo" });

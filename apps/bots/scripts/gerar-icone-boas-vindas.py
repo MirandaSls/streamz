@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o ícone do bot **Streamz Boas-vindas** — um aceno saindo de uma porta.
+"""Gera o ícone do bot **Porteiro** — um aceno saindo de uma porta.
 
 Arte própria, desenhada aqui com primitivas do Pillow: nada copiado de
 terceiros. A paleta é a do `design.md` — Void Ink no fundo, Volt Lime no

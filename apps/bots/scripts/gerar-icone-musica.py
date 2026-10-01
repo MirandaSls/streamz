@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o ícone do bot **Streamz Música** — uma nota musical na paleta do repo.
+"""Gera o ícone do bot **Fone** — uma nota musical na paleta do repo.
 
 Arte própria, desenhada aqui com primitivas do Pillow: nada copiado de
 terceiros. A paleta é a do `design.md` — Void Ink no fundo, Volt Lime na nota.

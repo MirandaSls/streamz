@@ -1,5 +1,5 @@
 /**
- * O miolo do **Streamz Boas-vindas**: o que acontece quando alguém entra.
+ * O miolo do **Porteiro**: o que acontece quando alguém entra.
  *
  * O bot inteiro é um `guildMemberAdd` e um `guildMemberRemove`. Tudo que dá
  * para testar sem servidor de pé está em `mensagem.ts`, `configuracao.ts` e
@@ -229,7 +229,7 @@ export class ServicoDeBoasVindas {
     if (!cargo) return { estado: "falhou", detalhe: `o cargo ${cargoId} não existe mais` };
     if (membro.roles.cache.has(cargoId)) return { estado: "ok", detalhe: "já tinha o cargo" };
     try {
-      await membro.roles.add(cargoId, "cargo automático do Streamz Boas-vindas");
+      await membro.roles.add(cargoId, "cargo automático do Porteiro");
       return { estado: "ok", detalhe: cargo.name };
     } catch (erro) {
       if (ehRotaAusente(erro)) return { estado: "falhou", detalhe: SEM_ROTA_DE_CARGO };

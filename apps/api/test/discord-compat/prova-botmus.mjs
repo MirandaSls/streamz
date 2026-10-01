@@ -1,4 +1,4 @@
-// A prova do **Streamz Música** rodando contra a bancada descartável.
+// A prova do **Fone** rodando contra a bancada descartável.
 //
 // Entrada (variáveis de ambiente):
 //   SEMENTE   JSON de `semear.mjs` (dono, servidor, canal de texto, canal de voz)
