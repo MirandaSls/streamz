@@ -83,7 +83,6 @@ import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
 import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
-import { useMessages } from "@/stores/messages";
 import { useModeration } from "@/stores/moderation";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
@@ -190,7 +189,6 @@ export default function Composer({
   ariaLabel,
   destino,
   draftKey,
-  ultimaMinhaMensagem,
   onCreateThread,
   onCreatePoll,
   modoLento,
@@ -207,8 +205,6 @@ export default function Composer({
   destino?: string;
   /** chave do rascunho; o painel de thread usa uma própria para não colidir. */
   draftKey?: string;
-  /** última mensagem minha neste canal — `↑` no campo vazio abre a edição dela. */
-  ultimaMinhaMensagem?: () => { id: string; content: string } | null;
   /** menu do "+": criar thread a partir da conversa. */
   onCreateThread?: () => void;
   /** menu do "+": criar enquete (h-moderacao). */
@@ -676,16 +672,6 @@ export default function Composer({
       if (proxima) {
         event.preventDefault();
         acrescentar(proxima);
-        return;
-      }
-    }
-
-    // ↑ no campo vazio abre a edição **na mensagem**, não aqui (como no Discord)
-    if (event.key === "ArrowUp" && !draft && ultimaMinhaMensagem) {
-      const ultima = ultimaMinhaMensagem();
-      if (ultima) {
-        event.preventDefault();
-        useMessages.getState().startEditing(ultima.id);
         return;
       }
     }

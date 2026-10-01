@@ -10,7 +10,6 @@ import ReplyBar from "@/components/chat/ReplyBar";
 // h-moderacao: mesmo aviso "somente-leitura" do canal principal (ChatView)
 import { SemPermissaoNotice } from "@/components/moderation/ComposerNotice";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
@@ -236,7 +235,6 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
               placeholder="Responder na thread…"
               ariaLabel="Responder na thread"
               destino={nome ?? "este tópico"}
-              ultimaMinhaMensagem={() => ultimaMinhaMensagem(items, user.id)}
               onSend={(content, attachments, sticker) =>
                 send({ channelId, author: user, content, attachments, sticker, parentId })
               }
