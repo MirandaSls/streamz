@@ -289,7 +289,8 @@ export const api = {
 
   // ── d-social: amigos e bloqueio ──
   friends: () => request<FriendLists>("/friends"),
-  requestFriend: (username: string) => request<FriendRequest>("/friends/requests", json({ username })),
+  requestFriend: (username: string, mensagem?: string) =>
+    request<FriendRequest>("/friends/requests", json(mensagem ? { username, mensagem } : { username })),
   acceptFriend: (requestId: string) =>
     request<FriendRequest>(`/friends/requests/${requestId}/accept`, { method: "POST" }),
   removeFriendRequest: (requestId: string) =>

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   displayNameOf,
+  normalizarUsername,
   type ApelidoDeAmigoEvent,
   type FriendLists,
   type FriendRequest,
@@ -51,7 +52,7 @@ interface FriendsState extends FriendLists {
   setOpen: (open: boolean) => void;
   setTab: (tab: FriendsTab) => void;
 
-  send: (username: string) => Promise<boolean>;
+  send: (username: string, mensagem?: string) => Promise<boolean>;
   accept: (requestId: string) => Promise<void>;
   dismiss: (requestId: string) => Promise<void>;
   remove: (user: PublicUser) => Promise<void>;
@@ -142,11 +143,11 @@ export const useFriends = create<FriendsState>((set, get) => {
     },
     setTab: (tab) => set({ tab }),
 
-    send: async (username) => {
-      const nome = username.trim().replace(/^@/, "");
+    send: async (username, mensagem) => {
+      const nome = normalizarUsername(username);
       if (!nome) return false;
       try {
-        const request = await api.requestFriend(nome);
+        const request = await api.requestFriend(nome, mensagem);
         // pedido cruzado vira amizade na hora: o servidor devolve ACCEPTED e o
         // evento `friend.accepted` chega junto (é ele que toasta e põe a
         // conversa na lista) — recarregar evita divergência

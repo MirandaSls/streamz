@@ -21,6 +21,7 @@ import Avatar from "@/components/ui/Avatar";
 import { PilulasDeCargo } from "@/components/ui/perfil/PilulasDeCargo";
 import { BotaoDeIcone, Button, Tabs, type AbaDeTabs } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
+import UsernameCopiavel from "@/components/ui/UsernameCopiavel";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
@@ -331,7 +332,7 @@ export default function UserProfileModal({
                 <span className="truncate text-sm text-text-muted">{profile.pronouns}</span>
               )}
             </div>
-            <div className="truncate text-sm text-text-default">@{user.username}</div>
+            <div className="truncate text-sm text-text-default"><UsernameCopiavel username={user.username} prefixo="@" /></div>
             {personalizado && <div className="mt-1 text-sm text-text-default">{personalizado}</div>}
 
             <Tabs

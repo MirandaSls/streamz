@@ -11,6 +11,7 @@
 // ── Amigos ───────────────────────────────────────────────────
 
 import { z } from "zod";
+import { USERNAME_MAX, USERNAME_MIN, normalizarUsername } from "./auth";
 import type { MemberRole, PublicUser } from "./dominio";
 import { replySnippet } from "./mensagens";
 import { achatarPayloadDeBot } from "./mensagens-de-bot";
@@ -31,6 +32,13 @@ export interface FriendRequest {
   addresseeId: string;
   user: PublicUser;
   createdAt: string;
+  /**
+   * Texto de apresentação que quem pediu escreveu junto do pedido. Quando os
+   * dois viram amigos, ele aparece na conversa direta — é o "oi, sou o fulano
+   * do servidor X" que dá contexto a um pedido vindo de um desconhecido.
+   * Ausente/null = pedido sem mensagem (ou payload antigo).
+   */
+  mensagem?: string | null;
 }
 
 /** As listas da página Amigos numa chamada só (`GET /friends`). */
@@ -59,13 +67,32 @@ export interface FriendLists {
  */
 export type RelationshipKind = "self" | "none" | "friend" | "incoming" | "outgoing" | "blocked";
 
+/** Teto da mensagem que acompanha um pedido de amizade. */
+export const MAX_FRIEND_REQUEST_MESSAGE_LENGTH = 120;
+
 /** Pedido de amizade por nome de usuário (é assim que o Discord adiciona). */
 export const friendRequestSchema = z.object({
-  username: z
-    .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  // Normaliza ("@Fulano" acha "fulano"), mas não aplica a regra de formato de
+  // `usernameSchema`: quem tem nome antigo, com hífen ou maiúscula, ainda
+  // precisa poder ser adicionado. Nome que não existe vira 404 na API.
+  username: z.preprocess(
+    (valor) => (typeof valor === "string" ? normalizarUsername(valor) : valor),
+    z
+      .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+      .min(USERNAME_MIN, "Nome de usuário muito curto")
+      .max(USERNAME_MAX, "Nome de usuário muito longo"),
+  ),
+  // Só espaço conta como "sem mensagem": vira undefined para a API não gravar
+  // uma string vazia que depois apareceria como balão em branco na conversa.
+  mensagem: z
+    .string({ invalid_type_error: "deve ser texto" })
     .trim()
-    .min(3, "Nome de usuário muito curto")
-    .max(32, "Nome de usuário muito longo"),
+    .max(
+      MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
+      `Mensagem acima de ${MAX_FRIEND_REQUEST_MESSAGE_LENGTH} caracteres`,
+    )
+    .optional()
+    .transform((texto) => texto || undefined),
 });
 export type FriendRequestInput = z.infer<typeof friendRequestSchema>;
 

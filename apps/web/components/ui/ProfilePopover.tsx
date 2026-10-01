@@ -27,6 +27,7 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import TagDeBot from "@/components/ui/TagDeBot";
+import UsernameCopiavel from "@/components/ui/UsernameCopiavel";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { CabecalhoDoPerfil } from "@/components/ui/perfil/CabecalhoDoPerfil";
 import { PainelDaMinhaConta } from "@/components/ui/perfil/PainelDaMinhaConta";
@@ -892,7 +893,7 @@ export default function ProfilePopoverHost() {
               )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-text-sm text-text-default">
-              <span className="min-w-0 truncate">{user.username}</span>
+              <UsernameCopiavel username={user.username} className="min-w-0 truncate" />
               {perfil?.pronouns && (
                 <>
                   <span aria-hidden="true" className="text-text-muted">
