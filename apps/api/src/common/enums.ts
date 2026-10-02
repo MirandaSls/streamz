@@ -3,6 +3,7 @@ import type {
   AuditTargetType as PrismaAuditTargetType,
   ChannelType as PrismaChannelType,
   FriendshipStatus as PrismaFriendshipStatus,
+  GuildDefaultNotifications as PrismaGuildDefaultNotifications,
   MemberRole as PrismaMemberRole,
   MessageType as PrismaMessageType,
   NotificationLevel as PrismaNotificationLevel,
@@ -14,6 +15,7 @@ import type {
   AuditTargetType,
   ChannelType,
   FriendshipStatus,
+  GuildDefaultNotifications,
   MemberRole,
   MessageType,
   NotificationLevel,
@@ -44,3 +46,6 @@ type _TravaFriendshipStatus = Trava<Equivalentes<PrismaFriendshipStatus, Friends
 type _TravaAuditAction = Trava<Equivalentes<PrismaAuditAction, AuditAction>>;
 type _TravaAuditTargetType = Trava<Equivalentes<PrismaAuditTargetType, AuditTargetType>>;
 type _TravaReportReason = Trava<Equivalentes<PrismaReportReason, ReportReason>>;
+type _TravaGuildDefaultNotifications = Trava<
+  Equivalentes<PrismaGuildDefaultNotifications, GuildDefaultNotifications>
+>;

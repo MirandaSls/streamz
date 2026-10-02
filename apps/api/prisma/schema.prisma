@@ -54,6 +54,15 @@ enum MemberRole {
   MEMBER
 }
 
+// Notificação padrão do servidor (aba Engajamento). Subconjunto de
+// NotificationLevel: o Discord não oferece "Nada" como padrão. Mesmos literais
+// da union `GuildDefaultNotifications` de @streamz/shared — a equivalência é
+// travada em common/enums.ts.
+enum GuildDefaultNotifications {
+  ALL
+  MENTIONS
+}
+
 model User {
   id                    String      @id @default(cuid())
   snowflake             BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
@@ -258,6 +267,34 @@ model Guild {
   discoverable       Boolean    @default(false)
   auditLogs          AuditLog[]
   reports            Report[]
+
+  // ── perfil do servidor ──
+  // Até 5 características `{ emoji, texto }`, na ordem escolhida. É `Json` e
+  // não tabela: são etiquetas sem identidade própria, sempre lidas e gravadas
+  // juntas. A forma é garantida na escrita (`guildTraitsSchema`) e conferida de
+  // novo na leitura (`lerGuildTraits`), porque o banco não a garante.
+  traits         Json     @default("[]")
+  // Nomes dos jogos do perfil (texto livre), até MAX_GUILD_GAMES.
+  games          String[] @default([])
+  privateProfile Boolean  @default(false)
+
+  // ── engajamento ──
+  // Mensagens do sistema no `systemChannelId`: os SUPPRESS_* do Discord com o
+  // sinal invertido (true = enviar), para o padrão "tudo ligado" ser o default
+  // da coluna e os servidores que já existem não mudarem de comportamento.
+  systemWelcomeMessage Boolean                   @default(true)
+  systemWelcomeSticker Boolean                   @default(true)
+  systemBoostMessage   Boolean                   @default(true)
+  systemTips           Boolean                   @default(true)
+  activityFeed         Boolean                   @default(true)
+  defaultNotifications GuildDefaultNotifications @default(ALL)
+  // Canal de voz AFK. Sem FK, como `systemChannelId`/`rulesChannelId`: o
+  // Channel já aponta para o Guild, e a FK de volta criaria um ciclo de
+  // cascata. Id de canal que não existe mais é lido como "sem canal AFK".
+  afkChannelId         String?
+  // Um de AFK_TIMEOUTS_SECONDS (60/300/900/1800/3600); conferido no contrato.
+  afkTimeoutSeconds    Int                       @default(300)
+  widgetEnabled        Boolean                   @default(false)
 
   // ── j-bots ──
   // Comandos de barra registrados **para este servidor** e as interações que
