@@ -10,8 +10,7 @@ import {
 import { AlertTriangle, Bot, ChevronRight, RefreshCw } from "@/components/ui/icones";
 import { EmBreve } from "@/components/ui/controls";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
-import Avatar from "@/components/ui/Avatar";
-import { Button, Tooltip } from "@/components/ui/primitivos";
+import { Button } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
@@ -20,97 +19,20 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
 /**
- * ── j-bots ── Aba "Aplicativos" das configurações do servidor: o que está
- * instalado aqui, com o que cada um pode fazer, e o botão de tirar.
+ * Aba "Aplicativos": o que está instalado no servidor e o botão de tirar.
+ * Lá ("Descobrir aplicativos") se instala, aqui se confere e se remove.
  *
- * É a contrapartida de "Descobrir aplicativos" (lote B): lá se instala, aqui se
- * confere e se remove. Sem esta tela, um app instalado por outro moderador só
- * apareceria como um membro a mais na lista, e a única pista de que ele tem
- * `MANAGE_MESSAGES` seria abrir a aba de cargos e reconhecer o cargo gerenciado
- * pelo nome.
+ * `MANAGE_GUILD` esconde a aba (o registro em `ServerSettingsModal`) e a API
+ * repete a checagem nas rotas: esconder é conforto, a permissão é a do servidor.
  *
- * `MANAGE_GUILD` esconde a aba inteira (o registro em `ServerSettingsModal` é
- * quem faz isso) **e** a API repete a checagem nas três rotas — a mesma dobra
- * das outras abas: esconder é conforto, a permissão de verdade é a do servidor.
+ * As permissões do app são só leitura aqui: editar é mexer no cargo gerenciado
+ * dele, na aba "Cargos", que já tem a trava de escalada de privilégio. Duas
+ * telas escrevendo no mesmo cargo discordariam.
  *
- * **As permissões aqui são leitura, não edição.** Mudar o que o app pode fazer
- * é mexer no cargo gerenciado dele, e isso tem um lugar: a aba "Cargos", que já
- * sabe fazer a trava de escalada de privilégio (`servidor-cargo-do-app.png` do
- * acervo confirma: o Discord edita a permissão do app pelo **cargo** dele em
- * Server Settings → Roles, não por aqui). Duas telas escrevendo no mesmo cargo
- * seriam duas chances de discordarem.
- *
- * ## Redesenho (cartão 6u-aplicativos-servidor)
- *
- * **Referência.** Não há print 1:1 do usuário desta tela (não está em
- * `docs/Reference/*.png` da raiz) e o CSS bruto capturado (303+850 arquivos)
- * também não tem a classe deste componente — busca por
- * `application`/`integration`/`botCard`/`installedApp` em
- * `docs/referencias-discord/tokens/css-bruto/**` não achou nada. A referência
- * que existe é de catálogo (dois lotes iguais, mesma captura de fev/2024):
- * `docs/Reference/apps/servidor-integracoes-bots-e-apps.png` e
- * `.../referencias-discord/suporte/imagens/apps-activities/…/26.png` — Server
- * Settings → Integrations, seção **"Bots and Apps"**, um cartão por app
- * (ícone, nome, "Added on … by …", dois ícones pequenos e **"Manage ›"** à
- * direita, sem "Remove" visível na linha — mora dentro do "Manage"). O
- * `MEDIDAS.md` do próprio acervo (`docs/Reference/apps/MEDIDAS.md` §10) já
- * registra que esse recorte é pequeno demais para ter uma âncora de tamanho
- * confiável: **"servem de referência de layout e texto"**, nunca de px
- * (ADR-0009 §7, autoridade 3). Por isso esta passada usa a imagem só para
- * três decisões de forma — cartão por app com borda (não lista com divisória),
- * ordem ícone→nome→ação, e o rótulo "Gerenciar" — e nenhuma medida em px sai
- * dela.
- *
- * **A caixa do cartão não tinha origem.** Antes era `rounded-lg p-3`
- * (raio 8, chute da migração da onda 0 — não há CSS nem print que sustente
- * 8 em vez de outro raio). Sem medida própria para "cartão de app/bot", a
- * caixa passa a reaproveitar a única medida real que existe em Configurações
- * para "caixa com borda sobre `background-base-lowest`": o par
- * ícone+mensagem+"Tentar de novo" de `SegurancaTab.tsx`/`SessoesTab.tsx`
- * (`rounded-[4px] border border-border-subtle bg-background-base-lowest`),
- * hoje repetido por `EngajamentoTab.tsx`/`AcessoTab.tsx` pelo mesmo motivo —
- * a fonte vive fora da lista de cada cartão. Reaproveitar um raio medido é
- * melhor que inventar um novo; o raio exato do cartão de app do Discord
- * continua **não medido** (ver "nao_verificado").
- *
- * **O botão que faltava.** "Gerenciar" existe no Discord e não no Streamz: lá
- * abre uma página cheia (canais, sincronização, desinstalar); aqui as
- * permissões já são só leitura (ver acima) e ficam na aba "Cargos". Por §6.6
- * do PROCESSO, o controle **fica visível e desabilitado**, com a dica "(em
- * breve)" — mesmo padrão de `CargosTab.tsx` ("Precisando de ajuda com as
- * permissões?"): `Tooltip` (`rotulo`) por fora, `<span className="inline-flex">`
- * por dentro, porque um `<button disabled>` não dispara `pointerenter`/hover
- * e a dica nunca abriria. O "Remover" que já existia (a única ação real desta
- * tela) continua funcionando, à esquerda do "Gerenciar" — a ordem "real,
- * depois futuro" evita que o botão cinza pareça a ação principal.
- *
- * **Estados** (cartão pede vazio/carregando/erro/sem permissão/hover/foco/
- * desabilitado):
- * - **carregando** — "Carregando…" enquanto `apps` é `null`.
- * - **vazio** — "Nenhum aplicativo instalado." quando a lista volta vazia de
- *   verdade (sem rota ausente, sem erro).
- * - **erro** (falha diferente de 404) — antes virava uma mentira silenciosa:
- *   só o toast, e a tela ficava exatamente com o texto do estado **vazio**,
- *   que é outra coisa — o mesmo defeito que `SessoesTab.tsx` fechou para as
- *   sessões e `EngajamentoTab.tsx`/`AcessoTab.tsx` fecharam para as deles.
- *   Agora um `BlocoDeErro` (o mesmo ícone+mensagem+"Tentar de novo" de lá)
- *   substitui a lista até a próxima tentativa; o toast continua, para quem
- *   não está com o olho na aba no instante da falha.
- * - **rota ausente** (404, lote B ainda não existe nesta instância) —
- *   `EmBreve` (`components/ui/controls.tsx`), a mesma caixa "isto ainda não
- *   existe" que `SessoesTab.tsx` usa para `/me/sessions`; troca o parágrafo
- *   próprio de antes, que reconstruía a mesma caixa com raio e padding sem
- *   origem (8/12 em vez do 4/8-12 medido).
- * - **sem permissão** — não existe dentro desta página: `ServerSettingsModal`
- *   só lista "Aplicativos" no menu de quem tem `MANAGE_GUILD` (a API repete a
- *   checagem nas três rotas, acima), então quem abre esta aba sempre pode ver
- *   e remover. É o padrão que `EngajamentoTab.tsx`/`AcessoTab.tsx`/
- *   `SoundboardTab.tsx` citam como "mesmo padrão de `AplicativosTab.tsx`".
- * - **hover/foco** — do `Button`/`Tooltip` dos primitivos; nenhum estilo
- *   próprio nesta peça.
- * - **desabilitado** — o novo "Gerenciar (em breve)": `disabled:opacity-50
- *   disabled:pointer-events-none` já é a base de todo `Button` (cabeçalho do
- *   primitivo), sem classe extra aqui.
+ * Erro de carregamento (não 404) tem bloco próprio: sem ele a tela ficaria igual
+ * ao estado vazio, que é outra coisa. 404 = rota do lote B ausente nesta
+ * instância (`EmBreve`), também distinto de "nenhum aplicativo".
+ * Visual das irmãs (`BanimentosTab`): lista de linhas em moldura única.
  */
 export default function AplicativosTab({ guildId }: { guildId: string }) {
   /** `null` = ainda carregando; `[]` = carregou e não há nada (ou 404/erro). */
@@ -188,123 +110,86 @@ export default function AplicativosTab({ guildId }: { guildId: string }) {
 
       {falhouCarregar && <BlocoDeErro tentar={() => setTentativa((t) => t + 1)} />}
 
-      {apps === null && !falhouCarregar && (
-        <p className="text-sm text-text-muted">Carregando…</p>
-      )}
-
-      {apps !== null && !falhouCarregar && apps.length === 0 && !indisponivel && (
-        <p className="text-sm text-text-muted">
-          Nenhum aplicativo instalado. Encontre um em “Descobrir aplicativos” e adicione-o aqui.
-        </p>
-      )}
-
-      {apps !== null && !falhouCarregar && apps.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {apps.map((item) => (
-            <LinhaDeApp key={item.id} item={item} aoRemover={() => void remover(item)} />
-          ))}
-        </ul>
+      {!indisponivel && !falhouCarregar && (
+        <>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
+            Aplicativos — {apps?.length ?? 0}
+          </p>
+          <div className="flex min-h-0 flex-col rounded-xl border border-border-subtle bg-card-background-default p-2">
+            {apps === null && <p className="p-2 text-sm text-text-muted">Carregando…</p>}
+            {apps !== null && apps.length === 0 && (
+              <p className="p-2 text-sm text-text-muted">
+                Nenhum aplicativo instalado. Encontre um em “Descobrir aplicativos”.
+              </p>
+            )}
+            {apps?.map((item) => (
+              <LinhaDeApp key={item.id} item={item} aoRemover={() => void remover(item)} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
 /**
- * Uma instalação na lista.
- *
- * No celular a linha vira coluna (`celular:` no `flex-col`): em 358px de largura
- * útil, o nome do app, quem instalou e os botões lado a lado deixavam o nome
- * com 90px e truncando no terceiro caractere. Empilhado, cada um tem a linha
- * inteira, e os botões ficam com os 44px de alvo que o dedo precisa.
+ * Uma instalação. No celular a ação desce para a largura toda (alvo de 44px).
+ * As permissões ficam recolhidas atrás de uma contagem para não poluir a linha.
  */
 function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () => void }) {
   const concedidas = permissionNames(item.permissions);
+  const [aberto, setAberto] = useState(false);
+  const idLista = `permissoes-${item.id}`;
   return (
-    // Raio e borda: ver "Redesenho" no cabeçalho — reaproveita o
-    // `rounded-[4px] border border-border-subtle bg-background-base-lowest`
-    // medido para caixa de aviso em Configurações; não há medida própria
-    // para cartão de app/bot no acervo.
-    <li className="rounded-[4px] border border-border-subtle bg-background-base-lowest p-3">
-      <div className="flex items-start gap-3 celular:flex-col">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
+    <div className="mb-1 min-w-0 rounded-lg bg-background-mod-subtle p-2 last:mb-0">
+      <div className="flex items-center gap-3 celular:flex-col celular:items-stretch">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <IconeDoApp url={item.app.iconUrl} nome={item.app.name} />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold text-text-strong">{item.app.name}</span>
+              <span className="truncate text-sm font-medium text-text-strong">{item.app.name}</span>
               <TagDeBot />
             </div>
-            {item.app.description && (
-              <p className="mt-0.5 line-clamp-2 text-sm text-text-muted">{item.app.description}</p>
-            )}
-            <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text-muted">
-              <Avatar user={item.instaladoPor} size="xs" surface="border-background-base-lowest" />
-              <span className="truncate">
-                Instalado por {displayNameOf(item.instaladoPor)} em{" "}
-                {horaCompleta(item.createdAt)}
-              </span>
+            <p className="mt-0.5 truncate text-xs text-text-muted">
+              Instalado por {displayNameOf(item.instaladoPor)} em {horaCompleta(item.createdAt)}
             </p>
           </div>
         </div>
-
-        {/* "Remover" (real) antes de "Gerenciar" (em breve): o botão cinza
-            desabilitado não deve ler como a ação principal da linha. */}
-        <div className="flex shrink-0 items-center gap-2 celular:w-full celular:flex-col">
-          <Button
-            variante="critico-secundario"
-            tamanho="sm"
-            onClick={aoRemover}
-            aria-label={`Remover ${item.app.name} do servidor`}
-            className="celular:h-[44px] celular:w-full"
-          >
-            Remover
-          </Button>
-
-          {/* O Discord tem "Manage ›" aqui (abre canais, sincronização,
-              desinstalar — página cheia que o Streamz não tem; permissão já
-              é só leitura nesta aba, ver cabeçalho). Fica visível e
-              desabilitado com a dica "(em breve)" (§6.6 do PROCESSO), mesmo
-              padrão de `CargosTab.tsx`: o `<span>` recebe o ponteiro porque
-              um `<button disabled>` não dispara hover. */}
-          <Tooltip rotulo={`Gerenciar ${item.app.name} (em breve)`}>
-            <span className="inline-flex celular:w-full">
-              <Button
-                variante="neutro"
-                tamanho="sm"
-                iconeDireita={<ChevronRight size={16} aria-hidden="true" />}
-                disabled
-                aria-label={`Gerenciar ${item.app.name} (em breve)`}
-                className="celular:h-[44px] celular:w-full"
-              >
-                Gerenciar
-              </Button>
-            </span>
-          </Tooltip>
-        </div>
+        <Button
+          variante="critico-secundario"
+          tamanho="sm"
+          onClick={aoRemover}
+          aria-label={`Remover ${item.app.name} do servidor`}
+          className="shrink-0 celular:h-[44px] celular:w-full"
+        >
+          Remover
+        </Button>
       </div>
 
-      <div className="mt-3 border-t border-border-subtle pt-2">
-        <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
-          Permissões concedidas
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        aria-controls={idLista}
+        className="mt-1 flex items-center gap-1 rounded-md px-1 text-xs text-text-muted outline-none hover:text-text-default focus-visible:text-text-default celular:h-[44px]"
+      >
+        <ChevronRight
+          size={14}
+          aria-hidden="true"
+          className={`transition-transform ${aberto ? "rotate-90" : ""}`}
+        />
+        {concedidas.length === 0
+          ? "Sem permissões extras"
+          : `${concedidas.length} ${concedidas.length === 1 ? "permissão concedida" : "permissões concedidas"}`}
+      </button>
+      {aberto && (
+        <p id={idLista} className="px-1 pb-1 text-xs text-text-muted">
+          {concedidas.length === 0
+            ? "O bot só faz o que qualquer membro faria."
+            : concedidas.map((nome) => PERMISSION_INFO[nome].label).join(", ")}
         </p>
-        {concedidas.length === 0 ? (
-          <p className="text-sm text-text-muted">
-            Nenhuma. O bot só faz o que qualquer membro faria.
-          </p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {concedidas.map((nome) => (
-              <li key={nome}>
-                <Tooltip rotulo={PERMISSION_INFO[nome].description}>
-                  <span className="rounded-[3px] bg-input-background-default px-1.5 py-0.5 text-xs text-text-default">
-                    {PERMISSION_INFO[nome].label}
-                  </span>
-                </Tooltip>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </li>
+      )}
+    </div>
   );
 }
 
