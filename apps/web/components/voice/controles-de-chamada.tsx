@@ -185,23 +185,21 @@ export function SplitDeDispositivo({
       <BotaoDeChamada label={label} onClick={onClick} tom={tom} borda="esquerda" pressionado={pressionado} atalho={atalho}>
         {icone}
       </BotaoDeChamada>
-      <Tooltip label={labelDaSeta}>
-        <button
-          ref={seta}
-          type="button"
-          onClick={() => setAberto((v) => !v)}
-          aria-label={labelDaSeta}
-          aria-expanded={aberto}
-          // mesmos dois tons do `TOM` acima — referenciar em vez de duplicar o
-          // literal, senão um ajuste de cor (como o da migração 0.8) precisa
-          // lembrar de mexer aqui também
-          className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
-            tom === "mudo" ? TOM.mudo : TOM.neutro
-          }`}
-        >
-          <ChevronDown size={18} />
-        </button>
-      </Tooltip>
+      <button
+        ref={seta}
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-label={labelDaSeta}
+        aria-expanded={aberto}
+        // mesmos dois tons do `TOM` acima — referenciar em vez de duplicar o
+        // literal, senão um ajuste de cor (como o da migração 0.8) precisa
+        // lembrar de mexer aqui também
+        className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
+          tom === "mudo" ? TOM.mudo : TOM.neutro
+        }`}
+      >
+        <ChevronDown size={18} />
+      </button>
 
       <PopoverFlutuante
         ancora={seta}

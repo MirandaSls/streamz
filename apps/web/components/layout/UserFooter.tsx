@@ -109,18 +109,16 @@ function FooterSplit({
           {children}
         </button>
       </Tooltip>
-      <Tooltip label={labelDaSeta}>
-        <button
-          ref={seta}
-          type="button"
-          onClick={() => setAberto((v) => !v)}
-          aria-label={labelDaSeta}
-          aria-expanded={aberto}
-          className={`grid h-8 w-4 place-items-center rounded-r-[4px] rounded-l-[1px] transition ${cor}`}
-        >
-          <ChevronDown size={16} />
-        </button>
-      </Tooltip>
+      <button
+        ref={seta}
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-label={labelDaSeta}
+        aria-expanded={aberto}
+        className={`grid h-8 w-4 place-items-center rounded-r-[4px] rounded-l-[1px] transition ${cor}`}
+      >
+        <ChevronDown size={16} />
+      </button>
 
       <PopoverFlutuante
         ancora={par}
