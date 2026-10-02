@@ -104,6 +104,7 @@ import {
   isTauri,
   salvarArquivoNativo,
 } from "@/lib/desktop";
+import { attachmentDisplayName, type Attachment } from "@streamz/shared";
 import { API_URL } from "@/lib/config";
 import { getAccessToken } from "@/lib/session";
 import { ui } from "@/stores/ui";
@@ -490,6 +491,52 @@ function baixarPeloNavegador(href: string, nome: string, revogar: boolean): void
   a.remove();
   // o objeto só pode morrer depois de o download começar
   if (revogar) window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+}
+
+/**
+ * Baixa um anexo qualquer (arquivo, texto, PDF) com o nome original.
+ *
+ * Existe porque `<a href={url} download>` não funciona aqui: a URL assinada é
+ * do R2 (outra origem) e o navegador ignora `download` fora da mesma origem —
+ * navegava para o arquivo em vez de baixar. Por isso os bytes vêm por `fetch`
+ * (com o proxy da API como segunda porta) e o arquivo sai de um blob local ou
+ * do "Salvar como" nativo no app. Todo caminho termina em toast.
+ */
+export async function baixarAnexo(
+  anexo: Pick<Attachment, "url" | "id" | "filename" | "size">,
+): Promise<void> {
+  const nome = attachmentDisplayName(anexo as Attachment);
+  let baixada: Baixada;
+  try {
+    baixada = await baixar(anexo.url, anexo.id);
+  } catch (erro) {
+    ui.toast(
+      erro instanceof FalhaAoBaixar && erro.recusadaPelaApi
+        ? "Você não tem mais acesso a este arquivo"
+        : `Não foi possível baixar ${nome}`,
+      "error",
+    );
+    return;
+  }
+
+  if (isTauri()) {
+    try {
+      const bytes = new Uint8Array(await baixada.blob.arrayBuffer());
+      const caminho = await salvarArquivoNativo(nome, bytes);
+      // `null` é o usuário cancelando o diálogo: não é erro
+      if (caminho) ui.toast(`Salvo em ${caminho}`);
+    } catch {
+      ui.toast(`Não foi possível salvar ${nome}`, "error");
+    }
+    return;
+  }
+
+  try {
+    baixarPeloNavegador(URL.createObjectURL(baixada.blob), nome, true);
+    ui.toast(`${nome} baixado`);
+  } catch {
+    ui.toast(`Não foi possível salvar ${nome}`, "error");
+  }
 }
 
 /** O endereço da imagem como texto. */

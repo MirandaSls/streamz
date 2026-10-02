@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Download, FileText } from "@/components/ui/icones";
+import { ChevronDown, Download, FileText } from "@/components/ui/icones";
 import { attachmentDisplayName, type Attachment } from "@streamz/shared";
 import {
   LIMITE_DA_PREVIA_BYTES,
@@ -9,7 +9,7 @@ import {
   recortarPrevia,
 } from "@/lib/texto-longo";
 import { formatBytes } from "@/lib/format";
-import { baixarTextoDoAnexo } from "@/lib/imagem-arquivo";
+import { baixarAnexo, baixarTextoDoAnexo } from "@/lib/imagem-arquivo";
 
 type Estado =
   | { tipo: "carregando" }
@@ -18,10 +18,9 @@ type Estado =
 
 /**
  * Prévia de um anexo de texto (`message.txt`, gerado quando a mensagem passa
- * do limite, e qualquer outro que `ehTextoPrevisualizavel` aceite): o mesmo
- * cabeçalho do cartão de arquivo comum (`Arquivo`, em `MediaGroup.tsx`) — ícone,
- * nome, tamanho, baixar — e abaixo as primeiras linhas em fonte monoespaçada,
- * como o Discord mostra `.txt` anexado.
+ * do limite, e qualquer outro que `ehTextoPrevisualizavel` aceite): um
+ * cartão como o do Discord: área de código com rolagem própria em cima e, na
+ * barra de baixo, nome/tamanho e os botões de baixar e expandir.
  *
  * Busca sob demanda (a mensagem não carrega o conteúdo de anexos que ninguém
  * vai ler) e corta em `LIMITE_DA_PREVIA_BYTES`: arquivo maior que isso nunca
@@ -65,21 +64,55 @@ export default function PreviaDeTexto({
 
   // "Expandir" só revela o que já veio no download (até o limite da prévia);
   // não dispara uma segunda busca.
-  let corpo = "";
   let temMaisLinhas = false;
   if (estado.tipo === "ok") {
     const recolhida = recortarPrevia(estado.texto, LINHAS_DA_PREVIA_RECOLHIDA);
     temMaisLinhas = recolhida.cortado;
-    corpo = aberto ? estado.texto : recolhida.trecho;
   }
 
+  const classeBotao =
+    "grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-link celular:h-[44px] celular:w-[44px]";
+
   return (
-    <div className="w-[432px] max-w-full rounded-lg border border-border-subtle bg-background-base-lower p-4">
-      {/* cabeçalho idêntico ao de `Arquivo`: mesmo ícone, mesma âncora de
-          baixar — só o corpo abaixo é novidade desta prévia */}
-      <div className="flex items-center gap-3">
+    <div className="w-[432px] max-w-full overflow-hidden rounded-lg border border-border-subtle bg-background-base-lower">
+      {estado.tipo === "carregando" && (
+        <div
+          aria-hidden="true"
+          className="animate-pulse space-y-1.5 bg-background-code p-3"
+        >
+          <div className="h-3 w-11/12 rounded bg-background-base-lowest" />
+          <div className="h-3 w-9/12 rounded bg-background-base-lowest" />
+          <div className="h-3 w-10/12 rounded bg-background-base-lowest" />
+        </div>
+      )}
+
+      {estado.tipo === "ok" && (
+        /* rolagem própria (nada de `overflow-hidden` cortando texto): recolhido
+           o teto é a altura de `LINHAS_DA_PREVIA_RECOLHIDA` linhas de `text-xs`
+           (leading-4 = 1rem), expandido vai até 70vh. `tabIndex` deixa o teclado
+           rolar a área. */
+        <pre
+          tabIndex={0}
+          aria-label={`Conteúdo de ${nome}`}
+          style={aberto ? undefined : { maxHeight: `${LINHAS_DA_PREVIA_RECOLHIDA + 1.5}rem` }}
+          className={`m-0 overflow-y-auto whitespace-pre-wrap break-words bg-background-code p-3 font-mono text-xs leading-4 text-text-default [scrollbar-width:thin] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-text-link ${
+            aberto ? "max-h-[70vh]" : ""
+          }`}
+        >
+          {estado.texto}
+        </pre>
+      )}
+
+      {estado.tipo === "ok" && estado.cortadoPeloLimite && (
+        <p className="px-3 pt-2 text-xs text-text-muted">
+          Arquivo maior que a prévia — baixe para ver o resto
+        </p>
+      )}
+
+      {/* barra do cartão: nome e tamanho à esquerda, ações à direita, como no Discord */}
+      <div className="flex items-center gap-3 p-3">
         <FileText
-          size={40}
+          size={32}
           strokeWidth={1.25}
           className="shrink-0 text-text-muted"
           aria-hidden="true"
@@ -95,57 +128,26 @@ export default function PreviaDeTexto({
           </a>
           <span className="text-xs text-text-muted">{formatBytes(anexo.size)}</span>
         </span>
-        <a
-          href={anexo.url}
-          download={nome}
+        <button
+          type="button"
+          onClick={() => void baixarAnexo(anexo)}
           aria-label={`Baixar ${nome}`}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
+          className={classeBotao}
         >
           <Download size={20} />
-        </a>
-      </div>
-
-      {estado.tipo === "carregando" && (
-        <div
-          aria-hidden="true"
-          className="mt-3 animate-pulse space-y-1.5 rounded bg-background-code p-3"
-        >
-          <div className="h-3 w-11/12 rounded bg-background-base-lowest" />
-          <div className="h-3 w-9/12 rounded bg-background-base-lowest" />
-          <div className="h-3 w-10/12 rounded bg-background-base-lowest" />
-        </div>
-      )}
-
-      {estado.tipo === "ok" && (
-        <div className="mt-3">
-          <pre
-            className={`whitespace-pre-wrap break-words rounded bg-background-code p-3 font-mono text-xs text-text-default ${
-              aberto ? "max-h-64 overflow-y-auto" : "overflow-hidden"
-            }`}
+        </button>
+        {temMaisLinhas && (
+          <button
+            type="button"
+            onClick={() => setAberto((v) => !v)}
+            aria-label={aberto ? "Recolher prévia" : "Expandir prévia"}
+            aria-expanded={aberto}
+            className={classeBotao}
           >
-            {corpo}
-          </pre>
-
-          {(temMaisLinhas || estado.cortadoPeloLimite) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-              {temMaisLinhas && (
-                <button
-                  type="button"
-                  onClick={() => setAberto((v) => !v)}
-                  className="text-xs font-medium text-text-link hover:underline"
-                >
-                  {aberto ? "Recolher" : "Expandir"}
-                </button>
-              )}
-              {estado.cortadoPeloLimite && (
-                <span className="text-xs text-text-muted">
-                  Arquivo maior que a prévia — baixe para ver o resto
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+            <ChevronDown size={20} className={aberto ? "rotate-180" : ""} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
