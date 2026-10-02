@@ -30,6 +30,11 @@ rtc:
 room:
   empty_timeout: 60
   departure_timeout: 20
+  # "Silenciar no servidor" de bot de música usa `mutePublishedTrack` na faixa
+  # da ponte (`VoiceService.silenciarFaixaDaPonte`): silenciar funciona sem
+  # isto, **desfazer** não — o LiveKit recusa com "remote unmute not enabled"
+  # e o bot fica mudo até reconectar. Só a API (que tem a chave) pede isso.
+  enable_remote_unmute: true
 
 # TURN é o último recurso: rede que só libera 443 de saída não conecta nem por
 # UDP nem por ICE/TCP em porta alta. Deixe desligado até alguém reclamar — e

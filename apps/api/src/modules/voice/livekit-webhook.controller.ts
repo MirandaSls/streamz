@@ -74,13 +74,20 @@ export class LivekitWebhookController {
       throw new UnauthorizedException("Assinatura do webhook do LiveKit inválida");
     }
 
-    // Só "participant_joined" interessa aqui (ver JSDoc da classe); os demais
-    // eventos (track publicado, sala vazia etc.) são ignorados de propósito.
-    if (evento.event === "participant_joined" && evento.room?.name && evento.participant?.identity) {
-      // Dispara e esquece: o LiveKit espera 200 rápido e reenvia/atrasa
-      // entregas seguintes se a resposta demorar. `aoEntrarNoLivekit` nunca
-      // lança, então não há erro para engolir aqui.
-      void this.voice.aoEntrarNoLivekit(evento.room.name, evento.participant.identity);
+    // "participant_joined" (ver JSDoc da classe) e "track_published", que é
+    // quando a faixa da ponte de um bot passa a existir para ser silenciada
+    // (`aoPublicarNoLivekit`); os demais eventos são ignorados de propósito.
+    // Dispara e esquece: o LiveKit espera 200 rápido e reenvia/atrasa entregas
+    // seguintes se a resposta demorar. Os dois métodos nunca lançam, então
+    // não há erro para engolir aqui.
+    const sala = evento.room?.name;
+    const identidade = evento.participant?.identity;
+    if (sala && identidade) {
+      if (evento.event === "participant_joined") {
+        void this.voice.aoEntrarNoLivekit(sala, identidade);
+      } else if (evento.event === "track_published") {
+        void this.voice.aoPublicarNoLivekit(sala, identidade);
+      }
     }
 
     return { ok: true };
