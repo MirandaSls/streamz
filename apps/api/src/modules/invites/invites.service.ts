@@ -159,7 +159,7 @@ export class InvitesService {
     const invite = await this.prisma.invite.findUnique({
       where: { code },
       include: {
-        guild: { select: { id: true, name: true, iconUrl: true, description: true } },
+        guild: { select: { id: true, name: true, iconUrl: true, description: true, bannerColor: true, createdAt: true } },
         creator: true,
         channel: { select: { name: true } },
       },
@@ -191,6 +191,8 @@ export class InvitesService {
       reason,
       memberCount,
       onlineCount,
+      bannerColor: invite.guild.bannerColor,
+      guildCreatedAt: invite.guild.createdAt.toISOString(),
       description: invite.guild.description,
       channelName: invite.channel?.name ?? null,
       inviter: invite.creator ? toPublicUser(invite.creator as PublicUserRow) : null,
