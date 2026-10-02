@@ -570,7 +570,12 @@ export function VoiceTile({
         // `overflow-hidden` que recorta a ampliação e carrega rótulo e selos,
         // que ficam parados; e `VideoDaFaixa` é o mesmo de `PreviaDeTela` e
         // `TelaCheiaDeVideo`, que não têm zoom nenhum a herdar.
-        <div className="h-full w-full" style={zoomAtivo ? zoom.estilo : undefined}>
+        // `relative z-0` dá ao invólucro um nível de empilhamento próprio e
+        // fixo: o `transform` do zoom o promove a camada de composição, e no
+        // WebView2 o `<video>` dessa camada pintava por cima do rótulo de
+        // nome (irmão posterior, sem z-index) até o ponteiro entrar e forçar
+        // um repaint. O rótulo sobe para `z-[1]` abaixo.
+        <div className="relative z-0 h-full w-full" style={zoomAtivo ? zoom.estilo : undefined}>
           <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
         </div>
       ) : tela ? (
@@ -610,10 +615,16 @@ export function VoiceTile({
                     // 64 da tira do desktop ocupavam 82% da altura e eram
                     // cortados pela borda e pela pílula (passeio de 2026-09-15).
                     // 40 cabe acima da pílula; não medido no Discord, que não
-                    // tem captura da tira de miniaturas no celular com escala
-                    "h-10 w-10 [&>img]:h-10 [&>img]:w-10 [&>span]:h-10 [&>span]:w-10 [&>span]:text-sm"
+                    // tem captura da tira de miniaturas no celular com escala.
+                    //
+                    // `[&>canvas]` é o avatar CALADO: sem falar, `FotoDoAvatar`
+                    // troca a `<img>` por um `<canvas>` com o primeiro quadro, e
+                    // só `[&>img]` o redimensionava — calado o círculo voltava
+                    // aos 80 do `xl` numa caixa de 64/40 (estourava tile e
+                    // anel) e, ao falar, encolhia de novo.
+                    "h-10 w-10 [&>img]:h-10 [&>img]:w-10 [&>canvas]:h-10 [&>canvas]:w-10 [&>span]:h-10 [&>span]:w-10 [&>span]:text-sm"
                   : compacto
-                    ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
+                    ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>canvas]:h-16 [&>canvas]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
                     : ""
               }`}
             />
@@ -801,7 +812,7 @@ export function VoiceTile({
           `.overlayTitle__2f4f7.idle{opacity:0}` — o ponteiro parado, que no
           palco já é a moldura inteira que some. */}
       <span
-        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default transition-opacity ${
+        className={`pointer-events-none absolute z-[1] flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default transition-opacity ${
           // o ramo de 20px é o do celular (`PalcoMobile`), medido lá
           rotuloPequeno
             ? "h-[20px] gap-1.5 px-[6px] text-[11px]"
