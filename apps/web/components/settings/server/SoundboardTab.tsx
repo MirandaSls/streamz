@@ -59,7 +59,7 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  *
  * **Por que a prévia não usa `useSoundboard().tocarLocalmente`:** aquela
  * função é para quem **ouve o `soundboard.play` de outra pessoa na chamada**
- * (`hooks/useRealtime.ts:384`). Esta prévia chama `tocarNaSaida`
+ * (`hooks/useRealtime.ts`). Esta prévia chama `tocarNaSaida`
  * (`lib/soundboard-audio.ts`) direto, com o volume de `volumeDoEfeito` (volume
  * dos efeitos vezes o de referência do arquivo — a mesma conta do painel da
  * chamada); `tocarNaSaida` também respeita `deafened`, então surdo cala a

@@ -1,4 +1,4 @@
-import { donoDaIdentidade } from "@streamz/shared";
+import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
 
 /**
  * Quem está falando agora — a **única** fonte do anel verde.
@@ -54,6 +54,26 @@ export function donoDoParticipante(p: { identity: string; metadata?: string }): 
     }
   }
   return donoDaIdentidade(p.identity);
+}
+
+/**
+ * Os participantes do LiveKit que pertencem a `userId`: a pessoa e, quando ela
+ * transmite pelo desktop, o `#tela` — a pessoa primeiro, porque é dela que se
+ * lê o microfone e o "falando".
+ *
+ * O dono sai de `donoDoParticipante`, e não da identidade crua: o bot de
+ * música entra como `bot:<snowflake>`, e volume, "Silenciar" e anel são
+ * guardados pelo `userId` interno que o servidor põe no metadata. Pela
+ * identidade crua, o `<audio>` do bot nascia sob a chave `bot:<snowflake>` e o
+ * volume que o menu grava sob o `userId` nunca chegava a ele.
+ */
+export function participantesDoDono<P extends { identity: string; metadata?: string }>(
+  participantes: readonly P[],
+  userId: string,
+): P[] {
+  return participantes
+    .filter((p) => donoDoParticipante(p) === userId)
+    .sort((a, b) => Number(ehIdentidadeDeTela(a.identity)) - Number(ehIdentidadeDeTela(b.identity)));
 }
 
 /** Como `falantesDeIdentidades`, mas resolvendo o dono pelo participante inteiro. */

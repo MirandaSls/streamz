@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { GuildSoundboard, SoundboardSound } from "@streamz/shared";
+import type { GuildSoundboard, SoundboardPlayEvent, SoundboardSound } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { tocarEfeitoSonoro } from "@/lib/soundboard-audio";
 import { usePreferenciasPorParticipante } from "@/stores/preferencias-por-participante";
@@ -57,11 +57,34 @@ interface SoundboardState {
   registrarUso: (id: string) => void;
   definirVolume: (v: number) => void;
   /**
-   * toca o som localmente, no volume de efeitos deste cliente — a menos que
-   * `autorId` seja alguém cujos efeitos eu silenciei (ESPEC2 item N,
-   * `stores/preferencias-por-participante.ts`).
+   * Toca, no volume de efeitos deste cliente, o `soundboard.play` que chegou
+   * pelo gateway — ou não toca, pela regra de `deveTocarEfeitoDaChamada`.
+   * `minhaChamada` é o canal de voz em que **este** cliente está conectado.
    */
-  tocarLocalmente: (sound: SoundboardSound, autorId?: string) => void;
+  tocarLocalmente: (evento: SoundboardPlayEvent, minhaChamada: string | null) => void;
+}
+
+/**
+ * Este cliente deve tocar o efeito que alguém disparou na chamada?
+ *
+ * Duas recusas, e as duas são o "Silenciar efeitos sonoros" funcionando:
+ *
+ * - **o autor está silenciado por mim** (`efeitosSonorosSilenciados`, chave =
+ *   `user.id` do evento, o mesmo id que o menu de participante grava);
+ * - **este cliente não está naquela chamada.** A API manda o evento para a sala
+ *   `user:<id>`, que é *todo* socket da pessoa — a aba ociosa, o navegador
+ *   aberto ao lado do app de desktop. Sem esta recusa cada um deles tocava o
+ *   som também, e quem silenciava o autor no cliente da chamada continuava a
+ *   ouvi-lo pelo outro: o item parecia não fazer nada. O som é da chamada, e só
+ *   o cliente que está nela o toca.
+ */
+export function deveTocarEfeitoDaChamada(
+  evento: Pick<SoundboardPlayEvent, "channelId"> & { user: Pick<SoundboardPlayEvent["user"], "id"> },
+  minhaChamada: string | null,
+  efeitosSonorosSilenciados: Readonly<Record<string, true>>,
+): boolean {
+  if (!minhaChamada || evento.channelId !== minhaChamada) return false;
+  return !efeitosSonorosSilenciados[evento.user.id];
 }
 
 /** Quantos sons a seção "Utilizados com frequência" mostra (duas fileiras de 3). */
@@ -130,9 +153,10 @@ export const useSoundboard = create<SoundboardState>()(
 
       definirVolume: (v) => set({ volume: Math.min(1, Math.max(0, v)) }),
 
-      tocarLocalmente: (sound, autorId) => {
-        if (autorId && usePreferenciasPorParticipante.getState().efeitosSilenciados(autorId)) return;
-        tocarEfeitoSonoro(sound, get().volume);
+      tocarLocalmente: (evento, minhaChamada) => {
+        const { efeitosSonorosSilenciados } = usePreferenciasPorParticipante.getState();
+        if (!deveTocarEfeitoDaChamada(evento, minhaChamada, efeitosSonorosSilenciados)) return;
+        tocarEfeitoSonoro(evento.sound, get().volume);
       },
     }),
     {

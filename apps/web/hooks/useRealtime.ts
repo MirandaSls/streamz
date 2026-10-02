@@ -436,11 +436,12 @@ export function useRealtime(currentUserId?: string): void {
        * Vale inclusive para quem apertou: assim o autor ouve junto com a sala,
        * e não adiantado — e não ouve nada quando a API recusa.
        *
-       * `user.id` vai junto (ESPEC2 item N): quem silenciou os efeitos sonoros
-       * desta pessoa no menu de participante não ouve o que ela dispara.
+       * Quem decide se toca é `deveTocarEfeitoDaChamada`: só o cliente que
+       * está **nesta** chamada (o evento chega a todo socket da pessoa), e
+       * nunca o som de quem eu silenciei no menu de participante.
        */
-      on<SoundboardPlayEvent>(WS_EVENTS.SOUNDBOARD_PLAY, ({ sound, user }) => {
-        useSoundboard.getState().tocarLocalmente(sound, user.id);
+      on<SoundboardPlayEvent>(WS_EVENTS.SOUNDBOARD_PLAY, (evento) => {
+        useSoundboard.getState().tocarLocalmente(evento, useVoice.getState().channelId);
       }),
 
       // ── h-moderacao ──

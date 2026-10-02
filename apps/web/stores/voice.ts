@@ -121,6 +121,7 @@ import {
   comFalante,
   donoDoParticipante,
   falantesDeParticipantes,
+  participantesDoDono,
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
@@ -3147,7 +3148,9 @@ function participantesComTelas(): ParticipanteDeTela[] {
   return participantesDaSala().map((p) => {
     const publicacoes = Array.from(p.trackPublications.values());
     return {
-      dono: donoDaIdentidade(p.identity),
+      // mesma resolução de `participantesDe`: o dono de uma tela tem de ser o
+      // mesmo `userId` que `assistindo` guarda
+      dono: donoDoParticipante(p),
       telas: publicacoes.filter(
         (pub): pub is RemoteTrackPublication =>
           ehPublicacaoRemota(pub) &&
@@ -3213,12 +3216,11 @@ export function usuarioDaIdentidade(channelId: string, identity: string): Public
 /**
  * Todos os participantes da sala que pertencem a um usuário: a pessoa e, se
  * ela transmite pelo desktop, o `#tela`. A pessoa vem primeiro — é o
- * participante de quem se lê "falando" e o microfone.
+ * participante de quem se lê "falando" e o microfone. O bot de música, cuja
+ * identidade não é o `userId`, também é achado aqui (ver `participantesDoDono`).
  */
 export function participantesDe(userId: string): Participant[] {
-  return participantesDaSala()
-    .filter((p) => donoDaIdentidade(p.identity) === userId)
-    .sort((a, b) => Number(a.identity !== userId) - Number(b.identity !== userId));
+  return participantesDoDono(participantesDaSala(), userId);
 }
 
 // A transmissão nativa pode acabar sem ninguém pedir: a janela fechou, a sala

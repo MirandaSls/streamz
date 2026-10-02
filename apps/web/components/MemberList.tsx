@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/icones";
 import {
   Permission,
-  TIMEOUT_PRESETS,
   colorRoleOf,
   highestPosition,
   isTimedOut,
@@ -25,14 +24,15 @@ import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { Tooltip } from "@/components/ui/primitivos";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
-import { api } from "@/lib/api";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
 import {
   garantirComandosDeContexto,
   iniciarChamadaComUsuario,
   itemAdicionarNota,
+  itemAlterarApelido,
   itemApelidoDeAmigo,
   itemBloquear,
+  itemCastigar,
   itemDesfazerAmizade,
   itemIgnorar,
   submenuAppsDeUsuario,
@@ -47,7 +47,6 @@ import { useNotas } from "@/stores/notas";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
-import { errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -211,29 +210,6 @@ export default function MemberList() {
   }
 
   /**
-   * "Alterar apelido" (outro membro, com `MANAGE_NICKNAMES`): mesmo prompt de
-   * texto do resto do app, iniciado com o apelido atual; string vazia apaga
-   * (`api.alterarApelidoDeMembro`, `docs/CONTRATO-MENUS.md` §5 — a rota já é
-   * a mesma de "Editar perfil por servidor", só que para outro `userId`).
-   */
-  async function alterarApelido(guildId: string, m: GuildMemberView, nome: string) {
-    const valor = await ui.prompt({
-      title: `Alterar apelido de ${nome}`,
-      label: "APELIDO NO SERVIDOR",
-      initial: m.nickname ?? "",
-      placeholder: m.user.username,
-      confirmLabel: "Salvar",
-    });
-    if (valor === null) return;
-    try {
-      await api.alterarApelidoDeMembro(guildId, m.user.id, valor.trim() ? valor.trim() : null);
-      ui.toast("Apelido alterado.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível alterar o apelido"), "error");
-    }
-  }
-
-  /**
    * Botão direito num membro (`docs/CONTRATO-MENUS.md` item J).
    *
    * SEM ícones — ao contrário do menu de mensagem/DM, a ESPEC desta leva pede
@@ -287,7 +263,7 @@ export default function MemberList() {
 
       items.push({ separator: true });
       if (podeAlterarApelido && activeGuildId) {
-        items.push({ label: "Alterar apelido", onSelect: () => void alterarApelido(activeGuildId, m, nome) });
+        items.push(itemAlterarApelido(activeGuildId, m, nome));
       }
       items.push(submenuAppsDeUsuario(activeGuildId, activeChannelId, m.user.id));
       items.push(submenuConvidarParaOServidor(m.user.id, meusServidores));
@@ -333,22 +309,7 @@ export default function MemberList() {
         });
       }
       if (podeAgirAqui && podeCastigar) {
-        if (isTimedOut(m.timeoutUntil)) {
-          items.push({ label: "Remover castigo", onSelect: () => void removeTimeout(m.user.id) });
-        } else {
-          items.push({
-            label: `Castigar ${nome}`,
-            danger: true,
-            submenu: [
-              ...TIMEOUT_PRESETS.map((p) => ({
-                label: p.label,
-                onSelect: () => void applyTimeout(m.user.id, p.minutes),
-              })),
-              { separator: true as const },
-              { label: "Duração personalizada…", onSelect: () => timeout(m.user.id) },
-            ],
-          });
-        }
+        items.push(itemCastigar(m, nome, { applyTimeout, removeTimeout, timeout }));
       }
       if (podeAgirAqui && podeExpulsar) {
         items.push({ label: `Expulsar ${nome}`, danger: true, onSelect: () => kick(m.user.id) });

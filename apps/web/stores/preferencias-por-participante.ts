@@ -29,6 +29,8 @@ interface PreferenciasPorParticipanteState {
   alternarEfeitosSilenciados: (userId: string) => void;
 }
 
+const CHAVE_DAS_PREFERENCIAS = "preferencias-por-participante";
+
 export const usePreferenciasPorParticipante = create<PreferenciasPorParticipanteState>()(
   persist(
     (set, get) => ({
@@ -47,7 +49,7 @@ export const usePreferenciasPorParticipante = create<PreferenciasPorParticipante
         }),
     }),
     {
-      name: "preferencias-por-participante",
+      name: CHAVE_DAS_PREFERENCIAS,
       version: 2,
       // v1 tinha `videosDesativados` ("Desativar vídeo" saiu do menu — câmera
       // ligada de alguém agora sempre aparece); descarta o campo do estado
@@ -61,3 +63,16 @@ export const usePreferenciasPorParticipante = create<PreferenciasPorParticipante
     },
   ),
 );
+
+/*
+  O `persist` só lê o `localStorage` ao nascer. Com duas abas, o silêncio
+  marcado numa (a que só olha a barra lateral) não chegava à outra (a que está
+  na chamada e de fato toca o som) até um F5. O evento `storage` só dispara nas
+  **outras** abas da mesma origem, então reidratar nele não reescreve a aba
+  que acabou de gravar.
+*/
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === CHAVE_DAS_PREFERENCIAS) void usePreferenciasPorParticipante.persist.rehydrate();
+  });
+}
