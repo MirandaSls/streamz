@@ -38,6 +38,7 @@ import { ApplicationsModule } from "./modules/applications/applications.module";
 import { DiscordCompatModule } from "./modules/discord-compat/discord-compat.module";
 import { InteractionsModule } from "./modules/interactions/interactions.module";
 import { UpdatesModule } from "./modules/updates/updates.module";
+import { WidgetModule } from "./modules/widget/widget.module";
 import { DiagnosticsModule } from "./modules/diagnostics/diagnostics.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
@@ -73,6 +74,7 @@ import { validateEnv } from "./common/env";
     ChannelsModule,
     MessagesModule,
     InvitesModule,
+    WidgetModule,
     DMsModule,
     GatewayModule,
     VoiceModule,

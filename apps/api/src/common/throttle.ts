@@ -161,3 +161,11 @@ export const DIAGNOSTICS_THROTTLE = Throttle({ default: { ttl: seconds(60), limi
  * o teto é apertado porque cada PUT escreve no banco e acorda todas as abas.
  */
 export const GUILD_LAYOUT_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 30 } });
+
+// ── widget ──
+/**
+ * Widget público (`GET guilds/:id/widget.json`): sem autenticação, então o teto
+ * por IP é o único freio contra varredura de ids de servidor. Sites que embutem
+ * o widget cacheiam, então 30/min é folgado para uso legítimo.
+ */
+export const WIDGET_THROTTLE = Throttle({ default: { ttl: seconds(60), limit: 30 } });
