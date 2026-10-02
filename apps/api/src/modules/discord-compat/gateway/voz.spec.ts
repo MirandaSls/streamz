@@ -95,6 +95,9 @@ function ambiente(opcoes: { permissoes?: number; jaEmVoz?: string | null } = {})
     async snowflakeDeUsuario() {
       return BigInt(SF_BOT);
     },
+    async snowflakeDeServidor(id: string) {
+      return id === "g1" ? BigInt(SF_SERVIDOR) : null;
+    },
   } as unknown as IdsService;
 
   const dados = {
@@ -533,5 +536,82 @@ describe("VozDoGateway.acompanharMovimento — bot movido por moderador", () => 
   it("bot que nunca pediu canal por aqui não é tocado", async () => {
     const { servico } = ambiente();
     expect(await servico.acompanharMovimento("u_bot", "g1", "c_voz")).toBe(false);
+  });
+});
+
+describe("VozDoGateway.acompanharExpulsao — bot tirado da voz por moderador, kick ou ban", () => {
+  async function botEmVoz() {
+    const amb = ambiente();
+    const { sessao, despachados } = sessaoFalsa("9f3c");
+    amb.registro.registrar(sessao);
+    await amb.servico.tratarAtualizacaoDeVoz(sessao, {
+      guild_id: SF_SERVIDOR,
+      channel_id: SF_CANAL_VOZ,
+      self_deaf: true,
+      self_mute: false,
+    });
+    despachados.length = 0;
+    return { ...amb, sessao, despachados };
+  }
+
+  it("despacha VOICE_STATE_UPDATE com channel_id null e o session_id real — e nada atrás", async () => {
+    const { servico, despachados } = await botEmVoz();
+
+    await servico.acompanharExpulsao("u_bot", "c_voz", "g1");
+
+    // O lavalink-client só destrói o player com `session_id` no payload; sem
+    // ele o evento é descartado e o bot segue "conectado".
+    expect(despachados.map((d) => d.evento)).toEqual(["VOICE_STATE_UPDATE"]);
+    const estado = despachados[0].dados as Record<string, unknown>;
+    expect(estado.channel_id).toBeNull();
+    expect(estado.session_id).toBe("9f3c");
+    expect(estado.user_id).toBe(SF_BOT);
+    expect(estado.guild_id).toBe(SF_SERVIDOR);
+    expect(() => JSON.stringify(estado)).not.toThrow();
+  });
+
+  it("canal já apagado: o guild_id sai do servidor, não do canal", async () => {
+    const { servico, despachados } = await botEmVoz();
+
+    await servico.acompanharExpulsao("u_bot", "c_sumiu", "g1");
+
+    expect(despachados).toHaveLength(1);
+    expect((despachados[0].dados as Record<string, unknown>).guild_id).toBe(SF_SERVIDOR);
+  });
+
+  it("quem não tem sessão no gateway compat (humano) e conversa direta não geram nada", async () => {
+    const { servico, despachados } = await botEmVoz();
+
+    await servico.acompanharExpulsao("u_humano", "c_voz", "g1");
+    await servico.acompanharExpulsao("u_bot", "c_dm", null);
+
+    expect(despachados).toEqual([]);
+  });
+
+  it("apaga o pedido anotado: um voice.state seguinte não é lido como movimento", async () => {
+    const { servico, despachados } = await botEmVoz();
+    await servico.acompanharExpulsao("u_bot", "c_voz", "g1");
+    despachados.length = 0;
+
+    expect(await servico.acompanharMovimento("u_bot", "g1", "c_de_outro")).toBe(false);
+    expect(despachados).toEqual([]);
+  });
+
+  it("depois de tirado, o op 4 seguinte entra de novo com o par de sempre", async () => {
+    const { servico, sessao, despachados } = await botEmVoz();
+    await servico.acompanharExpulsao("u_bot", "c_voz", "g1");
+    despachados.length = 0;
+
+    await servico.tratarAtualizacaoDeVoz(sessao, {
+      guild_id: SF_SERVIDOR,
+      channel_id: SF_CANAL_VOZ,
+      self_deaf: true,
+      self_mute: false,
+    });
+
+    expect(despachados.map((d) => d.evento)).toEqual([
+      "VOICE_STATE_UPDATE",
+      "VOICE_SERVER_UPDATE",
+    ]);
   });
 });

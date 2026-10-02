@@ -153,6 +153,17 @@ describe("VoiceService.desconectar", () => {
     expect(await voice.membrosDaSala("voz-1")).toEqual([]);
   });
 
+  it("o \"Desconectar\" do menu avisa a casca do Discord — é assim que o bot de música sabe que saiu", async () => {
+    const { voice } = servico(Permission.MOVE_MEMBERS);
+    const aviso = vi.fn();
+    voice.registrarAvisoDeExpulsao(aviso);
+    await voice.join("ana", "voz-1");
+
+    await voice.desconectar("dono", "g1", "ana");
+
+    expect(aviso).toHaveBeenCalledWith("ana", "voz-1", "g1");
+  });
+
   it("sem MOVE_MEMBERS não desconecta — e não mexe no estado", async () => {
     const { voice } = servico(Permission.MUTE_MEMBERS);
     await voice.join("ana", "voz-1");

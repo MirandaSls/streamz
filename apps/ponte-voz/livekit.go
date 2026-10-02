@@ -81,6 +81,20 @@ func Conectar(rei Reivindicacao, log *slog.Logger) (*Publicador, error) {
 		OnDisconnected: func() {
 			registro.Warn("o LiveKit desconectou a ponte: o áudio deste bot parou de sair no navegador")
 		},
+		ParticipantCallback: lksdk.ParticipantCallback{
+			// Chega para todo participante da sala; só o nosso interessa — é
+			// nele que a API grava o pedido de silêncio (ver `AtributoDeSilencio`).
+			OnAttributesChanged: func(mudou map[string]string, p lksdk.Participant) {
+				local, ok := p.(*lksdk.LocalParticipant)
+				if !ok {
+					return
+				}
+				if _, tocou := mudou[AtributoDeSilencio]; !tocou {
+					return
+				}
+				sincronizarSilencio(local, registro)
+			},
+		},
 	})
 
 	// `canSubscribe: false` é um dos grants do token (§D5.6): pedir inscrição
@@ -104,7 +118,86 @@ func Conectar(rei Reivindicacao, log *slog.Logger) (*Publicador, error) {
 		"nome", sala.LocalParticipant.Name(),
 		"faixa", NomeDaFaixa)
 
+	// O atributo pode ter chegado entre a entrada na sala e a publicação (o
+	// moderador silenciou o bot nesse meio-tempo): o callback rodou sem faixa
+	// nenhuma para calar, e não roda de novo enquanto o valor não mudar.
+	sincronizarSilencio(sala.LocalParticipant, registro)
+
 	return &Publicador{sala: sala, faixa: faixa, log: registro}, nil
+}
+
+// AtributoDeSilencio é o atributo do participante da ponte em que a API grava
+// o "silenciar no servidor" de um moderador: "1" cala, "0" devolve o som.
+// O nome é contrato com `ATRIBUTO_DE_SILENCIO_DA_PONTE`
+// (`apps/api/src/modules/voice/voice.service.ts`) e não muda de um lado só.
+//
+// Por que existe: a API cala a faixa com `MutePublishedTrack`, mas **devolver**
+// o som pela mesma via exige `room.enable_remote_unmute` na config do LiveKit —
+// sem ela o servidor recusa, e o bot desmutado pelo moderador seguia mudo até
+// sair da call. Mutar e desmutar a **própria** faixa o LiveKit sempre aceita;
+// então a API só diz o que quer e quem obedece é a ponte.
+const AtributoDeSilencio = "streamz.silenciado"
+
+// faixaMutavel é a fatia de `*lksdk.LocalTrackPublication` que o silêncio usa.
+// Existe para o teste não precisar subir um LiveKit.
+type faixaMutavel interface {
+	Source() livekit.TrackSource
+	IsMuted() bool
+	SetMuted(muted bool)
+}
+
+var _ faixaMutavel = (*lksdk.LocalTrackPublication)(nil)
+
+// silencioPedido lê o pedido da API. `ok` é falso quando ela não disse nada
+// (atributo ausente ou apagado): aí a ponte não mexe — quem calou pela API,
+// sem atributo, é quem desfaz.
+func silencioPedido(atributos map[string]string) (silenciar bool, ok bool) {
+	switch atributos[AtributoDeSilencio] {
+	case "1":
+		return true, true
+	case "0":
+		return false, true
+	}
+	return false, false
+}
+
+// aplicarSilencio põe as faixas de microfone (a música sai como MICROPHONE,
+// ver `Conectar`) no estado pedido e devolve quantas mudaram. Faixa que já
+// está no estado certo não é tocada: `SetMuted` repetido manda sinal à toa.
+func aplicarSilencio(faixas []faixaMutavel, silenciar bool) int {
+	mudaram := 0
+	for _, f := range faixas {
+		if f.Source() != livekit.TrackSource_MICROPHONE || f.IsMuted() == silenciar {
+			continue
+		}
+		f.SetMuted(silenciar)
+		mudaram++
+	}
+	return mudaram
+}
+
+// sincronizarSilencio aplica o que o atributo pede às faixas publicadas por nós.
+// `SetMuted` avisa o servidor (`SendMuteTrack`), e é esse aviso — e não o
+// `MutePublishedTrack` da API — que faz o SFU voltar a repassar o áudio.
+func sincronizarSilencio(local *lksdk.LocalParticipant, log *slog.Logger) {
+	silenciar, ok := silencioPedido(local.Attributes())
+	if !ok {
+		return
+	}
+	var faixas []faixaMutavel
+	for _, pub := range local.TrackPublications() {
+		if f, ok := pub.(*lksdk.LocalTrackPublication); ok {
+			faixas = append(faixas, f)
+		}
+	}
+	if aplicarSilencio(faixas, silenciar) == 0 {
+		return
+	}
+	if silenciar {
+		log.Info("moderador silenciou o bot no servidor: faixa calada")
+	} else {
+		log.Info("moderador devolveu o som do bot: faixa de volta ao ar")
+	}
 }
 
 // Escrever entrega um quadro Opus de 20 ms (`DuracaoDoQuadro`).

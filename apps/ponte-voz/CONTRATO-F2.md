@@ -227,6 +227,31 @@ Lado da ponte (lote A2, `AvisarQueCaiu` em `main.go`): chama e **só loga** se
 falhar. Não há o que fazer, e travar o encerramento de uma sessão por causa
 disso seria pior.
 
+### O caminho inverso: a API tira o bot da voz
+
+Moderador desconectando, kick, ban: quem sabe primeiro é a API, e o
+`voice.state` do próprio bot **não** passa pela ponte de eventos (§3). O
+`VoiceService.expulsarDaVoz` chama o aviso que o `DiscordCompatModule` pluga
+(`VozDoGateway.acompanharExpulsao`), que despacha o `VOICE_STATE_UPDATE` com
+`channel_id: null` e o `session_id` da sessão. Sem o `session_id` o
+lavalink-client não destrói o player, e o `/tocar` seguinte não manda op 4
+(o bot "não entra mais na call").
+
+### Silenciar no servidor: o atributo `streamz.silenciado`
+
+A API grava no participante `bot:<snowflake>` o atributo `streamz.silenciado`
+(`"1"` cala, `"0"` devolve o som), só com `attributes` no `UpdateParticipant` —
+sem `permission`, que trocaria os grants da ponte. A ponte (`livekit.go`,
+`AtributoDeSilencio`) ouve `OnAttributesChanged` do participante local e chama
+`SetMuted` na própria faixa de microfone; também reaplica logo depois do
+`PublishTrack`, porque o atributo pode ter chegado antes da faixa.
+
+Por que não só o `MutePublishedTrack` da API: **devolver** o som por ele exige
+`room.enable_remote_unmute: true` na config do LiveKit; sem ela o servidor
+recusa, e o bot desmutado seguia mudo. Mutar e desmutar a própria faixa o
+LiveKit aceita sempre. A API ainda chama `MutePublishedTrack` (calar é
+imediato mesmo com ponte antiga); a recusa do desmutar vira `debug`.
+
 ---
 
 ## 5. O `_rtpsize` e a extensão de cabeçalho — leia isto duas vezes
