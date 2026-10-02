@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { displayNameOf, type InviteFullPreview } from "@streamz/shared";
+import { guildBannerBackground, type InviteFullPreview } from "@streamz/shared";
+import { desdeDoServidor, iniciaisDoServidor, rotuloDeMembros } from "@/lib/convite-cartao";
 import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
@@ -51,18 +52,9 @@ function usePreviaDeConvite(code: string): InviteFullPreview | null | undefined 
   return previa;
 }
 
-/** Iniciais do nome, como o rail faz com servidor sem ícone. */
-function acronimo(nome: string): string {
-  return nome
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 4)
-    .toUpperCase();
-}
-
 const LARGURA = 432;
+
+const CARTAO = "mt-1 w-full overflow-hidden rounded-xl border border-border-normal bg-background-surface-high";
 
 export default function InviteEmbed({ code }: { code: string }) {
   const previa = usePreviaDeConvite(code);
@@ -77,11 +69,11 @@ export default function InviteEmbed({ code }: { code: string }) {
 
   if (previa === null || !previa.valid) {
     return (
-      <div
-        className="mt-1 rounded-xl bg-background-surface-high p-4 text-sm text-text-muted"
-        style={{ maxWidth: LARGURA }}
-      >
-        Convite inválido ou expirado
+      <div className={`${CARTAO} p-4`} style={{ maxWidth: LARGURA }}>
+        <p className="text-base font-bold text-text-strong">Convite inválido</p>
+        <p className="mt-1 text-sm text-text-muted">
+          Este convite expirou ou o link está errado. Peça um novo a quem te convidou.
+        </p>
       </div>
     );
   }
@@ -106,54 +98,44 @@ export default function InviteEmbed({ code }: { code: string }) {
   }
 
   return (
-    <div className="mt-1 rounded-xl bg-background-surface-high p-4" style={{ maxWidth: LARGURA }}>
-      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-        {previa.inviter
-          ? `${displayNameOf(previa.inviter)} te convidou para entrar em um servidor`
-          : "Você foi convidado para entrar em um servidor"}
-      </p>
-      {/* No celular a linha não cabe em uma só: com 314px de coluna sobravam
-          146 para o meio, e o nome do servidor saía truncado ("Time de
-          Produ…") com "1 online"/"2 membros" quebrando em duas linhas. Com
-          `flex-wrap` o botão desce inteiro para baixo (é o padrão do cartão de
-          convite no telefone) e o nome recupera a largura do cartão. */}
-      <div className="mt-3 flex items-center gap-3 celular:flex-wrap">
-        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-input-background-default text-sm font-semibold text-text-strong">
+    <div className={CARTAO} style={{ maxWidth: LARGURA }}>
+      {/* faixa: o servidor só tem cor (`bannerColor`), sem imagem; sem cor, o
+          fundo neutro escuro do campo, como o Discord faz sem banner */}
+      <div
+        aria-hidden="true"
+        className="h-[100px] w-full bg-input-background-default"
+        style={{ background: guildBannerBackground(previa.bannerColor) }}
+      />
+      <div className="px-4 pb-4">
+        {/* anel na cor do corpo do cartão, para o ícone "recortar" a faixa */}
+        <div className="-mt-8 grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-input-background-default text-xl font-semibold text-text-strong ring-4 ring-background-surface-high">
           {previa.guild.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previa.guild.iconUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            acronimo(previa.guild.name)
+            iniciaisDoServidor(previa.guild.name)
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-text-strong">{previa.guild.name}</div>
-          <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
-            {/* `.status_d5f3cd{height:8px;width:8px;margin-inline-end:4px}`
-                (css-bruto/931937): bolinha de 8×8 (`h-2 w-2`, já batia) com
-                4px até o texto — `gap-1`, não `gap-1.5` (6px). */}
-            <span className="flex items-center gap-1">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-status-positive" />
-              {previa.onlineCount} online
-            </span>
-            <span className="flex items-center gap-1">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-channels-default" />
-              {previa.memberCount} membros
-            </span>
-          </div>
-        </div>
+        <p className="mt-3 truncate text-base font-bold text-text-strong">{previa.guild.name}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-text-muted">
+          <span className="flex items-center gap-1">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-status-positive" />
+            {previa.onlineCount} online
+          </span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-channels-default" />
+            {rotuloDeMembros(previa.memberCount)}
+          </span>
+        </p>
+        <p className="mt-0.5 text-sm text-text-muted">{desdeDoServidor(previa.guildCreatedAt)}</p>
         <Button
           disabled={entrando}
           onClick={() => void acao()}
-          // quem já é membro não precisa de chamada para ação: o botão vira
-          // um atalho neutro para o servidor, como o "Entrou" do Discord
-          variante={jaSouMembro ? "secundario" : "primario"}
-          tamanho="sm"
-          /* 32px de altura no desktop (tamanho `sm`, raiz de 16px): 44
-             literais no celular, único botão do cartão. */
-          className="shrink-0 celular:h-[44px] celular:w-full celular:px-5"
+          variante="positivo"
+          /* no celular 44px literais, alvo de toque */
+          className="mt-4 w-full celular:h-[44px]"
         >
-          {jaSouMembro ? "Entrou" : entrando ? "Entrando…" : "Entrar"}
+          {jaSouMembro ? "Ir para o Servidor" : entrando ? "Entrando…" : "Entrar"}
         </Button>
       </div>
     </div>

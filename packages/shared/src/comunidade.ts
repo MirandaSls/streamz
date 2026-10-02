@@ -183,6 +183,10 @@ export interface InviteDetail extends InviteInfo {
 export interface InviteFullPreview extends InvitePreview {
   memberCount: number;
   onlineCount: number;
+  /** cor da faixa do perfil do servidor (`Guild.bannerColor`); null = faixa neutra. */
+  bannerColor: string | null;
+  /** criação do servidor (ISO) — o "Desde …" do cartão de convite. */
+  guildCreatedAt: string;
   description: string | null;
   channelName: string | null;
   inviter: PublicUser | null;
