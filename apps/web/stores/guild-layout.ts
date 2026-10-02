@@ -29,13 +29,20 @@ function lerAbertas(): string[] {
   }
 }
 
+// A gravação é adiada: localStorage é síncrono e, rodando antes do `set`,
+// atrasava o primeiro render de abrir/fechar a pasta. Cada chamada grava o
+// estado já visto por ela, na ordem, então a última continua vencendo.
 function gravarAbertas(ids: string[]) {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CHAVE_ABERTAS, JSON.stringify(ids));
-  } catch {
-    // modo privado / cota cheia: a pasta simplesmente volta fechada no reload
-  }
+  const gravar = () => {
+    try {
+      window.localStorage.setItem(CHAVE_ABERTAS, JSON.stringify(ids));
+    } catch {
+      // modo privado / cota cheia: a pasta simplesmente volta fechada no reload
+    }
+  };
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(gravar);
+  else setTimeout(gravar, 0);
 }
 
 interface GuildLayoutState {
@@ -118,13 +125,13 @@ export const useGuildLayout = create<GuildLayoutState>((set, get) => {
     alternarPasta: (id) => {
       const abertas = get().abertas;
       const proximas = abertas.includes(id) ? abertas.filter((x) => x !== id) : [...abertas, id];
-      gravarAbertas(proximas);
       set({ abertas: proximas });
+      gravarAbertas(proximas);
     },
 
     fecharTodas: () => {
-      gravarAbertas([]);
       set({ abertas: [] });
+      gravarAbertas([]);
     },
 
     limpar: () => {
