@@ -9,14 +9,14 @@ O bot oficial de **cargos por reação** da instância. Uma pasta, como manda o
 (`scripts/gerar-icone-cargos.py`), da prova (`prova-cargos.sh`) e do serviço
 `bot-cargos` no fim do bloco de bots do `docker-compose.yml`.
 
-Nome, arte e descrição são próprios. Os bots que fazem isto no Discord são
+Nome, arte e descrição são próprios. Os bots de terceiros que fazem isto são
 serviços fechados de outras empresas; usar o nome ou a arte deles seria se
 passar por eles.
 
 Ele só é possível por causa da F5 da compatibilidade: desde o PR #196 a reação
 chega ao bot como `MESSAGE_REACTION_ADD` de verdade, com `user_id` e emoji, e
 não mais como um `MESSAGE_UPDATE` da mensagem inteira (§7 e §12 F5 do
-`docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md`).
+documento de compatibilidade de bots, em `docs/`).
 
 ## Os comandos
 
@@ -59,7 +59,7 @@ cujo canal ou mensagem sumiu é esquecido, e o que só não deu para conferir
 
 ## O que ainda não funciona nesta instância
 
-`membro.roles.add()` do discord.js é
+`membro.roles.add()` da biblioteca de bots é
 `PUT /guilds/:id/members/:uid/roles/:rid`, e o §12 F5 do documento lista
 "membros/cargos no REST" como **ainda na fila**. Enquanto essa rota não existir,
 o bot publica painéis, reage neles e recebe as reações — e ao tentar dar o cargo

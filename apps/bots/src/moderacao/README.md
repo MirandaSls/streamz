@@ -9,7 +9,7 @@ O bot oficial de moderação da instância. Uma pasta, como manda o
 (`scripts/gerar-icone-moderacao.py`) e do serviço `bot-moderacao` no fim do
 bloco de bots do `docker-compose.yml`.
 
-Nome, arte e descrição são próprios. Os bots que fazem isto no Discord são
+Nome, arte e descrição são próprios. Os bots de terceiros que fazem isto são
 serviços fechados de outras empresas; usar o nome ou a arte deles seria se
 passar por eles.
 
@@ -88,10 +88,10 @@ o `versao: 1` gravado no corpo existe para o laço de migração saber o que lê
 
 ## O que depende de rota que a casca ainda não tem
 
-A `discord-compat` de hoje é leitura para servidor e membros. **Não existem**
-`PUT /guilds/:id/bans/:uid`, `DELETE /guilds/:id/bans/:uid`,
+A casca de compatibilidade de hoje é leitura para servidor e membros. **Não
+existem** `PUT /guilds/:id/bans/:uid`, `DELETE /guilds/:id/bans/:uid`,
 `DELETE /guilds/:id/members/:uid` nem `PATCH /guilds/:id/members/:uid` — que são
-o que `member.ban()`, `member.kick()` e `member.timeout()` do discord.js
+o que `member.ban()`, `member.kick()` e `member.timeout()` da biblioteca de bots
 emitem. Então `/banir`, `/desbanir`, `/expulsar`, `/silenciar` e
 `/dessilenciar` fazem **todas** as conferências, chamam o caminho certo e, com a
 rota ausente, respondem uma frase que diz isso — em vez de pendurar ou cuspir
@@ -106,7 +106,7 @@ registro de moderação serve para provar. A tabela completa está no cabeçalho
 
 `/limpar` **funciona hoje**, apagando uma mensagem por vez pelo
 `DELETE /channels/:id/messages/:mid`. Isso tem um efeito colateral bom: o
-`bulk-delete` do Discord recusa mensagem com mais de 14 dias, e o `DELETE`
+`bulk-delete` padrão recusa mensagem com mais de 14 dias, e o `DELETE`
 unitário não.
 
 ## Ambiente
@@ -126,6 +126,6 @@ docker run --rm -v "$PWD":/w -w /w node:22 bash -lc "corepack enable; \
   pnpm --filter @streamz/bots test; pnpm --filter @streamz/bots lint"
 
 # ponta a ponta, na bancada descartável (derruba tudo no fim)
-apps/api/test/discord-compat/prova-botmod.sh
-apps/api/test/discord-compat/prova-botmod.sh derrubar
+apps/api/test/*/prova-botmod.sh
+apps/api/test/*/prova-botmod.sh derrubar
 ```

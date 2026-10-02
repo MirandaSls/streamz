@@ -46,9 +46,9 @@ cp src-tauri/icons/icon.png                      ../web/public/icone-512.png
 ## `apps/web/app/opengraph-image.png`
 
 Imagem de compartilhamento (1200×630). É PNG porque raspador de link (Slack,
-Discord, WhatsApp, Facebook) não renderiza SVG em `og:image`, e é **arquivo
-estático** porque a web também é buildada com `output: "export"` para o Tauri,
-onde rota de imagem não sobrevive.
+WhatsApp, Facebook) não renderiza SVG em `og:image`, e é **arquivo estático**
+porque a web também é buildada com `output: "export"` para o Tauri, onde rota
+de imagem não sobrevive.
 
 Reproduz o `marca/og-image-1200x630.svg` com a Archivo de verdade — o `<text>`
 do pacote dependeria da fonte instalada em quem abrisse o arquivo.

@@ -50,9 +50,10 @@ entende que errou, em vez de ver um buraco.
 
 `/boas-vindas canal` seria um subcomando, e a casca de compatibilidade
 **recusa** subcomando e grupo de subcomando no `PUT` de registro, com 50035
-(§9 de `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md`). Então `acao` é uma opção de
-texto com escolhas: no `/` a pessoa escolhe da lista; no `!` a primeira palavra
-é a ação — exatamente o que digitaria se fossem subcomandos de verdade.
+(§9 do documento de compatibilidade de bots, em `docs/`). Então `acao` é uma
+opção de texto com escolhas: no `/` a pessoa escolhe da lista; no `!` a
+primeira palavra é a ação — exatamente o que digitaria se fossem subcomandos
+de verdade.
 
 E `/boas-vindas ver` responde em **texto**, e não num embed: a resposta do
 prefixo `!` é um `message.reply`, e o `POST /channels/:id/messages` da casca
@@ -62,8 +63,8 @@ primeira execução da prova que pegou isso.
 
 Pelo mesmo motivo o canal e o cargo chegam como **texto** (`#geral`, `@Membro`
 ou o id) e não como opção de tipo canal/cargo: o `Contexto` do runtime só expõe
-`texto()` e `numero()`, e uma opção `TIPO_CANAL` faria o `getString` do
-discord.js lançar. Ver `alvos.ts`.
+`texto()` e `numero()`, e uma opção `TIPO_CANAL` faria o `getString` da
+biblioteca de bots lançar. Ver `alvos.ts`.
 
 ---
 
@@ -104,7 +105,7 @@ O `guildId` é conferido contra `^[0-9]{1,32}$` antes de virar caminho.
 
 ## O que ainda não funciona nesta instância
 
-O **cargo automático** e a **DM** chamam as rotas padrão do discord.js:
+O **cargo automático** e a **DM** chamam as rotas padrão da biblioteca de bots:
 
 | | rota | estado |
 |---|---|---|
@@ -128,6 +129,6 @@ docker compose --profile bots up -d --build bot-boas-vindas
 Prova ponta a ponta na bancada descartável (sobe e derruba tudo):
 
 ```bash
-apps/api/test/discord-compat/prova-botbv.sh
-apps/api/test/discord-compat/prova-botbv.sh derrubar
+apps/api/test/*/prova-botbv.sh
+apps/api/test/*/prova-botbv.sh derrubar
 ```
