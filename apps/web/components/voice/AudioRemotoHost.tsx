@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Track } from "livekit-client";
-import { donoDaIdentidade, ehIdentidadeDeTela } from "@streamz/shared";
+import { ehIdentidadeDeTela } from "@streamz/shared";
 import {
   mixDaFaixa,
   ouvintesRemotos,
@@ -14,6 +14,7 @@ import { useSilencioDoServidor } from "@/hooks/useSilencioDoServidor";
 import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
 import { participantesDaSala, participantesDe, useVoice } from "@/stores/voice";
+import { donoDoParticipante } from "@/stores/voice-falantes";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -45,11 +46,13 @@ export default function AudioRemotoHost() {
   if (!channelId) return null;
 
   // O `<userId>#tela` da captura nativa é do mesmo dono: o áudio dele toca
-  // junto com o da pessoa, e o meu próprio `#tela` não volta para mim.
-  const identidades = participantesDaSala().map((p) => donoDaIdentidade(p.identity));
+  // junto com o da pessoa, e o meu próprio `#tela` não volta para mim. O bot
+  // de música (`bot:<snowflake>`) vira o `userId` dele pelo metadata — é sob
+  // essa chave que o menu grava volume e "Silenciar" (`donoDoParticipante`).
+  const donos = participantesDaSala().map(donoDoParticipante);
   return (
     <>
-      {ouvintesRemotos(estados, identidades, meuId).map((userId) => (
+      {ouvintesRemotos(estados, donos, meuId).map((userId) => (
         <AudioDoParticipante key={`audio-${userId}`} userId={userId} />
       ))}
     </>

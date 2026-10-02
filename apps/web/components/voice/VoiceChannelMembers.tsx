@@ -6,6 +6,7 @@ import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
+import { iconesDeSilencio } from "@/components/voice/icones-de-silencio";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
@@ -95,6 +96,7 @@ export default function VoiceChannelMembers({
           const nome = displayNameOf(e.user);
           // quem está mudo nunca "fala": o anel tem de contar a mesma história
           const ativo = !e.muted && falando.has(e.user.id);
+          const silencio = iconesDeSilencio(e);
           return (
             <li
               key={e.user.id}
@@ -191,28 +193,24 @@ export default function VoiceChannelMembers({
                 {/* Cinza é o mudo por conta própria: em 101842.png o microfone
                     cortado de "Md" sai #81828a = `channels-default` (coluna
                     x=348, y 412–425). Vermelho (`status-danger`) é o
-                    imposto por um moderador (`serverMute`/`serverDeaf`,
-                    `useSilencioDoServidor.ts`) — como no Discord, que só
-                    pinta de vermelho o mudo/ensurdecido **pelo servidor**. O
-                    servidor manda sobre o próprio: quem está com o áudio
-                    cortado por um moderador mostra o fone cortado mesmo que
-                    também tenha se silenciado sozinho. */}
-                {e.serverDeaf ? (
-                  <HeadphoneOff
-                    size={14}
-                    className="shrink-0 text-status-danger"
-                    aria-label="Áudio desativado pelo servidor"
-                  />
-                ) : e.serverMute ? (
+                    imposto por um moderador (`serverMute`/`serverDeaf`) —
+                    como no Discord, que só pinta de vermelho o
+                    mudo/ensurdecido **pelo servidor**. Quais ícones e de que
+                    cor: `iconesDeSilencio`; microfone antes do fone, a ordem
+                    da barra de controles. */}
+                {silencio.microfone && (
                   <MicOff
                     size={14}
-                    className="shrink-0 text-status-danger"
-                    aria-label="Silenciado pelo servidor"
+                    className={`shrink-0 ${silencio.microfone === "servidor" ? "text-status-danger" : "text-channels-default"}`}
+                    aria-label={silencio.microfone === "servidor" ? "Silenciado pelo servidor" : "Mudo"}
                   />
-                ) : e.deafened ? (
-                  <HeadphoneOff size={14} className="shrink-0 text-channels-default" aria-label="Sem áudio" />
-                ) : (
-                  e.muted && <MicOff size={14} className="shrink-0 text-channels-default" aria-label="Mudo" />
+                )}
+                {silencio.fone && (
+                  <HeadphoneOff
+                    size={14}
+                    className={`shrink-0 ${silencio.fone === "servidor" ? "text-status-danger" : "text-channels-default"}`}
+                    aria-label={silencio.fone === "servidor" ? "Áudio desativado pelo servidor" : "Sem áudio"}
+                  />
                 )}
               </button>
             </li>

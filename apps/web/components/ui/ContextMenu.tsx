@@ -14,18 +14,81 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
 
+/** Diâmetro do polegar da barra do menu, em px. */
+const POLEGAR = 16;
+/** Largura fixa do balão do valor: cabe "200%" em negrito sem a caixa pular a cada passo. */
+const LARGURA_DO_BALAO = 52;
+/**
+ * Quanto o balão pode passar da ponta do trilho. Entre o trilho e o corte do
+ * rolador do menu há 16px (o `px-2` do item mais o `p-2` do rolador); 12 deixa
+ * 4 de respiro e o balão nunca é cortado nas pontas da barra.
+ */
+const FOLGA_DO_BALAO = 12;
+
+/**
+ * Onde desenhar o balão do valor sobre a barra, em px a partir da ponta
+ * esquerda do trilho: `centro` é o centro do polegar (onde a seta aponta) e
+ * `esquerda` é a borda do balão, presa para ele não sair do menu nas pontas.
+ *
+ * O centro do polegar não anda a largura toda do trilho, só ela menos o
+ * polegar: em 0% ele está a meio polegar da ponta, não na ponta.
+ */
+export function posicaoDoBalao(
+  fracao: number,
+  larguraDoTrilho: number,
+  larguraDoBalao: number = LARGURA_DO_BALAO,
+  folga: number = FOLGA_DO_BALAO,
+): { centro: number; esquerda: number } {
+  const f = Math.min(1, Math.max(0, fracao));
+  const centro = POLEGAR / 2 + f * Math.max(0, larguraDoTrilho - POLEGAR);
+  const minimo = -folga;
+  const maximo = Math.max(minimo, larguraDoTrilho + folga - larguraDoBalao);
+  return { centro, esquerda: Math.min(maximo, Math.max(minimo, centro - larguraDoBalao / 2)) };
+}
+
 /**
  * Barra arrastável dentro do menu (o volume de um participante).
  *
  * O menu não fecha ao mexer: arrastar é um ajuste contínuo, e fechar a cada
- * movimento tornaria impossível ouvir o resultado enquanto se regula.
+ * movimento tornaria impossível ouvir o resultado enquanto se regula. Cada
+ * passo do arraste já chama `onChange` — o volume muda enquanto o mouse anda,
+ * não ao soltar.
+ *
+ * O valor aparece num balão escuro sobre o polegar (a dica cinza do app,
+ * `--background-base-low` com texto branco e seta de 5px) enquanto se arrasta
+ * ou se para o mouse em cima do polegar, e some ao soltar — é como o Discord
+ * mostra o "95%" sem gastar uma coluna de número ao lado do rótulo.
  */
 function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> }) {
   const { min, max, step, onChange, format, semValor } = item.slider;
-  // estado local: os itens do menu são montados uma vez, então o `value` da
-  // definição está congelado no momento em que o menu abriu — sem isso a barra
-  // não andaria enquanto o mouse arrasta
+  // estado local: arrastar não pode esperar a lista do menu ser remontada
+  // (num menu comum ela nem é), senão a barra não andaria sob o mouse
   const [value, setValue] = useState(item.slider.value);
+  const [arrastando, setArrastando] = useState(false);
+  const [sobrePolegar, setSobrePolegar] = useState(false);
+  const [porTeclado, setPorTeclado] = useState(false);
+  // medida na hora do gesto: o balão só existe depois de um, e o menu não
+  // muda de largura enquanto está aberto
+  const [largura, setLargura] = useState(0);
+
+  // soltar pode acontecer fora da barra (o arraste passa da ponta), então é a
+  // janela que escuta o fim do gesto
+  useEffect(() => {
+    if (!arrastando) return;
+    const soltar = () => setArrastando(false);
+    window.addEventListener("pointerup", soltar);
+    window.addEventListener("pointercancel", soltar);
+    return () => {
+      window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("pointercancel", soltar);
+    };
+  }, [arrastando]);
+
+  const fracao = max === min ? 0 : (value - min) / (max - min);
+  const texto = format ? format(value) : String(value);
+  const { centro, esquerda } = posicaoDoBalao(fracao, largura);
+  const balao = largura > 0 && (arrastando || sobrePolegar || porTeclado);
+
   return (
     <div
       className="px-2 py-1.5"
@@ -37,28 +100,111 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
           {item.icon ? <span className="shrink-0 opacity-80">{item.icon as ReactNode}</span> : null}
           {item.label}
         </span>
-        {!semValor && (
-          <span className="tabular-nums text-text-muted">
-            {format ? format(value) : String(value)}
-          </span>
-        )}
+        {!semValor && <span className="tabular-nums text-text-muted">{texto}</span>}
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step ?? 1}
-        value={value}
-        aria-label={item.label}
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          setValue(v);
-          onChange(v);
-        }}
-        className="h-1 w-full cursor-pointer appearance-none rounded-full bg-border-subtle accent-brand-500"
-      />
+      <div className="relative h-6">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-slider-track-background"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-brand-500"
+          // o preenchimento vai até o centro do polegar, que anda `100% - 16px`
+          style={{ width: `calc(${POLEGAR / 2}px + ${fracao} * (100% - ${POLEGAR}px))` }}
+        />
+        {balao && (
+          <>
+            <span
+              aria-hidden="true"
+              style={{ left: esquerda, width: LARGURA_DO_BALAO }}
+              className="pointer-events-none absolute bottom-full z-10 mb-[7px] grid h-7 place-items-center rounded-lg bg-background-base-low text-sm font-bold tabular-nums text-text-overlay-light shadow-shadow-high"
+            >
+              {texto}
+            </span>
+            <span
+              aria-hidden="true"
+              style={{ left: centro }}
+              className="pointer-events-none absolute bottom-full z-10 mb-[2px] h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-background-base-low"
+            />
+          </>
+        )}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step ?? 1}
+          value={value}
+          aria-label={item.label}
+          aria-valuetext={texto}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setValue(v);
+            onChange(v);
+          }}
+          onPointerDown={(e) => {
+            setLargura(e.currentTarget.getBoundingClientRect().width);
+            setArrastando(true);
+          }}
+          onPointerMove={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setLargura(r.width);
+            const alvo = posicaoDoBalao(fracao, r.width).centro;
+            setSobrePolegar(Math.abs(e.clientX - r.left - alvo) <= POLEGAR / 2 + 2);
+          }}
+          onPointerLeave={() => setSobrePolegar(false)}
+          onFocus={(e) => {
+            // só o foco de teclado: o clique também foca, e aí quem manda é o arraste
+            if (!e.currentTarget.matches(":focus-visible")) return;
+            setLargura(e.currentTarget.getBoundingClientRect().width);
+            setPorTeclado(true);
+          }}
+          onBlur={() => setPorTeclado(false)}
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent outline-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-[0_2px_6px_rgba(0,0,0,0.45)] [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-4 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_2px_6px_rgba(0,0,0,0.45)] [&:focus-visible::-moz-range-thumb]:outline [&:focus-visible::-moz-range-thumb]:outline-2 [&:focus-visible::-moz-range-thumb]:outline-offset-2 [&:focus-visible::-moz-range-thumb]:outline-border-focus [&:focus-visible::-webkit-slider-thumb]:outline [&:focus-visible::-webkit-slider-thumb]:outline-2 [&:focus-visible::-webkit-slider-thumb]:outline-offset-2 [&:focus-visible::-webkit-slider-thumb]:outline-border-focus"
+        />
+      </div>
     </div>
   );
+}
+
+/**
+ * Marca otimista de um interruptor `manterAberto`: o valor que a caixa mostra
+ * desde o clique e a verdade (`checked`) contra a qual ele foi feito.
+ */
+export interface MarcaOtimista {
+  valor: boolean;
+  base: boolean;
+}
+
+/**
+ * O que a caixa de um interruptor mostra. A marca otimista vale **enquanto a
+ * verdade não mudou desde o clique**: quando o menu vivo é remontado com a
+ * verdade nova, ela assume sozinha, sem ninguém precisar limpar a marca.
+ */
+export function marcaExibida(verdade: boolean, marca: MarcaOtimista | undefined): boolean {
+  return marca && marca.base === verdade ? marca.valor : verdade;
+}
+
+/**
+ * Tira as marcas cuja verdade já mudou desde o clique (ou cujo item saiu da
+ * lista). A caixa já mostra a verdade nova, e a marca que ficasse voltaria a
+ * valer no dia em que a verdade regressasse ao valor de antes: outro moderador
+ * desfaz o silêncio com o menu aberto e a caixa mostraria o clique velho.
+ * Devolve o mesmo objeto quando nada sai, para o `setState` não renderizar à toa.
+ */
+export function podarMarcas(
+  marcas: Record<string, MarcaOtimista>,
+  items: MenuItem[],
+): Record<string, MarcaOtimista> {
+  let podou = false;
+  const resto: Record<string, MarcaOtimista> = {};
+  for (const [rotulo, marca] of Object.entries(marcas)) {
+    const item = items.find((it) => "onSelect" in it && "label" in it && it.label === rotulo);
+    const verdade = item && "checked" in item ? item.checked === true : undefined;
+    if (verdade === marca.base) resto[rotulo] = marca;
+    else podou = true;
+  }
+  return podou ? resto : marcas;
 }
 
 /**
@@ -244,9 +390,14 @@ function Painel({
   const ref = useRef<HTMLDivElement>(null);
   const botoes = useRef<(HTMLButtonElement | null)[]>([]);
   const [pos, setPos] = useState<Colocacao | null>(null);
-  const [foco, setFoco] = useState<number>(-1);
+  // o primeiro foco é decidido ao montar, e só então: num menu vivo a lista é
+  // remontada enquanto a pessoa navega, e reavaliar aqui a cada remontagem
+  // jogaria o foco de volta ao topo no meio do caminho
+  const [foco, setFoco] = useState<number>(() => (autoFoco ? proximo(items, -1, 1) : -1));
   const [aberto, setAberto] = useState<number | null>(null);
   const [ancora, setAncora] = useState<DOMRect | null>(null);
+  /** marcas otimistas dos interruptores `manterAberto`, por rótulo. */
+  const [marcas, setMarcas] = useState<Record<string, MarcaOtimista>>({});
   const timer = useRef<number | undefined>(undefined);
   /**
    * Quando esta folha nasceu — a **carência do primeiro toque**.
@@ -261,21 +412,20 @@ function Painel({
    * verdade. Vale só na folha: no desktop o menu nasce do `mouseup` do botão
    * direito, e não há dedo em cena.
    *
-   * **O carimbo é renovado a cada menu, e não só na montagem.** `openContextMenu`
-   * *troca* o menu da store em vez de passar por `null` (ver `stores/ui.ts`), e
-   * um item que abre outro menu faz `onClose()` seguido de `openContextMenu()`
-   * no mesmo manipulador — o React junta os dois numa renderização só, o
-   * `Painel` não desmonta e o `useRef` guardaria a hora do menu *anterior*. Com
-   * o carimbo velho a carência já teria vencido e a folha nova nasceria
-   * desprotegida: era o toque que atravessa de volta, pelo caminho do kebab do
-   * cartão de perfil. Renovar no efeito que já mede a posição custa uma linha e
-   * vale para os dois casos, o de montar e o de reaproveitar.
+   * **Cada menu é um `Painel` novo.** `openContextMenu` *troca* o menu da store
+   * em vez de passar por `null` (ver `stores/ui.ts`), e um item que abre outro
+   * menu faz `onClose()` seguido de `openContextMenu()` no mesmo manipulador —
+   * o React junta os dois numa renderização só. Antes o `Painel` sobrevivia à
+   * troca e o carimbo era renovado a cada lista nova; agora o host o monta pela
+   * chave `ContextMenuState.id` (e o submenu pela posição do pai), então o
+   * `useRef` já nasce com a hora certa. Renovar a cada lista seria errado num
+   * menu vivo: cada remontagem reabriria a carência e engoliria o toque de quem
+   * acabou de ver a caixa mudar.
    */
   const nascidaEm = useRef(Date.now());
   const cedoDemais = () => folha && Date.now() - nascidaEm.current < 400;
 
   useLayoutEffect(() => {
-    nascidaEm.current = Date.now();
     const h = ref.current?.offsetHeight ?? 0;
     // a caixa cresce além de `largura` quando um rótulo não cabe (ver o
     // `style` abaixo): a colocação usa a largura real, senão o menu largo
@@ -285,16 +435,12 @@ function Painel({
   }, [x, y, largura, alternativoX, items]);
 
   useEffect(() => {
-    if (!autoFoco) return;
-    const primeiro = proximo(items, -1, 1);
-    setFoco(primeiro);
-  }, [autoFoco, items]);
-
-  useEffect(() => {
     if (foco >= 0) botoes.current[foco]?.focus();
   }, [foco]);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  useEffect(() => setMarcas((m) => podarMarcas(m, items)), [items]);
 
   const agendarSubmenu = useCallback((i: number, el: HTMLElement, temFilho: boolean) => {
     window.clearTimeout(timer.current);
@@ -308,6 +454,38 @@ function Painel({
       setAberto(i);
     }, SUBMENU_DELAY);
   }, []);
+
+  /**
+   * Item `manterAberto`: executa sem fechar e, se for caixa de marcar, vira a
+   * caixa na hora. A verdade da moderação de voz só volta com o `voice.state`
+   * do servidor; sem a marca otimista a caixa ficaria parada até lá, e o
+   * clique pareceria perdido. `onSelect` que devolve `false` (ou rejeita)
+   * desfaz a marca — a API recusou, e a caixa não pode mentir.
+   */
+  function escolherSemFechar(item: Extract<MenuItem, { onSelect: () => void; label: string }>) {
+    if (item.control !== "checkbox") {
+      item.onSelect();
+      return;
+    }
+    const rotulo = item.label;
+    const verdade = item.checked === true;
+    const marca: MarcaOtimista = { valor: !marcaExibida(verdade, marcas[rotulo]), base: verdade };
+    setMarcas((m) => ({ ...m, [rotulo]: marca }));
+    // o tipo diz `() => void` para aceitar qualquer ação; aqui a promessa, quando
+    // houver, é justamente o que interessa
+    const resultado = (item.onSelect as () => unknown)();
+    if (!(resultado instanceof Promise)) return;
+    const desfazer = () =>
+      setMarcas((m) => {
+        // um segundo clique já trocou a marca: a resposta deste é velha
+        if (m[rotulo] !== marca) return m;
+        const { [rotulo]: _fora, ...resto } = m;
+        return resto;
+      });
+    resultado.then((ok) => {
+      if (ok === false) desfazer();
+    }, desfazer);
+  }
 
   function aoTeclado(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -472,7 +650,10 @@ function Painel({
             return <Divider key={i} margem={8} />;
           }
           if (isSlider(item)) {
-            return <ItemDeslizante key={i} item={item} />;
+            // chave pelo rótulo, não pela posição: num menu vivo um item que
+            // surge acima da barra (a pessoa começou a transmitir) não pode
+            // remontá-la no meio do arraste
+            return <ItemDeslizante key={`slider:${item.label}`} item={item} />;
           }
           if (isReacoes(item)) {
             return (
@@ -480,7 +661,7 @@ function Painel({
             );
           }
           const filho = isSubmenu(item);
-          const marcado = !filho && item.checked === true;
+          const marcado = !filho && marcaExibida(item.checked === true, marcas[item.label]);
           const controle = !filho ? item.control : undefined;
           // item-pai de submenu também tem `description` (segunda linha, ex.:
           // "Config. de notificação" > "Nada" no print p5) — só `control`
@@ -545,6 +726,10 @@ function Painel({
                 if (filho) {
                   setAncora(e.currentTarget.getBoundingClientRect());
                   setAberto((a) => (a === i ? null : i));
+                  return;
+                }
+                if (item.manterAberto) {
+                  escolherSemFechar(item);
                   return;
                 }
                 onClose();
@@ -660,21 +845,17 @@ function Painel({
               {controle === "checkbox" && (
                 // marcado: `--text-brand`, não a cor do item (`current`) — é o
                 // que `.check_c1e9c4{color:var(--text-brand)}` faz no focado.
-                // Perigo (`item.danger`) segue o mesmo par que já pinta o
-                // rótulo em `cor` (acima): `--text-feedback-critical` na
-                // borda solta e na borda+fundo marcada, cheio (sem o
-                // `opacity-60` do caso comum, que existe para amaciar o
-                // `current` — o vermelho de perigo já nasce na intensidade
-                // certa). É como o Discord marca "Silenciar voz no
-                // servidor" / "Desativar áudio no servidor": rótulo e caixa
-                // no mesmo vermelho.
+                // Vale também no item de perigo: no Discord a caixa marcada de
+                // "Silenciar voz no servidor" é cheia na cor da marca (o
+                // blurple de lá; o limão daqui, ADR-0009), e só o rótulo fica
+                // vermelho. Solta, a caixa de perigo mantém a borda em
+                // `--text-feedback-critical`, cheia (sem o `opacity-60` do caso
+                // comum, que existe para amaciar o `current`).
                 <span
                   aria-hidden="true"
                   className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border ${
                     marcado
-                      ? item.danger
-                        ? "border-text-feedback-critical bg-text-feedback-critical"
-                        : "border-text-brand bg-text-brand"
+                      ? "border-text-brand bg-text-brand"
                       : item.danger
                         ? "border-text-feedback-critical"
                         : "border-current opacity-60"
@@ -731,6 +912,8 @@ function Painel({
       </div>
       {aberto !== null && ancora && isSubmenu(items[aberto]) && (
         <Painel
+          // outro item-pai é outro submenu: estado (foco, marcas, carência) do zero
+          key={aberto}
           items={(items[aberto] as Extract<MenuItem, { submenu: MenuItem[] }>).submenu}
           largura={largura}
           // submenu encosta no item, com 4px de sobreposição, como no Discord;
@@ -797,8 +980,20 @@ export default function ContextMenuHost() {
   */
   useVoltarNoCelular(ehMobile && menu !== null, close);
 
+  // os ouvintes são do menu aberto, não da lista: o menu vivo troca `items` a
+  // cada mudança da sala, e reinstalá-los a cada troca jogaria fora o gesto de
+  // rolagem que acabou de ser marcado
+  const menuId = menu?.id ?? null;
+  const vivo = menu?.vivo;
+
+  // o menu vivo se remonta sozinho enquanto estiver na tela; fechar cancela
+  useEffect(
+    () => (vivo ? vivo.assinar(() => useUI.getState().atualizarMenuVivo()) : undefined),
+    [vivo],
+  );
+
   useEffect(() => {
-    if (!menu) return;
+    if (menuId === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
@@ -839,13 +1034,16 @@ export default function ContextMenuHost() {
       window.removeEventListener("scroll", aoRolar, true);
       window.removeEventListener("resize", close);
     };
-  }, [menu, close, ehMobile]);
+  }, [menuId, close, ehMobile]);
 
   if (!menu) return null;
 
   return (
     <div ref={raiz}>
       <Painel
+        // outro menu é outro `Painel` (foco, submenu, marcas e carência do zero);
+        // o mesmo menu vivo com a lista nova não é
+        key={menu.id}
         items={menu.items}
         largura={menu.width ?? MENU_WIDTH}
         x={menu.x}
