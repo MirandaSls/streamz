@@ -69,6 +69,12 @@ describe("contaComoNaoLida", () => {
     // payload antigo, de antes do campo existir: mensagem normal
     expect(contaComoNaoLida({})).toBe(true);
   });
+
+  it("a narração de chamada (início e fim) não conta", () => {
+    expect(contaComoNaoLida({ type: "SYSTEM_CALL" })).toBe(false);
+    expect(contaComoNaoLida({ type: "SYSTEM_CALL", efemera: false })).toBe(false);
+    expect(contaComoNaoLida({ type: "DEFAULT" })).toBe(true);
+  });
 });
 
 describe("a efêmera na timeline", () => {
