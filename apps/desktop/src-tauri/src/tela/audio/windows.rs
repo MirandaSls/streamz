@@ -1,11 +1,13 @@
 //! Áudio do sistema por WASAPI em modo *loopback* — a metade Windows do
 //! `audio`.
 //!
-//! O caminho preferido é o *process loopback* (Windows 10 build 20348 em
-//! diante): captura tudo o que está tocando (jogo, vídeo, música) **menos** a
-//! árvore de processos do navegador do WebView2, onde roda o serviço de áudio
-//! que toca a chamada. Sem essa exclusão, as vozes da chamada voltariam para
-//! os outros participantes dentro do áudio da tela, como eco da própria voz.
+//! O caminho preferido é o *process loopback* (Windows 10 2004, build 19041,
+//! em diante, desde que atualizado): captura tudo o que está tocando (jogo,
+//! vídeo, música) **menos** a árvore de processos do navegador do WebView2,
+//! onde roda o serviço de áudio que toca a chamada. Sem essa exclusão, as
+//! vozes da chamada voltariam para os outros participantes dentro do áudio da
+//! tela, como eco da própria voz. A documentação da Microsoft cita o build
+//! 20348, mas OBS e GStreamer usam a mesma API no Windows 10 atualizado.
 //!
 //! **Por que o navegador do WebView2, e não o nosso PID.** Do runtime 117 em
 //! diante o `msedgewebview2.exe` é lançado reparentado pelo `explorer.exe` e
@@ -142,11 +144,12 @@ impl Loopback {
             Ok(loopback) => return Ok(loopback),
             Err(e) => e,
         };
-        // Fallback: Windows sem process loopback (antes do build 20348) ou
-        // ativação que falhou. Aqui o eco volta — as vozes da chamada estão
-        // na mistura do dispositivo —, mas é melhor que a tela sem som.
-        // Registrado como `warn` (não `info`) porque degrada o resultado para
-        // quem assiste: o motivo da queda precisa aparecer no log de suporte.
+        // Fallback: Windows sem process loopback (anterior ao Windows 10 2004
+        // ou sem atualização) ou ativação que falhou. Aqui o eco volta — as
+        // vozes da chamada estão na mistura do dispositivo —, mas é melhor
+        // que a tela sem som. Registrado como `warn` (não `info`) porque
+        // degrada o resultado para quem assiste: o motivo da queda precisa
+        // aparecer no log de suporte.
         log::warn!(
             "tela-audio: process loopback falhou ({erro:?}); usando loopback do dispositivo padrão — \
              áudio da transmissão vai levar as vozes da chamada: retorno para quem assiste"
@@ -220,7 +223,12 @@ impl Loopback {
                 &IAudioClient::IID,
                 Some(prop),
                 &aviso,
-            )?;
+            )
+            .inspect_err(|e| {
+                log::warn!(
+                    "tela-audio: ActivateAudioInterfaceAsync do process loopback falhou: {e}"
+                )
+            })?;
             // Timeout: o aviso pode chegar depois; o `send` dele só falha
             // em silêncio, porque o `rx` já foi embora. Os parâmetros seguem
             // vivos dentro do aviso, que o Windows ainda segura.
@@ -240,7 +248,13 @@ impl Loopback {
             resultado.ok().inspect_err(|e| {
                 log::warn!("tela-audio: ativação do process loopback voltou com erro: {e}")
             })?;
-            let cliente: IAudioClient = ativado.ok_or(ErroDeAudio::Falha)?.cast()?;
+            let ativado = ativado.ok_or_else(|| {
+                log::warn!("tela-audio: ativação do process loopback não devolveu interface");
+                ErroDeAudio::Falha
+            })?;
+            let cliente: IAudioClient = ativado.cast().inspect_err(|e| {
+                log::warn!("tela-audio: interface ativada não é IAudioClient: {e}")
+            })?;
 
             // O dispositivo virtual não responde `GetMixFormat`: o formato é
             // o que pedimos, e o motor de áudio converte para ele. Pedimos o
@@ -276,7 +290,9 @@ impl Loopback {
 
             // Auto-reset e sem nome: é só o que o `EVENTCALLBACK` exige
             // registrado antes do `Start`.
-            let evento = CreateEventW(None, false, false, PCWSTR::null())?;
+            let evento = CreateEventW(None, false, false, PCWSTR::null()).inspect_err(|e| {
+                log::warn!("tela-audio: CreateEventW do process loopback falhou: {e}")
+            })?;
             let iniciar = || -> Result<(IAudioCaptureClient, u32), ErroDeAudio> {
                 cliente
                     .SetEventHandle(evento)
@@ -284,7 +300,9 @@ impl Loopback {
                 let captura: IAudioCaptureClient = cliente.GetService().inspect_err(|e| {
                     log::warn!("tela-audio: GetService (IAudioCaptureClient) falhou: {e}")
                 })?;
-                let quadros_no_buffer = cliente.GetBufferSize()?;
+                let quadros_no_buffer = cliente.GetBufferSize().inspect_err(|e| {
+                    log::warn!("tela-audio: GetBufferSize do process loopback falhou: {e}")
+                })?;
                 cliente.Start().inspect_err(|e| {
                     log::warn!("tela-audio: Start do process loopback falhou: {e}")
                 })?;
