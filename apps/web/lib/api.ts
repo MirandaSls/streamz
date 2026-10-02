@@ -112,6 +112,7 @@ import type {
   VoiceMoveInput,
   VoiceStateEvent,
 } from "@streamz/shared";
+import type { ModerationNotice } from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
 import { cabecalhoDoCliente } from "./cliente";
@@ -603,6 +604,9 @@ export const api = {
     request<InboxMention[]>(`/me/mentions${limit ? `?limit=${limit}` : ""}`),
   inboxUnread: () => request<InboxUnreadGroup[]>("/me/unread"),
   markAllRead: () => request<{ channels: number }>("/me/read-all", { method: "POST" }),
+  moderationNotices: () => request<ModerationNotice[]>("/me/moderation-notices"),
+  dismissModerationNotice: (id: string) =>
+    request<void>(`/me/moderation-notices/${id}`, del()),
 
   // ── e-configuracoes ──
   /** Preferências de notificação (canal, servidor e o padrão global). */

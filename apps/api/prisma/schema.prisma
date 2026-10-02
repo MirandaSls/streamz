@@ -116,6 +116,7 @@ model User {
   hiddenChannels      DMHidden[]
   // ── pastas de servidores ──
   guildLayout         UserGuildLayout?
+  moderationNotices   ModerationNotice[]
   // ── g-emojis-midia ──
   customEmojis     CustomEmoji[]   @relation("EmojiCreator")
   createdStickers  Sticker[]       @relation("StickerCreator")
@@ -1478,4 +1479,26 @@ model UserGuildLayout {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum ModerationNoticeAction {
+  KICK
+  BAN
+}
+
+/// Aviso persistente na caixa de entrada de quem foi expulso/banido; a linha é
+/// apagada quando o usuário dispensa. `guildId` sem relação de propósito: o
+/// servidor pode ser apagado e o aviso continua valendo (daí o `guildName`).
+model ModerationNotice {
+  id        String                 @id @default(cuid())
+  userId    String
+  guildId   String?
+  guildName String
+  action    ModerationNoticeAction
+  reason    String?
+  createdAt DateTime               @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

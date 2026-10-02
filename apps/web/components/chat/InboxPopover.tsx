@@ -11,12 +11,14 @@ import {
   MessageCircle,
   PedidoDeAmizade,
   SlidersHorizontal,
+  X,
 } from "@/components/ui/icones";
-import type { InboxMention, InboxUnreadChannel } from "@streamz/shared";
+import type { InboxMention, InboxUnreadChannel, ModerationNotice } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
+import { horaCompleta } from "@/lib/format";
 import { EVENTO_CAIXA_DE_ENTRADA } from "@/lib/caixa-de-entrada";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -97,6 +99,8 @@ export default function InboxPopover({
   const [lidas, setLidas] = useState<Set<string>>(new Set());
   const mentions = useInbox((s) => s.mentions);
   const unread = useInbox((s) => s.unread);
+  const avisos = useInbox((s) => s.avisos);
+  const dispensarAviso = useInbox((s) => s.dispensarAviso);
   const loading = useInbox((s) => s.loading);
   const load = useInbox((s) => s.load);
   const markAllRead = useInbox((s) => s.markAllRead);
@@ -112,6 +116,8 @@ export default function InboxPopover({
     conversas: naoLidasEmConversas,
     temServidorNaoLido,
   });
+  // expulsão/banimento não existe nas stores de não-lido: o aviso entra na conta aqui
+  const badgeFinal = somarAvisosNoBadge(badge, avisos.length);
 
   const mencoes = useMemo(
     () => mentions.filter((m) => !lidas.has(m.message.id)),
@@ -142,10 +148,10 @@ export default function InboxPopover({
 
   return (
     <HeaderPopover
-      label={rotuloDoBotao(badge)}
+      label={rotuloDoBotao(badgeFinal)}
       title="Caixa de Entrada"
       icon={<Inbox size={tamanhoDoIcone} />}
-      badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
+      badge={<BadgeDaCaixa estado={badgeFinal} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
       distancia={distancia}
@@ -242,13 +248,20 @@ export default function InboxPopover({
 
           {!loading && aba === "mencoes" && (
             <>
-              {mencoes.length === 0 && (
+              {avisos.length > 0 && (
+                <div className="px-[21px] pt-3">
+                  {avisos.map((a) => (
+                    <AvisoDeModeracao key={a.id} aviso={a} onDispensar={() => dispensarAviso(a.id)} />
+                  ))}
+                </div>
+              )}
+              {mencoes.length === 0 && avisos.length === 0 && (
                 <Vazio icone={<AtSign size={40} />} titulo="Você já viu tudo!">
                   Todas as menções recebidas ficarão salvas aqui por 7 dias.
                 </Vazio>
               )}
               {mencoes.length > 0 && (
-                <div className="px-[21px] py-3">
+                <div className={`px-[21px] pb-3 ${avisos.length > 0 ? "pt-1" : "pt-3"}`}>
                   {mencoes.map((m) => (
                     <MessagePreview
                       key={m.message.id}
@@ -353,6 +366,47 @@ export default function InboxPopover({
 }
 
 // ── pedaços ────────────────────────────────────────────────────────────────
+
+function somarAvisosNoBadge(
+  estado: ReturnType<typeof badgeDaCaixa>,
+  avisos: number,
+): ReturnType<typeof badgeDaCaixa> {
+  if (avisos === 0) return estado;
+  const base = estado.tipo === "contagem" ? estado.total : 0;
+  return { tipo: "contagem", total: base + avisos } as ReturnType<typeof badgeDaCaixa>;
+}
+
+/** Cartão de expulsão/banimento: texto, motivo em linha secundária, horário e dispensar. */
+function AvisoDeModeracao({
+  aviso,
+  onDispensar,
+}: {
+  aviso: ModerationNotice;
+  onDispensar: () => void;
+}) {
+  const verbo = aviso.action === "BAN" ? "banido" : "expulso";
+  return (
+    <div className="mb-1 flex items-start gap-3 rounded-[5px] bg-background-base-lower p-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-text-default">
+          Você foi {verbo} de <strong className="font-semibold text-text-strong">{aviso.guildName}</strong>
+        </p>
+        {aviso.reason && <p className="mt-0.5 break-words text-xs text-text-muted">{aviso.reason}</p>}
+        <p className="mt-1 text-xs text-text-muted">{horaCompleta(aviso.createdAt)}</p>
+      </div>
+      <Tooltip label="Dispensar" side="left">
+        <button
+          type="button"
+          onClick={onDispensar}
+          aria-label={`Dispensar aviso de ${aviso.action === "BAN" ? "banimento" : "expulsão"} de ${aviso.guildName}`}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
+        >
+          <X size={16} />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
 
 /**
  * Rótulo do botão — é o que o leitor de tela anuncia e o que o tooltip mostra.
