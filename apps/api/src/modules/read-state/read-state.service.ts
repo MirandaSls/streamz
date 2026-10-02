@@ -83,7 +83,9 @@ export class ReadStateService {
     const [ultimas, lidos, mencoes, respostas, naoLidas] = await Promise.all([
       this.prisma.message.groupBy({
         by: ["channelId"],
-        where: { channelId: { in: channelIds } },
+        // a narração de chamada não é novidade: sem isso o `isUnread` do
+        // contrato (lastMessageAt > lastReadAt) acenderia o canal por ela
+        where: { channelId: { in: channelIds }, type: { not: "SYSTEM_CALL" } },
         _max: { createdAt: true },
       }),
       this.prisma.readState.findMany({
@@ -165,6 +167,7 @@ export class ReadStateService {
         ON r."channelId" = m."channelId" AND r."userId" = ${userId}
       WHERE m."channelId" IN (${Prisma.join(channelIds)})
         AND m."authorId" <> ${userId}
+        AND m."type" <> 'SYSTEM_CALL'
         AND (r."lastReadAt" IS NULL OR m."createdAt" > r."lastReadAt")
       GROUP BY m."channelId"
     `;

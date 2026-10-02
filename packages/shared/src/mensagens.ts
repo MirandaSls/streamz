@@ -40,6 +40,19 @@ export function isSystemMessage(m: Pick<Message, "type">): boolean {
   return m.type !== "DEFAULT";
 }
 
+/**
+ * Esta mensagem entra na contabilidade de não lidas/notificação?
+ *
+ * A narração de chamada (`SYSTEM_CALL`) é histórico, não aviso: quem estava na
+ * chamada já sabe, e quem perdeu vê o toque/ligação perdida em outro lugar. Por
+ * isso nem o início nem o fim dela geram não lido, badge, som ou notificação —
+ * ela só aparece na timeline. A efêmera também não conta (some ao recarregar).
+ * Fonte única da regra: a API aplica o equivalente em SQL (`read-state`).
+ */
+export function contaParaNaoLido(m: Partial<Pick<Message, "type" | "efemera">>): boolean {
+  return m.efemera !== true && m.type !== "SYSTEM_CALL";
+}
+
 // ── Chamada de conversa direta ──────────────────────────────
 
 /**

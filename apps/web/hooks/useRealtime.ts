@@ -655,7 +655,14 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   // toca som (a regra e o porquê estão em `contaComoNaoLida`). Quem a recebeu
   // está olhando para a tela: foi ele quem acabou de apertar Enter num
   // `/comando`.
-  if (!contaComoNaoLida(message)) return;
+  if (!contaComoNaoLida(message)) {
+    // a chamada não notifica, mas continua sendo a última coisa da conversa:
+    // a linha de prévia da DM mostra "iniciou uma chamada", como sempre
+    if (message.type === "SYSTEM_CALL" && !message.guildId) {
+      useDMs.getState().aplicarPrevia(message);
+    }
+    return;
+  }
 
   const me = useAuth.getState().user;
   const mine = message.author.id === currentUserId;

@@ -1,4 +1,4 @@
-import { MAX_MESSAGE_LENGTH } from "@streamz/shared";
+import { MAX_MESSAGE_LENGTH, contaParaNaoLido } from "@streamz/shared";
 import type { Attachment, Message, MessageReplyRef, PublicUser, Sticker } from "@streamz/shared";
 
 /**
@@ -40,12 +40,16 @@ export { MAX_MESSAGE_LENGTH };
  * de que há algo esperando por mim lá — e depois de um F5 não haveria nada, só
  * um contador teimando por uma mensagem que já não existe.
  *
+ * A narração de chamada (`SYSTEM_CALL`) também não: é histórico na timeline,
+ * nunca aviso (a regra está em `contaParaNaoLido`, no contrato, porque a API
+ * aplica a mesma na contagem de não lidas).
+ *
  * A regra mora aqui, e não solta dentro do `useRealtime`, porque é decisão de
  * produto e não detalhe de assinatura de evento: quem mexer nas não lidas
  * amanhã encontra o "por quê" junto do "o quê".
  */
-export function contaComoNaoLida(message: Pick<Message, "efemera">): boolean {
-  return message.efemera !== true;
+export function contaComoNaoLida(message: Partial<Pick<Message, "efemera" | "type">>): boolean {
+  return contaParaNaoLido(message);
 }
 
 /** Corta o excesso pelo topo (o mais antigo é o que dá para repaginar). */
