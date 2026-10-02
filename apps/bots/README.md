@@ -7,10 +7,10 @@ Bots que **nós** escrevemos, com nome do Streamz, hospedados nesta instância, 
 que aparecem em "Descobrir aplicativos" como aplicativos oficiais.
 
 Não são clones de bots de terceiros. Aqueles (todo mundo sabe quais) são
-serviços fechados rodando na infraestrutura de quem os fez, conectados ao
-`discord.com` com o token deles — não há nada que o Streamz possa expor que os
-faça falar com a gente (§2 de `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md`). O que
-dá para fazer é escrever os nossos, e é isto.
+serviços fechados rodando na infraestrutura de quem os fez, conectados à
+plataforma de origem com o token deles — não há nada que o Streamz possa expor
+que os faça falar com a gente (§2 do documento de compatibilidade de bots, em
+`docs/`). O que dá para fazer é escrever os nossos, e é isto.
 
 | | |
 |---|---|
@@ -98,7 +98,7 @@ docker compose --profile bots up -d --build bot-cargos
 | `BOTS_DADOS_DIR` | `/dados` | o estado dos bots que têm estado (§5 do `CONTRATO.md`) |
 | `BOTS_PREFIXO` | `!` | o prefixo da alternativa ao `/` |
 | `LOG_FORMATO` / `LOG_NIVEL` | `json` / `info` | log |
-| `BOTS_DEBUG` | — | `1` liga o `debug` do discord.js |
+| `BOTS_DEBUG` | — | `1` liga o log de `debug` da biblioteca de bots |
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_SENHA` | `lavalink` / `2333` / `streamz` | o servidor de áudio |
 | `LAVALINK_BUSCA` | `ytsearch` | plataforma de busca padrão |
 | `MUSICA_VOLUME_PADRAO` | `60` | volume ao entrar |

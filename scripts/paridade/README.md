@@ -1,10 +1,10 @@
 # Passeio de paridade (onda 0.7)
 
-Ferramental do passeio do `docs/PLANO-PARIDADE-DISCORD.md` (§3, passos 4–5, e §4,
-onda 0.7): uma **bancada isolada** desta worktree, uma **semente determinística**
-com um servidor que tem de tudo, as **capturas** das 70 telas do `telas.json`
-(52 desktop 1920×1080, 18 celular 390×844) e a **folha lado a lado** (nosso ×
-Discord).
+Ferramental do passeio do plano de paridade (em `docs/`; §3, passos 4–5, e
+§4, onda 0.7): uma **bancada isolada** desta worktree, uma **semente
+determinística** com um servidor que tem de tudo, as **capturas** das 70 telas
+do `telas.json` (52 desktop 1920×1080, 18 celular 390×844) e a **folha lado a
+lado** (nosso × referência).
 
 | Arquivo | Faz |
 |---|---|
@@ -123,8 +123,8 @@ Estado local em `.claude/paridade/` (ignorado pelo git): `segredos.env` e
   imagens carregadas. Celular com `isMobile`, `hasTouch` e gestos de **toque**
   (`tap`, toque longo por CDP), porque o `click` do Playwright manda
   `pointerType: "mouse"` e o toque longo do app ignora mouse. As barras de
-  rolagem ficam visíveis (o Playwright as esconde por padrão em modo sem cabeça;
-  o Discord mostra a dele).
+  rolagem ficam visíveis (o Playwright as esconde por padrão em modo sem
+  cabeça; a referência mostra a dela).
 
 ## A semente
 
@@ -133,7 +133,7 @@ convite, conversa e aplicativo vão pelas rotas REST; toda mensagem, reação,
 edição, "remover prévia", enquete e voto vai pelo **gateway** (`message.create`
 etc.), como manda o CLAUDE.md — as regras de permissão e as mensagens de sistema
 (entrada, fixação) saem iguais às de um usuário. A mensagem do bot vai pela
-casca de compatibilidade do Discord (`POST /api/v10/channels/:id/messages`, com
+casca de compatibilidade de bots (`POST /api/v10/channels/:id/messages`, com
 `Authorization: Bot`), que é por onde um bot de verdade escreve.
 
 **Prisma só onde a API não deixa**, e só nisto:
@@ -198,7 +198,7 @@ navegador só agenda a saída, com carência de reconexão).
 
 | Fora | Por quê |
 |---|---|
-| Embed rico e botões **renderizados** | `Message` não tem `embeds`/`components`: a casca achata o embed em texto e descarta os componentes (`discord-compat/rest/messages.controller.ts:161-166`, `traducao/embed.ts`). A mensagem é semeada no formato do Discord e sai achatada até a onda 3 |
+| Embed rico e botões **renderizados** | `Message` não tem `embeds`/`components`: a casca achata o embed em texto e descarta os componentes (`rest/messages.controller.ts:161-166` e `traducao/embed.ts`, na casca de compatibilidade). A mensagem é semeada no formato de embed padrão e sai achatada até a onda 3 |
 | Avatar, ícone do servidor, faixa com imagem, emoji personalizado, figurinha, som | todos exigem o storage (R2); sem ele as rotas respondem 503. Avatares saem com as iniciais |
 | Moderação de voz fotografada (expulsar da sala, mover de canal) | o `RoomServiceClient` da API não alcança o LiveKit da bancada — ver a ressalva de `LIVEKIT_URL` em "Decisões" |
 | "Falando" com áudio real | sem dispositivo de microfone no contêiner; ligar o microfone falso do Chromium acenderia o anel de forma não determinística (ver "Decisões") — o passeio não depende disso |
@@ -240,10 +240,11 @@ do Playwright — sem Pillow. Aceita as duas formas do `referencias.json`: a pla
 (`{ "<id>": [{ "arquivo", "nota" }] }`) e a aninhada por plataforma que o 0.7c
 gravou (`{ "desktop": { "<id>": [...] } }`, com `{ "lacuna": "…" }` onde não há
 imagem boa — a folha mostra o motivo). Caminho relativo é tentado contra
-`--refs` e contra `--refs/docs/referencias-discord`; absoluto (os prints 1:1 de
-`/opt/stack/streamz/docs/Reference`, que o `bancada.sh` monta no mesmo caminho)
-vale como está. O `index.html` lista toda folha existente, com selos de "captura
-falhou", "sem referência"/"lacuna" e "referência não encontrada".
+`--refs` e contra a pasta de referências em `docs/` dentro dele; absoluto (os
+prints 1:1 de `/opt/stack/streamz/docs/Reference`, que o `bancada.sh` monta no
+mesmo caminho) vale como está. O `index.html` lista toda folha existente, com
+selos de "captura falhou", "sem referência"/"lacuna" e "referência não
+encontrada".
 
 ## Onde a primeira execução deve falhar (olhar primeiro)
 
@@ -309,8 +310,8 @@ falhou", "sem referência"/"lacuna" e "referência não encontrada".
   lido) no boot.
 - `apps/api/src/modules/onboarding/onboarding.service.ts:185` — "X entrou no
   servidor" só com canal de sistema.
-- `apps/api/src/modules/discord-compat/rest/messages.controller.ts:161` — embed
-  achatado; `:166` — componentes descartados.
+- `rest/messages.controller.ts:161`, no módulo de compatibilidade de bots
+  (`apps/api/src/modules/`) — embed achatado; `:166` — componentes descartados.
 - `apps/web/components/layout/ChannelSidebar.tsx:759` (`data-channel-button`),
   `:217` (`Criar canal em …`), `:986` (menu do servidor).
 - `apps/web/components/layout/GuildRail.tsx:201` (rótulo com "(não lido)"),
