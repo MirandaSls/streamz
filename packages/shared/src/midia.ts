@@ -448,6 +448,24 @@ export function youtubeVideoId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+export type SpotifyTipo = "playlist" | "album" | "track" | "artist" | "episode" | "show";
+
+/**
+ * Tipo e id de um link do Spotify embutível, ou null. Troca o card de prévia
+ * pelo player oficial, como o Discord. O prefixo `/intl-xx/` (links com locale)
+ * e a query (`?si=`) não fazem parte da identidade do conteúdo. O id é
+ * base62 de 22 caracteres; qualquer outra forma vira null para nunca
+ * interpolar texto arbitrário na URL do iframe.
+ */
+export function spotifyEmbedDaUrl(url: string): { tipo: SpotifyTipo; id: string } | null {
+  const u = partesDaUrl(url);
+  if (!u || u.host !== "open.spotify.com") return null;
+  const m = u.path.match(
+    /^(?:\/intl-[A-Za-z-]+)?\/(playlist|album|track|artist|episode|show)\/([A-Za-z0-9]{22})\/?$/,
+  );
+  return m ? { tipo: m[1] as SpotifyTipo, id: m[2] } : null;
+}
+
 /** true se a URL aponta direto para uma imagem (vira anexo visual, não card). */
 export function isDirectImageUrl(url: string): boolean {
   const u = partesDaUrl(url);

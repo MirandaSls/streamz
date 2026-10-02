@@ -33,6 +33,7 @@ import {
   isSystemMessage,
   mentionsMe as ehMencaoParaMim,
   messageLinkPath,
+  spotifyEmbedDaUrl,
   youtubeVideoId,
 } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
@@ -65,6 +66,7 @@ import MediaGroup from "@/components/media/MediaGroup";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
+import SpotifyEmbed from "@/components/media/SpotifyEmbed";
 // ── h-moderacao ──
 import PollCard from "@/components/polls/PollCard";
 import { emit, errorMessage } from "@/stores/socket-adapter";
@@ -311,12 +313,13 @@ function MessageItem({
       ? null
       : extractFirstUrl(message.content);
   const videoId = url ? youtubeVideoId(url) : null;
-  const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
+  const spotify = url && !videoId ? spotifyEmbedDaUrl(url) : null;
+  const imagemDireta = url && !videoId && !spotify && isDirectImageUrl(url) ? url : null;
   // convite do nosso servidor vira cartão com botão "Entrar", não prévia de
   // link — ver `lib/links-de-convite.ts` (o host do app de desktop não é o
   // host público, e era isso que fazia o cartão sumir lá)
   const codigoDeConvite = url ? codigoDeConviteDaUrl(url) : null;
-  const embed = useLinkEmbed(videoId || imagemDireta || codigoDeConvite ? null : url);
+  const embed = useLinkEmbed(videoId || spotify || imagemDireta || codigoDeConvite ? null : url);
 
   // abrir a edição pelo `↑` do composer não passa por `startEdit`: o rascunho
   // precisa ser semeado quando o estado da store vira este id
@@ -930,6 +933,7 @@ function MessageItem({
           </div>
         )}
         {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
+        {spotify && <SpotifyEmbed tipo={spotify.tipo} id={spotify.id} title={message.content} />}
         {imagemDireta && (
           <button
             type="button"
