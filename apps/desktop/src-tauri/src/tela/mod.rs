@@ -33,6 +33,12 @@ use serde::Serialize;
 // `cargo test` alcançá-los; o que é de plataforma (o `Loopback`) continua
 // atrás de `#[cfg]` lá dentro.
 mod audio;
+
+// O `lib.rs` registra no boot o processo do navegador do WebView2, que o
+// loopback do áudio da tela precisa deixar de fora (ver `audio/windows.rs`).
+#[cfg(windows)]
+pub use audio::registrar_processo_do_webview;
+
 #[cfg(tela_nativa)]
 mod captura;
 #[cfg(tela_nativa)]

@@ -20,7 +20,7 @@ mod windows;
 // `self::` é obrigatório: sem ele o caminho seria ambíguo com o crate
 // `windows`, que tem exatamente o mesmo nome do módulo.
 #[cfg(windows)]
-pub use self::windows::Loopback;
+pub use self::windows::{registrar_processo_do_webview, Loopback};
 
 // ScreenCaptureKit: o som do sistema chega por um `SCStream` só de áudio.
 #[cfg(target_os = "macos")]
