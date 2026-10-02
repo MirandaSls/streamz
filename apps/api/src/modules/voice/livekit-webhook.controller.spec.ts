@@ -56,11 +56,17 @@ const CANAIS: Record<string, { id: string; guildId: string | null; type: string 
  * só precisam saber se `aoEntrarNoLivekit` foi chamado, não do que ele faz. */
 function controllerComVoiceFake(opts: { configurado?: boolean } = {}) {
   const aoEntrarNoLivekitMock = vi.fn().mockResolvedValue(undefined);
+  const aoPublicarNoLivekitMock = vi.fn().mockResolvedValue(undefined);
   const voice = {
     isConfigured: () => opts.configurado ?? true,
     aoEntrarNoLivekit: aoEntrarNoLivekitMock,
+    aoPublicarNoLivekit: aoPublicarNoLivekitMock,
   } as unknown as VoiceService;
-  return { controller: new LivekitWebhookController(voice), aoEntrarNoLivekitMock };
+  return {
+    controller: new LivekitWebhookController(voice),
+    aoEntrarNoLivekitMock,
+    aoPublicarNoLivekitMock,
+  };
 }
 
 /** Assina um corpo com as credenciais do ambiente, do jeito que o LiveKit faz:
@@ -178,12 +184,12 @@ describe("LivekitWebhookController", () => {
     expect(aoEntrarNoLivekitMock).toHaveBeenCalledWith("voice:voz-1", "ana");
   });
 
-  it("outro evento (track_published) não chama aoEntrarNoLivekit", async () => {
-    const { controller, aoEntrarNoLivekitMock } = controllerComVoiceFake();
+  it("track_published vai para aoPublicarNoLivekit, não para aoEntrarNoLivekit", async () => {
+    const { controller, aoEntrarNoLivekitMock, aoPublicarNoLivekitMock } = controllerComVoiceFake();
     const corpo = JSON.stringify({
       event: "track_published",
       room: { name: "voice:voz-1" },
-      participant: { identity: "ana" },
+      participant: { identity: "bot:1547627370028990472" },
       id: "y",
       createdAt: "0",
     });
@@ -193,6 +199,25 @@ describe("LivekitWebhookController", () => {
 
     expect(resposta).toEqual({ ok: true });
     expect(aoEntrarNoLivekitMock).not.toHaveBeenCalled();
+    expect(aoPublicarNoLivekitMock).toHaveBeenCalledWith("voice:voz-1", "bot:1547627370028990472");
+  });
+
+  it("outro evento (room_finished) não chama nenhum dos dois", async () => {
+    const { controller, aoEntrarNoLivekitMock, aoPublicarNoLivekitMock } = controllerComVoiceFake();
+    const corpo = JSON.stringify({
+      event: "room_finished",
+      room: { name: "voice:voz-1" },
+      participant: { identity: "ana" },
+      id: "z",
+      createdAt: "0",
+    });
+    const header = await assinar(corpo);
+
+    const resposta = await controller.webhook(requisicaoCom(corpo), header);
+
+    expect(resposta).toEqual({ ok: true });
+    expect(aoEntrarNoLivekitMock).not.toHaveBeenCalled();
+    expect(aoPublicarNoLivekitMock).not.toHaveBeenCalled();
   });
 });
 

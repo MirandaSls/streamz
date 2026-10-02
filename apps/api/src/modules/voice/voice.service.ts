@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { createHmac } from "node:crypto";
-import { AccessToken, RoomServiceClient, TrackSource } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, TrackSource, type TrackInfo } from "livekit-server-sdk";
 import {
   Permission,
   hasPermission,
@@ -735,7 +735,7 @@ export class VoiceService {
     // substituído inteiro, então SPEAK/STREAM do alvo têm de ir junto.
     try {
       const access = await this.guilds.assertCanViewChannel(userId, emVoz.channelId);
-      await this.aplicarPermissaoNaSala(emVoz.channelId, userId, access.permissions, moderacao);
+      await this.aplicarModeracaoNaSala(emVoz.channelId, userId, access.permissions, moderacao);
     } catch (e) {
       // o banco já é a fonte da verdade; o próximo token/join reaplica
       this.logger.warn(
@@ -769,10 +769,106 @@ export class VoiceService {
   }
 
   /**
+   * Leva a moderação de voz à conexão de mídia de `userId`, humano ou bot.
+   *
+   * Bot não está no LiveKit com o cuid: a ponte entra como `bot:<snowflake>`
+   * (`assinarTokenDaPonte`). Mandar o `updateParticipant` para o cuid dava
+   * `not_found` — que é só debug —, e o "silenciar no servidor" gravava no
+   * banco, acendia o ícone e o bot seguia tocando para a sala inteira.
+   */
+  private async aplicarModeracaoNaSala(
+    channelId: string,
+    userId: string,
+    permissions: number,
+    moderacao: ModeracaoDeVoz,
+  ): Promise<void> {
+    // sem LiveKit não há o que aplicar — e poupa a consulta ao banco
+    if (!this.isConfigured()) return;
+    const ponte = await this.identidadeDaPonte(userId);
+    if (ponte) {
+      await this.silenciarFaixaDaPonte(this.salaDe("VOICE", channelId), ponte, moderacao);
+      return;
+    }
+    await this.aplicarPermissaoNaSala(channelId, userId, permissions, moderacao);
+  }
+
+  /** `bot:<snowflake>` quando `userId` é conta de bot; `null` para humano. */
+  private async identidadeDaPonte(userId: string): Promise<string | null> {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isBot: true, snowflake: true },
+    });
+    return u?.isBot ? `bot:${u.snowflake}` : null;
+  }
+
+  /**
+   * Silencia (ou devolve) a faixa que a ponte de um bot publica.
+   *
+   * Não reusa o `updateParticipant` dos humanos por dois motivos. O objeto de
+   * permissão é substituído inteiro, e o de humano (`permissaoDoParticipante`)
+   * daria ao bot `canSubscribe` e `canPublishData`, que o token da ponte nega
+   * de propósito. E tirar a fonte MICROPHONE faz o LiveKit **despublicar** a
+   * faixa: o navegador republica quando a permissão volta, mas a ponte
+   * (`apps/ponte-voz/livekit.go`) publica uma vez só e ficaria muda até o
+   * Lavalink reconectar.
+   *
+   * `mutePublishedTrack` mantém a faixa e faz o SFU parar de repassar o áudio.
+   * Devolver o som exige `room.enable_remote_unmute: true` na config do
+   * LiveKit; sem ela o servidor recusa ("remote unmute not enabled") e o bot
+   * segue mudo até reconectar — por isso o aviso nomeia a opção.
+   *
+   * Nunca lança, como `aplicarPermissaoNaSala`.
+   */
+  private async silenciarFaixaDaPonte(
+    sala: string,
+    identity: string,
+    moderacao: ModeracaoDeVoz,
+  ): Promise<void> {
+    const client = this.roomService();
+    if (!client) return;
+    // ensurdecer também cala, como em `permissaoDoParticipante`
+    const silenciar = moderacao.serverMute || moderacao.serverDeaf;
+    let faixas: TrackInfo[];
+    try {
+      faixas = (await client.getParticipant(sala, identity)).tracks;
+    } catch (e) {
+      const erro = e as { code?: string; message?: string };
+      if (erro?.code === "not_found") {
+        // a ponte ainda não entrou (o `voice.join` do op 4 vem antes dela):
+        // o webhook `track_published` reaplica quando a faixa existir
+        this.logger.debug(`LiveKit: ${identity} ainda não está em ${sala}`);
+      } else {
+        this.logger.warn(
+          `LiveKit não leu as faixas de ${identity} em ${sala}: ${erro?.message ?? String(e)}`,
+        );
+      }
+      return;
+    }
+    for (const faixa of faixas) {
+      // Só o que muda de estado: o join do bot também passa por aqui, e pedir
+      // "desmutar" uma faixa que já está no ar bateria à toa na recusa do
+      // `enable_remote_unmute`.
+      if (faixa.source !== TrackSource.MICROPHONE || faixa.muted === silenciar) continue;
+      try {
+        await client.mutePublishedTrack(sala, identity, faixa.sid, silenciar);
+      } catch (e) {
+        const detalhe = (e as { message?: string })?.message ?? String(e);
+        this.logger.warn(
+          silenciar
+            ? `LiveKit não silenciou a faixa de ${identity} em ${sala}: ${detalhe}`
+            : `LiveKit não devolveu o som de ${identity} em ${sala} — exige ` +
+                `room.enable_remote_unmute: true na config do LiveKit: ${detalhe}`,
+        );
+      }
+    }
+  }
+
+  /**
    * Troca a permissão do participante que **já está** na sala do LiveKit.
    *
-   * Só a identidade principal: a de tela (`#tela`) só publica tela e não
-   * assina nada, então nem o silêncio nem a surdez mudam o que ela pode.
+   * Só a identidade principal de **humano**: a de tela (`#tela`) só publica
+   * tela e não assina nada, então nem o silêncio nem a surdez mudam o que ela
+   * pode; bot vai por `silenciarFaixaDaPonte` (ver `aplicarModeracaoNaSala`).
    *
    * **Nunca lança** pelo LiveKit, como `removerDaSala`: `not_found` é o caso
    * comum (o estado do Streamz à frente da conexão de mídia) e o resto fica no
@@ -823,7 +919,7 @@ export class VoiceService {
     permissions: number,
   ): void {
     void this.moderacaoDe(userId, guildId)
-      .then((moderacao) => this.aplicarPermissaoNaSala(channelId, userId, permissions, moderacao))
+      .then((moderacao) => this.aplicarModeracaoNaSala(channelId, userId, permissions, moderacao))
       .catch((e) =>
         this.logger.warn(
           `Falha ao reaplicar moderação de voz de ${userId}: ${e instanceof Error ? e.message : String(e)}`,
@@ -852,7 +948,8 @@ export class VoiceService {
     // só sala de canal de servidor tem moderação; `dm:` não tem moderador
     if (!sala.startsWith("voice:")) return;
     // a ponte de bots (`bot:<snowflake>`) e o participante de tela (`<userId>#tela`)
-    // não assinam nada no LiveKit — nada aqui se aplica a eles
+    // não assinam nada no LiveKit — nada aqui se aplica a eles (o silêncio do
+    // bot é reaplicado quando a faixa sai, em `aoPublicarNoLivekit`)
     if (identity.startsWith("bot:") || ehIdentidadeDeTela(identity)) return;
     const channelId = sala.slice("voice:".length);
     try {
@@ -879,6 +976,46 @@ export class VoiceService {
     } catch (e) {
       this.logger.warn(
         `Falha ao processar participant_joined de ${identity} em ${sala}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Chamado pelo webhook do LiveKit no evento `track_published`; só age na
+   * ponte de bots (`bot:<snowflake>`).
+   *
+   * A faixa da ponte nasce no ar — o token dela concede `canPublish` sempre —,
+   * e no `voice.join` do op 4 a ponte ainda nem entrou na sala para receber o
+   * silêncio. Sem isto o bot silenciado no servidor voltava a tocar a cada vez
+   * que o Lavalink reconecta. Humano não precisa: a permissão dele já vale
+   * antes de publicar (`aoEntrarNoLivekit`).
+   *
+   * Nunca lança, pelo mesmo motivo de `aoEntrarNoLivekit`.
+   */
+  async aoPublicarNoLivekit(sala: string, identity: string): Promise<void> {
+    if (!sala.startsWith("voice:") || !identity.startsWith("bot:")) return;
+    const snowflake = identity.slice("bot:".length);
+    // a ponte só assina `bot:<dígitos>`; qualquer outra coisa faria o `BigInt`
+    // abaixo lançar
+    if (!/^\d+$/.test(snowflake)) return;
+    const channelId = sala.slice("voice:".length);
+    try {
+      const channel = await this.canal(channelId);
+      if (!channel || !channel.guildId || channel.type !== "VOICE") return;
+      const bot = await this.prisma.user.findUnique({
+        where: { snowflake: BigInt(snowflake) },
+        select: { id: true, isBot: true },
+      });
+      if (!bot?.isBot) return;
+      const moderacao = await this.moderacaoDe(bot.id, channel.guildId);
+      // nada imposto: a faixa recém-publicada já está como deve
+      if (!moderacao.serverMute && !moderacao.serverDeaf) return;
+      await this.silenciarFaixaDaPonte(sala, identity, moderacao);
+    } catch (e) {
+      this.logger.warn(
+        `Falha ao processar track_published de ${identity} em ${sala}: ${
           e instanceof Error ? e.message : String(e)
         }`,
       );

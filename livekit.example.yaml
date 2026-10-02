@@ -19,6 +19,9 @@ rtc:
   tcp_port: 7881
   # dev em localhost: não tenta descobrir IP externo (STUN)
   use_external_ip: false
+room:
+  # desfazer o "silenciar no servidor" de um bot (ver livekit.prod.example.yaml)
+  enable_remote_unmute: true
 # formato: <api_key>: <api_secret>
 keys:
   devkey: TROQUE_POR_UM_SECRET_ALEATORIO_openssl_rand_hex_32

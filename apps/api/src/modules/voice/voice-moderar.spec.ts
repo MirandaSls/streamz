@@ -22,8 +22,17 @@ import {
  * comportamento do `updateParticipant` — chamado e tolerando `not_found` — é
  * o que se quer garantir.
  */
-const { updateParticipantMock, roomServiceClientMock } = vi.hoisted(() => {
+const {
+  updateParticipantMock,
+  getParticipantMock,
+  mutePublishedTrackMock,
+  roomServiceClientMock,
+} = vi.hoisted(() => {
   const updateParticipantMock = vi.fn().mockResolvedValue(undefined);
+  // implementação no `beforeEach` (precisa do `TrackSource`, que o hoist
+  // ainda não enxerga)
+  const getParticipantMock = vi.fn();
+  const mutePublishedTrackMock = vi.fn();
   // `roomService()` chama `new RoomServiceClient(...)`: a implementação
   // precisa ser uma function comum (não arrow) para aceitar `new` — uma arrow
   // function não é construtora e o `new` do serviço quebraria com
@@ -31,10 +40,12 @@ const { updateParticipantMock, roomServiceClientMock } = vi.hoisted(() => {
   const roomServiceClientMock = vi.fn().mockImplementation(function () {
     return {
       updateParticipant: updateParticipantMock,
+      getParticipant: getParticipantMock,
+      mutePublishedTrack: mutePublishedTrackMock,
       removeParticipant: vi.fn(),
     };
   });
-  return { updateParticipantMock, roomServiceClientMock };
+  return { updateParticipantMock, getParticipantMock, mutePublishedTrackMock, roomServiceClientMock };
 });
 
 vi.mock("livekit-server-sdk", async (importOriginal) => {
@@ -53,6 +64,14 @@ const CANAIS: Record<string, { id: string; guildId: string | null; type: string;
   texto: { id: "texto", guildId: "g1", type: "TEXT", name: "geral" },
 };
 
+/**
+ * Conta de bot de música. No LiveKit ela **não** é o cuid: a ponte de voz entra
+ * como `bot:<snowflake>` (`assinarTokenDaPonte`) — é essa diferença que fazia o
+ * "silenciar no servidor" de um bot cair em `not_found` e não calar nada.
+ */
+const BOT = { id: "bot-musica", snowflake: BigInt("1547627370028990472") };
+const IDENTIDADE_DO_BOT = `bot:${BOT.snowflake}`;
+
 function usuario(id: string) {
   return {
     id,
@@ -63,6 +82,7 @@ function usuario(id: string) {
     customStatusText: null,
     customStatusEmoji: null,
     customStatusExpiresAt: null,
+    ...(id === BOT.id ? { isBot: true, snowflake: BOT.snowflake } : {}),
   };
 }
 
@@ -129,8 +149,13 @@ function servico(permissoesDoAtor: number) {
       async findMany({ where }: { where: { id: { in: string[] } } }) {
         return where.id.in.map(usuario);
       },
-      async findUnique({ where }: { where: { id: string } }) {
-        return usuario(where.id);
+      // por id (moderação) ou por snowflake (webhook da ponte, que só conhece
+      // a identity `bot:<snowflake>`)
+      async findUnique({ where }: { where: { id?: string; snowflake?: bigint } }) {
+        if (where.snowflake !== undefined) {
+          return where.snowflake === BOT.snowflake ? usuario(BOT.id) : null;
+        }
+        return usuario(where.id!);
       },
     },
     channel: {
@@ -164,8 +189,18 @@ function servico(permissoesDoAtor: number) {
     voice: new VoiceService(guilds, prisma, realtime),
     emitToGuild,
     guildMemberUpdate,
+    guildMemberRows,
     assertCanModerarVoz,
   };
+}
+
+/**
+ * A faixa que a ponte do bot publica, com o `muted` vivo: o mock do
+ * `mutePublishedTrack` grava nela, como o SFU faria, e o `getParticipant`
+ * seguinte já a vê silenciada.
+ */
+function faixaDaPonte(): { sid: string; source: TrackSource; muted: boolean } {
+  return { sid: "TR_musica", source: TrackSource.MICROPHONE, muted: false };
 }
 
 describe("permissaoDoParticipante", () => {
@@ -382,5 +417,158 @@ describe("VoiceService.moderarVoz", () => {
       voice.moderarVoz("dono", "g1", { userId: "ana", mute: true }),
     ).resolves.toBeUndefined();
     expect(guildMemberUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
+  let faixa: ReturnType<typeof faixaDaPonte>;
+
+  beforeEach(() => {
+    process.env.LIVEKIT_API_KEY = "key-de-teste";
+    process.env.LIVEKIT_API_SECRET = "segredo-de-teste";
+    process.env.LIVEKIT_URL = "wss://livekit.teste";
+    roomServiceClientMock.mockClear();
+    updateParticipantMock.mockReset().mockResolvedValue(undefined);
+    faixa = faixaDaPonte();
+    // só a identidade da ponte existe na sala; o cuid do bot dá `not_found`,
+    // que é exatamente o que o LiveKit de produção respondia
+    getParticipantMock.mockReset().mockImplementation(async (_sala: string, identity: string) => {
+      if (identity !== IDENTIDADE_DO_BOT) throw { code: "not_found", message: "participant not found" };
+      return { identity, tracks: [{ ...faixa }] };
+    });
+    mutePublishedTrackMock
+      .mockReset()
+      .mockImplementation(async (_sala: string, _identity: string, _sid: string, muted: boolean) => {
+        faixa.muted = muted;
+        return { ...faixa };
+      });
+  });
+
+  /** Bot na sala e a reaplicação do join (dispara e esquece) já assentada. */
+  async function botNaVoz(permissoes: number) {
+    const s = servico(permissoes);
+    await s.voice.join(BOT.id, "voz-1");
+    await vi.waitFor(() => expect(getParticipantMock).toHaveBeenCalled());
+    getParticipantMock.mockClear();
+    return s;
+  }
+
+  it("join do bot sem moderação não mexe na faixa nem na permissão dele", async () => {
+    await botNaVoz(0);
+
+    expect(mutePublishedTrackMock).not.toHaveBeenCalled();
+    // o `updateParticipant` de humano daria ao bot canSubscribe/canPublishData
+    expect(updateParticipantMock).not.toHaveBeenCalled();
+  });
+
+  it("silenciar no servidor cala a faixa de `bot:<snowflake>`, não o cuid", async () => {
+    const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
+
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
+
+    expect(getParticipantMock).toHaveBeenCalledWith("voice:voz-1", IDENTIDADE_DO_BOT);
+    expect(mutePublishedTrackMock).toHaveBeenCalledTimes(1);
+    expect(mutePublishedTrackMock).toHaveBeenCalledWith(
+      "voice:voz-1",
+      IDENTIDADE_DO_BOT,
+      "TR_musica",
+      true,
+    );
+    expect(updateParticipantMock).not.toHaveBeenCalled();
+  });
+
+  it("desfazer o silêncio devolve o som da mesma faixa", async () => {
+    const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
+    mutePublishedTrackMock.mockClear();
+
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false });
+
+    expect(mutePublishedTrackMock).toHaveBeenCalledTimes(1);
+    expect(mutePublishedTrackMock).toHaveBeenCalledWith(
+      "voice:voz-1",
+      IDENTIDADE_DO_BOT,
+      "TR_musica",
+      false,
+    );
+  });
+
+  it("ensurdecer o bot também cala a faixa — como no humano, surdez impede falar", async () => {
+    const { voice } = await botNaVoz(Permission.DEAFEN_MEMBERS);
+
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, deaf: true });
+
+    expect(mutePublishedTrackMock).toHaveBeenCalledWith(
+      "voice:voz-1",
+      IDENTIDADE_DO_BOT,
+      "TR_musica",
+      true,
+    );
+  });
+
+  it("LiveKit recusando devolver o som (sem enable_remote_unmute) não derruba a moderação", async () => {
+    const { voice, guildMemberUpdate } = await botNaVoz(Permission.MUTE_MEMBERS);
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
+    mutePublishedTrackMock.mockRejectedValueOnce({
+      code: "failed_precondition",
+      message: "remote unmute not enabled",
+    });
+
+    await expect(
+      voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false }),
+    ).resolves.toBeUndefined();
+    expect(guildMemberUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { voiceMuted: false } }),
+    );
+  });
+});
+
+describe("VoiceService.aoPublicarNoLivekit — bot que entra já silenciado", () => {
+  let faixa: ReturnType<typeof faixaDaPonte>;
+
+  beforeEach(() => {
+    process.env.LIVEKIT_API_KEY = "key-de-teste";
+    process.env.LIVEKIT_API_SECRET = "segredo-de-teste";
+    process.env.LIVEKIT_URL = "wss://livekit.teste";
+    updateParticipantMock.mockReset().mockResolvedValue(undefined);
+    faixa = faixaDaPonte();
+    getParticipantMock.mockReset().mockImplementation(async (_sala: string, identity: string) => ({
+      identity,
+      tracks: [{ ...faixa }],
+    }));
+    mutePublishedTrackMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("bot com voiceMuted gravado: a faixa recém-publicada é calada", async () => {
+    const { voice, guildMemberRows } = servico(0);
+    guildMemberRows.set(BOT.id, { voiceMuted: true, voiceDeafened: false });
+
+    await voice.aoPublicarNoLivekit("voice:voz-1", IDENTIDADE_DO_BOT);
+
+    expect(mutePublishedTrackMock).toHaveBeenCalledWith(
+      "voice:voz-1",
+      IDENTIDADE_DO_BOT,
+      "TR_musica",
+      true,
+    );
+  });
+
+  it("bot sem moderação: nem consulta o LiveKit", async () => {
+    const { voice } = servico(0);
+
+    await voice.aoPublicarNoLivekit("voice:voz-1", IDENTIDADE_DO_BOT);
+
+    expect(getParticipantMock).not.toHaveBeenCalled();
+    expect(mutePublishedTrackMock).not.toHaveBeenCalled();
+  });
+
+  it("faixa de humano é ignorada — a permissão dele já vale antes de publicar", async () => {
+    const { voice, guildMemberRows } = servico(0);
+    guildMemberRows.set("ana", { voiceMuted: true, voiceDeafened: false });
+
+    await voice.aoPublicarNoLivekit("voice:voz-1", "ana");
+
+    expect(getParticipantMock).not.toHaveBeenCalled();
+    expect(mutePublishedTrackMock).not.toHaveBeenCalled();
   });
 });
