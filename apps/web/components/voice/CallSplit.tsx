@@ -123,6 +123,67 @@ function guardar(chave: string, valor: string) {
   }
 }
 
+/**
+ * Arraste do divisor, compartilhado pelas duas divisões.
+ *
+ * Três coisas separam isto de um `pointermove` ligado direto ao estado — que era
+ * o que travava: (1) o movimento é **coalescido por quadro** (`requestAnimationFrame`):
+ * mouse de 1000 Hz não pode virar 1000 reflows de um palco com vídeo; (2) o
+ * ponteiro fica **capturado** no divisor, então `<video>`, tiles e o chat por
+ * baixo não roubam o evento nem disparam hover/relayout no caminho; (3) o
+ * cancelamento (`pointercancel`, perda da captura) encerra o gesto como um soltar,
+ * senão o cursor e o `pointer-events: none` ficariam presos.
+ */
+function iniciarArraste(
+  e: ReactPointerEvent<HTMLDivElement>,
+  cursor: string,
+  aoMover: (ev: PointerEvent) => void,
+  aoSoltar: (ev: PointerEvent) => void,
+  aoTerminar: () => void,
+) {
+  e.preventDefault();
+  const alvo = e.currentTarget;
+  const id = e.pointerId;
+  try {
+    alvo.setPointerCapture(id);
+  } catch {
+    // ponteiro já inativo: os listeners em `window` ainda cobrem o gesto
+  }
+  let quadro = 0;
+  let ultimo: PointerEvent | null = null;
+  const aplicarPendente = () => {
+    quadro = 0;
+    if (ultimo) aoMover(ultimo);
+    ultimo = null;
+  };
+  const mover = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    ultimo = ev;
+    if (!quadro) quadro = requestAnimationFrame(aplicarPendente);
+  };
+  const encerrar = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    window.removeEventListener("pointermove", mover);
+    window.removeEventListener("pointerup", encerrar);
+    window.removeEventListener("pointercancel", encerrar);
+    if (quadro) cancelAnimationFrame(quadro);
+    quadro = 0;
+    ultimo = null;
+    try {
+      alvo.releasePointerCapture(id);
+    } catch {
+      // já liberado
+    }
+    document.body.style.cursor = "";
+    aoSoltar(ev);
+    aoTerminar();
+  };
+  document.body.style.cursor = cursor;
+  window.addEventListener("pointermove", mover);
+  window.addEventListener("pointerup", encerrar);
+  window.addEventListener("pointercancel", encerrar);
+}
+
 function lerLargura(): number | null {
   if (typeof window === "undefined") return null;
   try {
@@ -198,10 +259,17 @@ export function involucroDoPalco(
   expandido: boolean,
   altura: number,
   disponivel: number,
+  /**
+   * Divisor sendo arrastado: o palco não recebe ponteiro. Com o ponteiro
+   * capturado ele já não roubaria o gesto, mas o hover dos tiles (e a moldura que
+   * reaparece com o mouse) reagiria a cada quadro de um palco que está mudando
+   * de tamanho.
+   */
+  arrastando = false,
 ): { className: string; style: CSSProperties | undefined } {
   if (expandido) return { className: "flex min-h-0 flex-1 flex-col", style: undefined };
   return {
-    className: "relative flex min-h-0 shrink-0 flex-col",
+    className: `relative flex min-h-0 shrink-0 flex-col ${arrastando ? "pointer-events-none select-none" : ""}`,
     style: {
       height: altura,
       maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)`,
@@ -212,6 +280,9 @@ export function involucroDoPalco(
 /** Conversa direta: faixa de chamada em cima, conversa embaixo. */
 function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNode }) {
   const raiz = useRef<HTMLDivElement>(null);
+  const palcoRef = useRef<HTMLDivElement>(null);
+  /** Só liga/desliga o `pointer-events` do conteúdo: uma renderização por gesto, não por pixel. */
+  const [arrastando, setArrastando] = useState(false);
   /** Altura real da coluna; recalculada a cada mudança de tamanho, não só na montagem. */
   const [disponivel, setDisponivel] = useState(0);
   const [proporcao, setProporcao] = useState<number | null>(null);
@@ -283,18 +354,23 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
 
   const comecarArraste = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
       const topo = raiz.current?.getBoundingClientRect().top ?? 0;
-      const mover = (ev: PointerEvent) => aplicarAltura(ev.clientY - topo, false);
-      const soltar = (ev: PointerEvent) => {
-        window.removeEventListener("pointermove", mover);
-        window.removeEventListener("pointerup", soltar);
-        document.body.style.cursor = "";
-        aplicarAltura(ev.clientY - topo, true);
-      };
-      document.body.style.cursor = "row-resize";
-      window.addEventListener("pointermove", mover);
-      window.addEventListener("pointerup", soltar);
+      setArrastando(true);
+      iniciarArraste(
+        e,
+        "row-resize",
+        // durante o gesto a altura vai direto para o DOM: nenhum `setState`, então
+        // nada do React (nem o ResizeObserver, que observa a coluna e não o palco)
+        // reage a cada quadro. O estado e o localStorage só entram ao soltar.
+        (ev) => {
+          const total = disponivelRef.current;
+          const el = palcoRef.current;
+          if (total <= 0 || !el) return;
+          el.style.height = `${alturaDoPalco((ev.clientY - topo) / total, total)}px`;
+        },
+        (ev) => aplicarAltura(ev.clientY - topo, true),
+        () => setArrastando(false),
+      );
     },
     [aplicarAltura],
   );
@@ -312,7 +388,12 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
   return (
     <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background-base-lower">
       {/* as duas medidas e o porquê de cada uma estão em `involucroDoPalco` */}
-      <div {...involucroDoPalco(expandido, altura, disponivel)}>{chamada}</div>
+      <div
+        ref={palcoRef}
+        {...involucroDoPalco(expandido, altura, disponivel, arrastando)}
+      >
+        {chamada}
+      </div>
 
       <div
         role="separator"
@@ -328,7 +409,7 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         // de pega**: `border-y-2` dá 5px de alvo, e 5px não se acerta com o
         // dedo — o divisor existia e não era arrastável. O `bg-clip-content`
         // mantém a borda transparente, então nada disso aparece na tela.
-        className={`h-px shrink-0 cursor-row-resize border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none ${
+        className={`h-px shrink-0 cursor-row-resize touch-none border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none ${
           ehMobile ? PEGA_TOQUE : "border-y-2"
         } ${expandido ? "hidden" : ""}`}
       />
@@ -336,7 +417,15 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
       {/* `hidden` no lugar de `flex`, e não os dois na mesma classe: as duas
           declaram `display`, e qual vence sairia da ordem do CSS gerado, não
           da ordem em que estão escritas aqui. */}
-      <div className={expandido ? "hidden" : "flex min-h-0 min-w-0 flex-1 flex-col"}>{chat}</div>
+      <div
+        className={
+          expandido
+            ? "hidden"
+            : `flex min-h-0 min-w-0 flex-1 flex-col ${arrastando ? "pointer-events-none select-none" : ""}`
+        }
+      >
+        {chat}
+      </div>
     </div>
   );
 }
@@ -356,6 +445,7 @@ function DivisaoHorizontal({
   const raiz = useRef<HTMLDivElement>(null);
   const [disponivel, setDisponivel] = useState(0);
   const [desejada, setDesejada] = useState<number | null>(null);
+  const [arrastando, setArrastando] = useState(false);
 
   useEffect(() => {
     const el = raiz.current;
@@ -384,18 +474,16 @@ function DivisaoHorizontal({
 
   const comecarArraste = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
       const direita = raiz.current?.getBoundingClientRect().right ?? 0;
-      const mover = (ev: PointerEvent) => aplicar(direita - ev.clientX, false);
-      const soltar = (ev: PointerEvent) => {
-        window.removeEventListener("pointermove", mover);
-        window.removeEventListener("pointerup", soltar);
-        document.body.style.cursor = "";
-        aplicar(direita - ev.clientX, true);
-      };
-      document.body.style.cursor = "col-resize";
-      window.addEventListener("pointermove", mover);
-      window.addEventListener("pointerup", soltar);
+      setArrastando(true);
+      // um `setState` por quadro (o `iniciarArraste` coalesce), não por evento
+      iniciarArraste(
+        e,
+        "col-resize",
+        (ev) => aplicar(direita - ev.clientX, false),
+        (ev) => aplicar(direita - ev.clientX, true),
+        () => setArrastando(false),
+      );
     },
     [aplicar],
   );
@@ -414,7 +502,11 @@ function DivisaoHorizontal({
 
   return (
     <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 bg-background-base-lower">
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">{chamada}</div>
+      <div
+        className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${arrastando ? "pointer-events-none select-none" : ""}`}
+      >
+        {chamada}
+      </div>
 
       <div
         role="separator"
@@ -426,12 +518,16 @@ function DivisaoHorizontal({
         tabIndex={0}
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}
-        className="w-px shrink-0 cursor-col-resize border-x-2 border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none"
+        className="w-px shrink-0 cursor-col-resize touch-none border-x-2 border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none"
       />
 
-      <PainelDeChatDaCall titulo={titulo} largura={largura} onFechar={onFecharChat}>
-        {chat}
-      </PainelDeChatDaCall>
+      <div
+        className={arrastando ? "pointer-events-none flex min-h-0 select-none" : "flex min-h-0"}
+      >
+        <PainelDeChatDaCall titulo={titulo} largura={largura} onFechar={onFecharChat}>
+          {chat}
+        </PainelDeChatDaCall>
+      </div>
     </div>
   );
 }
