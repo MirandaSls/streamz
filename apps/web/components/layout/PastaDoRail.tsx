@@ -267,7 +267,7 @@ export default function PastaDoRail({
       >
         <span
           aria-hidden="true"
-          className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-interactive-text-active transition-all duration-200 ${classeDaPilula(
+          className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-interactive-text-active transition-[height,opacity,transform] duration-200 ${classeDaPilula(
             { aberta, ativa, naoLido, lado },
           )}`}
         />
@@ -365,11 +365,11 @@ export default function PastaDoRail({
           servidores não continuam clicáveis por baixo de nada. */}
       <div
         id={idDaLista}
-        className={`grid transition-[grid-template-rows,visibility] duration-[var(--mov-hover)] ease-out motion-reduce:transition-none ${
+        className={`grid [contain:layout_paint] transition-[grid-template-rows,visibility] duration-[var(--mov-hover)] ease-out motion-reduce:transition-none ${
           aberta ? "visible grid-rows-[1fr]" : "invisible grid-rows-[0fr]"
         }`}
       >
-        <div className="min-h-0 overflow-hidden">
+        <div className="min-h-0 overflow-hidden [contain:layout_paint]">
           {/* 6px do cabeçalho ao primeiro servidor, 10 entre eles e 4 até a
               borda de baixo — medidos no print 01. */}
           <div role="group" aria-label={nome} className="flex flex-col gap-2.5 pb-1 pt-1.5">
