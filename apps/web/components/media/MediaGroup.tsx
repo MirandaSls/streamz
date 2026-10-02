@@ -16,6 +16,7 @@ import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import PreviaDeTexto from "@/components/media/PreviaDeTexto";
+import { baixarAnexo } from "@/lib/imagem-arquivo";
 import { ehTextoPrevisualizavel } from "@/lib/texto-longo";
 import { useAuth } from "@/stores/auth";
 import { useMessages } from "@/stores/messages";
@@ -302,20 +303,21 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
           {formatBytes(anexo.size)}
         </span>
       </span>
-      <a
-        href={anexo.url}
-        download={nome}
+      <button
+        type="button"
+        onClick={() => void baixarAnexo(anexo)}
         aria-label={`Baixar ${nome}`}
         /* `h-8 w-8` mede 32 (a raiz do app é 16px, ADR-0009), e no telefone
            este é o único jeito de guardar o arquivo: o menu de toque longo da
            mensagem não tem "baixar anexo". 44 literais no celular, como o
            resto dos alvos de dedo do app.
-           Fica `<a download>`, não `BotaoDeIcone`: o download nativo do
-           navegador exige uma âncora, e o primitivo só renderiza `<button>`. */
+           É `<button>`, não `<a download>`: a URL assinada é de outra origem
+           (R2) e o navegador ignora `download` nela; `baixarAnexo` busca os
+           bytes e salva por blob/diálogo nativo. */
         className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />
-      </a>
+      </button>
     </div>
   );
 }

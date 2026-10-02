@@ -71,6 +71,17 @@ describe("ehTextoPrevisualizavel", () => {
     ).toBe(true);
   });
 
+  it("chave pública, conf e env contam", () => {
+    expect(ehTextoPrevisualizavel({ filename: "aipe_md_ed25519.pub", size: 10 })).toBe(true);
+    expect(ehTextoPrevisualizavel({ filename: "nginx.conf", size: 10 })).toBe(true);
+    expect(ehTextoPrevisualizavel({ filename: "prod.env", size: 10 })).toBe(true);
+  });
+
+  it("chave privada (pem/key) e sem extensão não preveem", () => {
+    expect(ehTextoPrevisualizavel({ filename: "id.pem", size: 10 })).toBe(false);
+    expect(ehTextoPrevisualizavel({ filename: "aipe_md_ed25519", size: 10 })).toBe(false);
+  });
+
   it("extensão desconhecida não prevê", () => {
     expect(ehTextoPrevisualizavel({ filename: "arquivo.zip", size: 10 })).toBe(false);
   });
@@ -87,7 +98,7 @@ describe("ehTextoPrevisualizavel", () => {
 
 describe("recortarPrevia", () => {
   it("com sobra: corta nas primeiras linhas e avisa", () => {
-    const texto = Array.from({ length: 10 }, (_, i) => `linha ${i}`).join("\n");
+    const texto = Array.from({ length: LINHAS_DA_PREVIA_RECOLHIDA + 4 }, (_, i) => `linha ${i}`).join("\n");
     const { trecho, cortado } = recortarPrevia(texto, LINHAS_DA_PREVIA_RECOLHIDA);
     expect(trecho).toBe(
       Array.from({ length: LINHAS_DA_PREVIA_RECOLHIDA }, (_, i) => `linha ${i}`).join("\n"),

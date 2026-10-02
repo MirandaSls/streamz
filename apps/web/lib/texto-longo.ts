@@ -17,7 +17,7 @@ export const NOME_DO_TEXTO_LONGO = "message.txt";
 export const LIMITE_DA_PREVIA_BYTES = 64 * 1024;
 
 /** Linhas mostradas com a prévia recolhida. */
-export const LINHAS_DA_PREVIA_RECOLHIDA = 6;
+export const LINHAS_DA_PREVIA_RECOLHIDA = 10;
 
 /**
  * O texto passa do teto de uma mensagem?
@@ -62,6 +62,10 @@ const EXTENSOES_PREVISUALIZAVEIS = new Set([
   "txt",
   "md",
   "log",
+  "pub",
+  "conf",
+  "cfg",
+  "env",
   "csv",
   "json",
   "xml",
