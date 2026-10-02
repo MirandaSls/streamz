@@ -31,6 +31,8 @@ export const WS_EVENTS = {
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
   GUILD_REMOVED: "guild.removed",
+  /** Aviso de moderação (expulsão/banimento) novo — payload `ModerationNotice`, sala `user:<id>`. */
+  MODERATION_NOTICE_NEW: "moderation.notice.new",
   /**
    * Entrei num servidor: criei, resgatei um convite ou fui adicionado.
    *

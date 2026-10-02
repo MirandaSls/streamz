@@ -228,6 +228,21 @@ export interface InboxMention {
   guildName: string | null;
 }
 
+export type ModerationNoticeAction = "KICK" | "BAN";
+
+/**
+ * Aviso de moderação persistente na caixa de entrada (substitui a DM
+ * SYSTEM_MOD_NOTICE). `guildName` é snapshot porque o servidor pode sumir.
+ */
+export interface ModerationNotice {
+  id: string;
+  guildId: string | null;
+  guildName: string;
+  action: ModerationNoticeAction;
+  reason: string | null;
+  createdAt: string;
+}
+
 /** Um canal com não-lido, dentro do grupo do servidor. */
 export interface InboxUnreadChannel {
   channelId: string;

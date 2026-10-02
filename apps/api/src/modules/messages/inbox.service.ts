@@ -5,6 +5,7 @@ import type {
   InboxMention,
   InboxUnreadChannel,
   InboxUnreadGroup,
+  ModerationNotice,
 } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
@@ -158,6 +159,34 @@ export class InboxService {
       guildId: null,
     } satisfies ChannelReadEvent);
     return { channels: canais.length };
+  }
+
+  /**
+   * Avisos de moderação (expulsão/banimento) que o usuário ainda não dispensou.
+   * Ficam no banco porque quem foi removido já não está em sala nenhuma: o aviso
+   * precisa esperar até ele abrir o app.
+   */
+  async moderationNotices(userId: string): Promise<ModerationNotice[]> {
+    const linhas = await this.prisma.moderationNotice.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return linhas.map((n) => ({
+      id: n.id,
+      userId: n.userId,
+      guildId: n.guildId,
+      guildName: n.guildName,
+      action: n.action,
+      reason: n.reason,
+      createdAt: n.createdAt.toISOString(),
+    })) as ModerationNotice[];
+  }
+
+  /** Dispensa um aviso. `deleteMany` com `userId` impede apagar o de outra pessoa e é idempotente. */
+  async dismissModerationNotice(userId: string, id: string): Promise<{ ok: true }> {
+    await this.prisma.moderationNotice.deleteMany({ where: { id, userId } });
+    return { ok: true };
   }
 
   /** Nome/tipo do canal e nome do servidor, para rotular cada item da caixa. */

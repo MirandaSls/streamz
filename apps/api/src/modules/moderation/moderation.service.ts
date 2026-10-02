@@ -13,6 +13,7 @@ import {
 } from "@streamz/shared";
 import type {
   MemberUpdatedEvent,
+  ModerationNotice,
   MessagesBulkDeletedEvent,
   ReportReason,
   ReportView,
@@ -21,7 +22,6 @@ import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { calcularFim } from "./timeout";
@@ -37,7 +37,7 @@ export interface BanOptions extends KickOptions {
 
 /**
  * Ações de moderação que vão além de tirar alguém do servidor: castigo,
- * expulsão/banimento **com motivo, limpeza de mensagens e aviso na DM**, e a
+ * expulsão/banimento **com motivo, limpeza de mensagens e aviso na caixa de entrada**, e a
  * remoção de mensagens em lote.
  *
  * A remoção do membro em si continua sendo do `GuildsService` — é lá que mora a
@@ -51,7 +51,6 @@ export class ModerationService {
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
     private readonly audit: AuditService,
-    private readonly dms: DMsService,
   ) {}
 
   // ── castigo ────────────────────────────────────────────────
@@ -128,20 +127,20 @@ export class ModerationService {
 
   // ── expulsão e banimento com contexto ──────────────────────
 
-  /** Expulsa com motivo e avisa o expulso na DM. */
+  /** Expulsa com motivo e deixa aviso na caixa de entrada do expulso. */
   async kick(actorId: string, guildId: string, targetUserId: string, opts: KickOptions = {}) {
     const guild = await this.prisma.guild.findUnique({
       where: { id: guildId },
       select: { name: true },
     });
     const result = await this.guilds.kick(actorId, guildId, targetUserId, opts.reason);
-    await this.avisarNaDM(actorId, targetUserId, guild?.name ?? "um servidor", "expulso", opts.reason);
+    await this.avisarModeracao(targetUserId, guildId, guild?.name ?? "um servidor", "KICK", opts.reason);
     return result;
   }
 
   /**
    * Bane com motivo, opcionalmente apagando as mensagens recentes do banido, e
-   * avisa na DM.
+   * deixa aviso na caixa de entrada.
    *
    * A limpeza vem **antes** do banimento: depois de banido o alvo já saiu das
    * salas dos canais, e quem ficou precisa ver as mensagens sumirem ao vivo.
@@ -158,7 +157,7 @@ export class ModerationService {
     if (horas > 0) await this.purgarMensagens(guildId, targetUserId, horas, actorId);
 
     const result = await this.guilds.ban(actorId, guildId, targetUserId, opts.reason);
-    await this.avisarNaDM(actorId, targetUserId, guild?.name ?? "um servidor", "banido", opts.reason);
+    await this.avisarModeracao(targetUserId, guildId, guild?.name ?? "um servidor", "BAN", opts.reason);
     return result;
   }
 
@@ -428,52 +427,39 @@ export class ModerationService {
   }
 
   /**
-   * Manda o aviso na conversa direta com o moderador ("Você foi banido de X").
+   * Grava o aviso de expulsão/banimento na caixa de entrada do alvo e o empurra
+   * ao vivo na sala `user:<id>`. Não é DM: o alvo já perdeu o servidor, e uma
+   * conversa com o moderador exporia o ator e exigiria relação entre os dois.
    *
-   * Nunca lança: se a DM falhar, o banimento já aconteceu e desfazê-lo seria
-   * pior do que ficar sem o aviso.
+   * Nunca lança: a ação de moderação já aconteceu e desfazê-la por causa do
+   * aviso seria pior do que ficar sem ele.
    */
-  private async avisarNaDM(
-    actorId: string,
+  private async avisarModeracao(
     targetUserId: string,
+    guildId: string,
     guildName: string,
-    acao: "expulso" | "banido",
+    action: "KICK" | "BAN",
     reason?: string,
   ) {
     try {
-      const dm = await this.dms.openWith(actorId, targetUserId);
-      const motivo = reason?.trim() ? ` Motivo: ${reason.trim()}` : "";
-      const content = `Você foi ${acao} de ${guildName}.${motivo}`;
-      const message = await this.prisma.message.create({
+      const row = await this.prisma.moderationNotice.create({
         data: {
-          channelId: dm.id,
-          authorId: actorId,
-          content,
-          type: "SYSTEM_MOD_NOTICE",
+          userId: targetUserId,
+          guildId,
+          guildName,
+          action,
+          reason: reason?.trim() || null,
         },
-        include: { author: true },
       });
-      this.realtime.emitToChannel(dm.id, WS_EVENTS.MESSAGE_NEW, {
-        id: message.id,
-        channelId: dm.id,
-        guildId: null,
-        author: toPublicUser(message.author),
-        content,
-        createdAt: message.createdAt.toISOString(),
-        editedAt: null,
-        reactions: [],
-        parentId: null,
-        replyCount: 0,
-        attachments: [],
-        type: "SYSTEM_MOD_NOTICE",
-        sticker: null,
-        suppressEmbeds: false,
-        replyTo: null,
-        replyMention: false,
-        thread: null,
-        pinned: false,
-        poll: null,
-      });
+      const payload: ModerationNotice = {
+        id: row.id,
+        guildId: row.guildId,
+        guildName: row.guildName,
+        action,
+        reason: row.reason,
+        createdAt: row.createdAt.toISOString(),
+      };
+      this.realtime.emitToUser(targetUserId, WS_EVENTS.MODERATION_NOTICE_NEW, payload);
     } catch {
       // aviso é cortesia; a ação de moderação já está feita
     }

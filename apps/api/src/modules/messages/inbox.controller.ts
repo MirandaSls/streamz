@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { InboxService } from "./inbox.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
@@ -27,5 +27,15 @@ export class InboxController {
   @Post("read-all")
   markAllRead(@CurrentUser() user: JwtPayload) {
     return this.inbox.markAllRead(user.sub);
+  }
+
+  @Get("moderation-notices")
+  moderationNotices(@CurrentUser() user: JwtPayload) {
+    return this.inbox.moderationNotices(user.sub);
+  }
+
+  @Delete("moderation-notices/:id")
+  dismissModerationNotice(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.inbox.dismissModerationNotice(user.sub, id);
   }
 }

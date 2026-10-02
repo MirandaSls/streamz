@@ -10,7 +10,6 @@ import type { PrismaService } from "../../prisma/prisma.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { RealtimeService } from "../realtime/realtime.service";
 import type { AuditService } from "../audit/audit.service";
-import type { DMsService } from "../dms/dms.service";
 
 /**
  * `PATCH /guilds/:guildId/members/:userId/nickname` — cartão
@@ -82,7 +81,6 @@ function servicoCom(membros: Membro[], ranks: Record<string, number>) {
     guilds as unknown as GuildsService,
     realtime as unknown as RealtimeService,
     naoUsado as unknown as AuditService,
-    naoUsado as unknown as DMsService,
   );
   return { s, eventos, semPermissao };
 }

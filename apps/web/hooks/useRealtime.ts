@@ -64,6 +64,8 @@ import type {
   ReportView,
 } from "@streamz/shared";
 import { shouldNotifyMessage } from "@streamz/shared";
+import type { ModerationNotice } from "@streamz/shared";
+import { useInbox } from "@/stores/messages-inbox";
 // ── onda 3 ── interações de componente, modal e autocomplete
 import type {
   AutocompleteDeBotEvent,
@@ -130,6 +132,7 @@ export function useRealtime(currentUserId?: string): void {
   useEffect(() => {
     // ── e-configuracoes ── sem elas, tudo notifica (o padrão do contrato)
     void useNotifications.getState().load();
+    void useInbox.getState().carregarAvisos();
     // Carga inicial das listas. Elas só eram refeitas na *re*conexão do socket,
     // então recarregar a página (ou abrir um link direto) deixava o rail vazio:
     // a lista só existia para quem tinha criado/entrado no servidor na mesma
@@ -287,6 +290,10 @@ export function useRealtime(currentUserId?: string): void {
           left: null,
         }[reason];
         if (texto) ui.toast(texto, "error");
+      }),
+
+      on<ModerationNotice>(WS_EVENTS.MODERATION_NOTICE_NEW, (n) => {
+        useInbox.getState().adicionarAviso(n);
       }),
 
       // erros de escrita voltam por um canal só do gateway (`emitError`)

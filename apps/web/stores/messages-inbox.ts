@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { InboxMention, InboxUnreadGroup } from "@streamz/shared";
+import type { InboxMention, InboxUnreadGroup, ModerationNotice } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
@@ -20,22 +20,50 @@ import { ui } from "@/stores/ui";
 interface InboxState {
   mentions: InboxMention[];
   unread: InboxUnreadGroup[];
+  avisos: ModerationNotice[];
   loading: boolean;
 
+  carregarAvisos: () => Promise<void>;
+  adicionarAviso: (n: ModerationNotice) => void;
+  dispensarAviso: (id: string) => Promise<void>;
   load: () => Promise<void>;
   markAllRead: () => Promise<void>;
 }
 
-export const useInbox = create<InboxState>((set) => ({
+export const useInbox = create<InboxState>((set, get) => ({
   mentions: [],
   unread: [],
+  avisos: [],
   loading: false,
+
+  carregarAvisos: async () => {
+    try {
+      set({ avisos: await api.moderationNotices() });
+    } catch {
+      // silencioso: avisos são complemento e chegam também pelo WS
+    }
+  },
+
+  adicionarAviso: (n) =>
+    set((s) => (s.avisos.some((a) => a.id === n.id) ? s : { avisos: [n, ...s.avisos] })),
+
+  dispensarAviso: async (id) => {
+    const antes = get().avisos;
+    set({ avisos: antes.filter((a) => a.id !== id) });
+    try {
+      await api.dismissModerationNotice(id);
+    } catch (e) {
+      set({ avisos: antes });
+      ui.toast(errorMessage(e, "Não foi possível dispensar o aviso"), "error");
+    }
+  },
 
   load: async () => {
     set({ loading: true });
     try {
       const [mentions, unread] = await Promise.all([api.inboxMentions(25), api.inboxUnread()]);
       set({ mentions, unread, loading: false });
+      void get().carregarAvisos();
     } catch (e) {
       set({ loading: false });
       ui.toast(errorMessage(e, "Não foi possível carregar a caixa de entrada"), "error");
