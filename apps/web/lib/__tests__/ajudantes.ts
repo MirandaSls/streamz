@@ -12,5 +12,7 @@ export function resposta(status: number, corpo: unknown): Response {
     ok: status >= 200 && status < 300,
     status,
     json: async () => corpo,
+    // `request` lê o corpo como texto para tolerar resposta vazia (201 sem corpo)
+    text: async () => (corpo === undefined ? "" : JSON.stringify(corpo)),
   } as Response;
 }
