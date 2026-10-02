@@ -4,13 +4,15 @@ import type { ContextoDoBot } from "../runtime/tipos";
 import { escaparMarkdown, truncar } from "./formatar";
 import {
   MemoriaDeBloqueio,
-  consultasAlternativas,
+  PREFIXOS_ALTERNATIVOS,
   ehFonteAlternativa,
   limparTitulo,
 } from "./fontes-alternativas";
+import { ordenarPorPontuacao } from "./escolher-faixa";
 import { idDePlaylistDoSpotify, buscarPlaylistPeloEmbed } from "./spotify-embed";
 import { resolverEmOrdem } from "./playlist-spotify";
 import { embedDeInatividade } from "./embeds";
+import { ehPrevia } from "./previa";
 import { ArmazemDeConfiguracao } from "./configuracao";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
 import {
@@ -98,6 +100,8 @@ export function plataformaDeBusca(): string {
 
 /** Teto de faixas de autoplay seguidas sem ninguém mexer: evita tocar para sempre numa call vazia. */
 export const LIMITE_DE_AUTOPLAY_SEGUIDO = 20;
+/** Quantas outras versões se procuram para uma música que veio como prévia. */
+const MAX_TENTATIVAS_DE_PREVIA = 2;
 
 export class ServicoDeMusica {
   readonly manager: LavalinkManager;
@@ -116,6 +120,12 @@ export class ServicoDeMusica {
   private readonly autoplaySeguidas = new Map<string, number>();
   /** A faixa (`encoded`) que o autoplay acabou de enfileirar; qualquer outra no `trackStart` é pedido manual. */
   private readonly autoplayPendente = new Map<string, string>();
+  /** URIs que já se provaram prévia de ~30 s; nunca mais escolhidas (memória do processo). */
+  private readonly previas = new Set<string>();
+  /** Por servidor, a faixa atual: quando começou e se pausa/retomada tornou o relógio inconfiável. */
+  private readonly execucao = new Map<string, { encoded: string; inicio: number; interferiu: boolean }>();
+  /** Tentativas de achar outra versão, por servidor + título normalizado (máx. `MAX_TENTATIVAS_DE_PREVIA`). */
+  private readonly tentativasDePrevia = new Map<string, number>();
 
   constructor(private readonly ctx: ContextoDoBot) {
     const cliente = ctx.cliente as Client<true>;
@@ -194,6 +204,9 @@ export class ServicoDeMusica {
     );
 
     this.manager.on("trackStart", (jogador, faixa) => {
+      if (faixa?.encoded) {
+        this.execucao.set(jogador.guildId, { encoded: faixa.encoded, inicio: Date.now(), interferiu: false });
+      }
       // Faixa que não é a do autoplay = alguém tocou algo: o contador recomeça.
       if (faixa?.encoded && this.autoplayPendente.get(jogador.guildId) !== faixa.encoded) {
         this.autoplaySeguidas.delete(jogador.guildId);
@@ -206,12 +219,28 @@ export class ServicoDeMusica {
     // servidor, então, cancelamos esse timer aqui quando o 24/7 está ligado e
     // deixamos o autoplay tentar continuar. A lib não sai por canal vazio
     // (`onAllNeighboursLeave` não é usado), então só o timer precisa cair.
-    this.manager.on("queueEnd", (jogador, faixa) => {
-      void this.aoAcabarAFila(jogador, faixa as Track | null);
+    // Pausa/retomada falsificam o tempo tocado; não há comando de seek no bot.
+    const marcarInterferencia = (jogador: Player) => {
+      const e = this.execucao.get(jogador.guildId);
+      if (e) e.interferiu = true;
+    };
+    this.manager.on("playerPaused", marcarInterferencia);
+    this.manager.on("playerResumed", marcarInterferencia);
+    // Na última faixa a lib emite `queueEnd` e NÃO `trackEnd`: os dois caminhos
+    // precisam checar a prévia.
+    this.manager.on("trackEnd", (jogador, faixa, evento) => {
+      void this.aoTerminarFaixa(jogador, faixa as Track | null, evento.reason);
+    });
+    this.manager.on("queueEnd", (jogador, faixa, evento) => {
+      void (async () => {
+        const trocou = await this.aoTerminarFaixa(jogador, faixa as Track | null, "reason" in (evento ?? {}) ? (evento as { reason?: string }).reason : undefined);
+        if (!trocou) await this.aoAcabarAFila(jogador, faixa as Track | null);
+      })();
     });
     this.manager.on("playerDestroy", (jogador, motivo) => {
       this.autoplaySeguidas.delete(jogador.guildId);
       this.autoplayPendente.delete(jogador.guildId);
+      this.execucao.delete(jogador.guildId);
       this.jaTentouDeNovo.delete(jogador.guildId);
       // Sem isto o próximo `/tocar` achava a ponte "já vista" de uma sessão que
       // acabou, pulava a espera do `VOICE_SERVER_UPDATE` e mandava o `play`
@@ -247,6 +276,65 @@ export class ServicoDeMusica {
       no: configuracaoDoAmbiente().host,
       busca: plataformaDeBusca(),
     });
+  }
+
+  /**
+   * Fim de faixa com motivo "finished": se o stream acabou muito antes da
+   * duração declarada, era prévia (ver `previa.ts`). Marca a uri, procura outra
+   * versão e toca no lugar. Devolve `true` se começou a tocar outra versão.
+   */
+  private async aoTerminarFaixa(jogador: Player, faixa: Track | null, motivo: string | undefined): Promise<boolean> {
+    const exec = this.execucao.get(jogador.guildId);
+    if (motivo !== "finished" || !faixa?.encoded || !exec || exec.encoded !== faixa.encoded) return false;
+    this.execucao.delete(jogador.guildId);
+    const duracaoMs = faixa.info.isStream ? 0 : (faixa.info.duration ?? 0);
+    const tocadoMs = Date.now() - exec.inicio;
+    if (!ehPrevia({ duracaoMs, tocadoMs, interferiuUsuario: exec.interferiu })) return false;
+
+    this.ctx.log.aviso("faixa truncada", {
+      servidor: jogador.guildId,
+      faixa: faixa.info.title,
+      fonte: faixa.info.sourceName,
+      duracaoMs,
+      tocadoMs,
+    });
+    if (faixa.info.uri) this.previas.add(faixa.info.uri);
+
+    const titulo = limparTitulo(faixa.info.title ?? "");
+    const chave = `${jogador.guildId}|${titulo.toLowerCase()}`;
+    const tentativas = this.tentativasDePrevia.get(chave) ?? 0;
+    if (titulo && tentativas < MAX_TENTATIVAS_DE_PREVIA) {
+      this.tentativasDePrevia.set(chave, tentativas + 1);
+      try {
+        const achada = await this.buscarTextoSemYoutube(
+          jogador,
+          titulo,
+          faixa.info.author || undefined,
+          duracaoMs || undefined,
+          faixa.requester,
+        );
+        if (achada && this.manager.getPlayer(jogador.guildId) === jogador) {
+          // O `trackEnd` já andou a fila: a seguinte pode ter virado a atual e volta para a frente.
+          const atual = jogador.queue.current;
+          if (atual && atual.encoded !== faixa.encoded) await jogador.queue.add(atual, 0);
+          await jogador.play({ clientTrack: achada, noReplace: false });
+          this.ctx.log.info("outra versão no lugar da prévia", {
+            servidor: jogador.guildId,
+            faixa: faixa.info.title,
+            para: achada.info.sourceName,
+          });
+          return true;
+        }
+      } catch (erro) {
+        this.ctx.log.erro("a busca por outra versão falhou", { servidor: jogador.guildId, erro });
+      }
+    }
+    this.tentativasDePrevia.delete(chave);
+    await this.avisarNoCanal(
+      jogador,
+      `**${nomeDaFaixa(faixa)}** só está disponível como prévia de 30 s nas fontes que tenho; pulei.`,
+    );
+    return false;
   }
 
   private async aoAcabarAFila(jogador: Player, ultima: Track | null) {
@@ -393,29 +481,17 @@ export class ServicoDeMusica {
    */
   private async tocarPorFonteAlternativa(jogador: Player, faixa: Track): Promise<Track | null> {
     try {
-      const original = faixa.info.duration ?? 0;
-      for (const consulta of consultasAlternativas(faixa.info)) {
-        // A lib monta "<source>:<query>" sozinha; separamos o prefixo para não
-        // duplicá-lo.
-        const corte = consulta.indexOf(":");
-        const origem = corte > 0 ? consulta.slice(0, corte) : undefined;
-        const termo = corte > 0 ? consulta.slice(corte + 1) : consulta;
-        const resultado = (await jogador.search(
-          origem ? { query: termo, source: origem as never } : { query: termo },
-          faixa.requester,
-        )) as SearchResult;
-        const achada = resultado.tracks.find((t) => {
-          if (!ehFonteAlternativa(t.info.sourceName)) return false;
-          // Versão de outra duração costuma ser remix, cover ou trecho: melhor
-          // tentar a próxima consulta do que tocar a errada.
-          const duracao = t.info.duration ?? 0;
-          if (original > 0 && duracao > 0 && Math.abs(duracao - original) / original > 0.4) {
-            return false;
-          }
-          return true;
-        });
-        if (!achada) continue;
-
+      const titulo = limparTitulo(faixa.info.title ?? "");
+      if (!titulo) return null;
+      // O autor do YouTube costuma ser o canal ("TraptVEVO"): só vale como dica.
+      const achada = await this.buscarTextoSemYoutube(
+        jogador,
+        titulo,
+        faixa.info.author || undefined,
+        faixa.info.duration || undefined,
+        faixa.requester,
+      );
+      if (achada) {
         const atual = jogador.queue.current;
         if (atual && atual.encoded !== faixa.encoded) await jogador.queue.add(atual, 0);
         await jogador.play({ clientTrack: achada, noReplace: false });
@@ -581,17 +657,9 @@ export class ServicoDeMusica {
     if (!embed || embed.faixas.length === 0) return resultado;
 
     const { achadas, puladas } = await resolverEmOrdem(embed.faixas, async (f) => {
-      // SoundCloud/JioSaavn primeiro: `buscarSimples` só evita o YouTube depois
-      // de o bloqueio ser marcado, e na 1ª rodada as faixas viravam ytsearch
-      // e não tocavam (o YouTube barra o IP).
-      const titulo = limparTitulo(f.titulo);
-      const consulta = `${f.artista} ${titulo}`.trim();
-      for (const source of ["scsearch", "jssearch"]) {
-        const alt = (await jogador.search({ query: consulta, source: source as never }, quemPediu)) as SearchResult;
-        if (alt.tracks?.length) return alt.tracks[0] ?? null;
-      }
-      const r = await this.buscarSimples(jogador, consulta, quemPediu);
-      return r.tracks?.[0] ?? null;
+      // Sem YouTube: SoundCloud + JioSaavn, escolhendo a melhor candidata
+      // (artista, título e duração do embed), não a primeira.
+      return this.buscarTextoSemYoutube(jogador, f.titulo, f.artista, f.duracaoMs, quemPediu);
     });
     this.ctx.log.info("playlist do spotify resolvida pelo embed", {
       faixasNoEmbed: embed.faixas.length,
@@ -609,17 +677,67 @@ export class ServicoDeMusica {
     } as unknown as SearchResult;
   }
 
-  /** Busca de uma consulta só: link direto, ou texto na fonte que está viva. */
+  /** Busca de uma consulta só: link direto, ou texto só em SoundCloud/JioSaavn (nunca YouTube). */
   private async buscarSimples(jogador: Player, consulta: string, quemPediu: unknown): Promise<SearchResult> {
-    // Com o YouTube barrando o IP, a busca por texto no YouTube acha faixas que
-    // depois não tocam; o SoundCloud acha e toca. Link segue direto, sem prefixo.
-    if (!/^https?:\/\//i.test(consulta.trim()) && this.youtubeBloqueado.ativo()) {
-      return (await jogador.search(
-        { query: consulta, source: "scsearch" as never },
-        quemPediu,
-      )) as SearchResult;
+    if (/^https?:\/\//i.test(consulta.trim())) {
+      return (await jogador.search({ query: consulta }, quemPediu)) as SearchResult;
     }
-    return (await jogador.search({ query: consulta }, quemPediu)) as SearchResult;
+    const { tracks } = await this.candidatasSemYoutube(jogador, consulta, undefined, undefined, quemPediu);
+    return {
+      loadType: tracks.length > 0 ? "search" : "empty",
+      tracks,
+      playlist: null,
+      exception: null,
+    } as unknown as SearchResult;
+  }
+
+  /**
+   * Candidatas de SoundCloud e JioSaavn, juntas, com as aceitas por
+   * `escolherMelhor` na frente (melhor primeiro) e o resto depois, na ordem da
+   * fonte. Texto livre digitado pelo usuário não tem alvo confiável, então não
+   * se descarta nada; quem precisa de rigor usa `buscarTextoSemYoutube`.
+   */
+  private async candidatasSemYoutube(
+    jogador: Player,
+    titulo: string,
+    artista: string | undefined,
+    duracaoMs: number | undefined,
+    quemPediu: unknown,
+  ): Promise<{ tracks: Track[]; melhor: Track | null }> {
+    const consulta = `${artista ?? ""} ${limparTitulo(titulo)}`.trim();
+    const respostas = await Promise.allSettled(
+      PREFIXOS_ALTERNATIVOS.map(
+        (source) => jogador.search({ query: consulta, source: source as never }, quemPediu) as Promise<SearchResult>,
+      ),
+    );
+    const todas: Track[] = [];
+    for (const r of respostas) {
+      // Uri já provada prévia nunca volta ao ranking.
+      if (r.status === "fulfilled") {
+        todas.push(...(r.value.tracks ?? []).slice(0, 10).filter((t) => !t.info.uri || !this.previas.has(t.info.uri)));
+      }
+    }
+    const ranking = ordenarPorPontuacao(
+      todas.map((t) => t.info),
+      { titulo, artista, duracaoMs },
+    );
+    const aceitas = new Set(ranking.map((r) => r.indice));
+    const ordenadas = [
+      ...ranking.map((r) => todas[r.indice]!),
+      ...todas.filter((_, i) => !aceitas.has(i)),
+    ];
+    return { tracks: ordenadas, melhor: ranking.length > 0 ? todas[ranking[0]!.indice]! : null };
+  }
+
+  /** Melhor faixa para um título (e artista/duração, se conhecidos) sem tocar no YouTube; `null` se nenhuma serve. */
+  private async buscarTextoSemYoutube(
+    jogador: Player,
+    titulo: string,
+    artista: string | undefined,
+    duracaoMs: number | undefined,
+    quemPediu: unknown,
+  ): Promise<Track | null> {
+    return (await this.candidatasSemYoutube(jogador, titulo, artista, duracaoMs, quemPediu)).melhor;
   }
 
   async desligar(): Promise<void> {
