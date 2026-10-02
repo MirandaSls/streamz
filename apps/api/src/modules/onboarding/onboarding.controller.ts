@@ -3,17 +3,25 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
 } from "class-validator";
 import {
+  AFK_TIMEOUTS_SECONDS,
+  GUILD_DEFAULT_NOTIFICATIONS,
   MAX_GUILD_DESCRIPTION,
   MAX_WELCOME_CHANNELS,
   MAX_WELCOME_DESCRIPTION,
   minhaAssociacaoEditarSchema,
 } from "@streamz/shared";
-import type { MinhaAssociacaoEditarInput } from "@streamz/shared";
+import type {
+  AfkTimeoutSeconds,
+  GuildDefaultNotifications,
+  MinhaAssociacaoEditarInput,
+} from "@streamz/shared";
 import { OnboardingService } from "./onboarding.service";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
@@ -47,6 +55,46 @@ class OnboardingDto {
   @IsString()
   @MaxLength(MAX_GUILD_DESCRIPTION)
   description?: string | null;
+
+  // ── Engajamento: os limites (lista de AFK, dois níveis de notificação) são
+  // os do contrato; que o canal AFK seja de voz deste servidor, o service confere
+  @IsOptional()
+  @IsBoolean()
+  systemWelcomeMessage?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  systemWelcomeSticker?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  systemBoostMessage?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  systemTips?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  activityFeed?: boolean;
+
+  @IsOptional()
+  @IsIn(GUILD_DEFAULT_NOTIFICATIONS)
+  defaultNotifications?: GuildDefaultNotifications;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  afkChannelId?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsIn(AFK_TIMEOUTS_SECONDS)
+  afkTimeoutSeconds?: AfkTimeoutSeconds;
+
+  @IsOptional()
+  @IsBoolean()
+  widgetEnabled?: boolean;
 }
 
 @UseGuards(JwtGuard)

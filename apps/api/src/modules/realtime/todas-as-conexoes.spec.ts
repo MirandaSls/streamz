@@ -71,6 +71,9 @@ function servicoDeConvites() {
     ownerId: "bia",
     description: null,
     bannerColor: null,
+    traits: [],
+    games: [],
+    privateProfile: false,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
   };
   let entrou = false;
@@ -155,6 +158,9 @@ describe("resgatar um convite", () => {
         ownerId: "bia",
         description: null,
         bannerColor: null,
+        traits: [],
+        games: [],
+        privateProfile: false,
         createdAt: "2026-01-01T00:00:00.000Z",
         unread: false,
         mentionCount: 0,

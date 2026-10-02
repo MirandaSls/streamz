@@ -6,7 +6,12 @@ import type {
   GuildOnboardingUpdate,
   MinhaAssociacaoEditarInput,
 } from "@streamz/shared";
-import { MAX_WELCOME_CHANNELS } from "@streamz/shared";
+import {
+  AFK_TIMEOUTS_SECONDS,
+  DEFAULT_AFK_TIMEOUT_SECONDS,
+  MAX_WELCOME_CHANNELS,
+  isAfkTimeoutSeconds,
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { diffChanges } from "../audit/changes";
@@ -21,9 +26,22 @@ const CAMPOS = {
   welcomeChannelIds: true,
   discoverable: true,
   description: true,
+  systemWelcomeMessage: true,
+  systemWelcomeSticker: true,
+  systemBoostMessage: true,
+  systemTips: true,
+  activityFeed: true,
+  defaultNotifications: true,
+  afkChannelId: true,
+  afkTimeoutSeconds: true,
+  widgetEnabled: true,
 } as const;
 
-type GuildOnboardingRow = { [K in keyof typeof CAMPOS]: GuildOnboarding[K] };
+// `afkTimeoutSeconds` é Int no Postgres (sem union): o DTO o estreita, e só
+// valores da lista passam pelo `update`, então o valor gravado é sempre válido
+type GuildOnboardingRow = {
+  [K in keyof typeof CAMPOS]: K extends "afkTimeoutSeconds" ? number : GuildOnboarding[K];
+};
 
 /**
  * Entrada no servidor: mensagem de sistema "X entrou", canal de regras com
@@ -140,6 +158,20 @@ export class OnboardingService {
       for (const id of patch.welcomeChannelIds) await this.assertCanalDeTexto(guildId, id);
     }
 
+    // AFK: só canal de VOZ deste servidor; o tempo, só da lista fechada do contrato
+    if (patch.afkChannelId) {
+      const voz = await this.prisma.channel.findFirst({
+        where: { id: patch.afkChannelId, guildId, type: "VOICE" },
+        select: { id: true },
+      });
+      if (!voz) throw new BadRequestException("O canal AFK precisa ser um canal de voz deste servidor");
+    }
+    if (patch.afkTimeoutSeconds !== undefined && !isAfkTimeoutSeconds(patch.afkTimeoutSeconds)) {
+      throw new BadRequestException(
+        `Tempo de inatividade inválido (use um de ${AFK_TIMEOUTS_SECONDS.join(", ")} segundos)`,
+      );
+    }
+
     const guild = await this.prisma.guild.update({
       where: { id: guildId },
       data: {
@@ -155,6 +187,25 @@ export class OnboardingService {
         ...(patch.description !== undefined
           ? { description: patch.description?.trim() || null }
           : {}),
+        ...(patch.systemWelcomeMessage !== undefined
+          ? { systemWelcomeMessage: patch.systemWelcomeMessage }
+          : {}),
+        ...(patch.systemWelcomeSticker !== undefined
+          ? { systemWelcomeSticker: patch.systemWelcomeSticker }
+          : {}),
+        ...(patch.systemBoostMessage !== undefined
+          ? { systemBoostMessage: patch.systemBoostMessage }
+          : {}),
+        ...(patch.systemTips !== undefined ? { systemTips: patch.systemTips } : {}),
+        ...(patch.activityFeed !== undefined ? { activityFeed: patch.activityFeed } : {}),
+        ...(patch.defaultNotifications !== undefined
+          ? { defaultNotifications: patch.defaultNotifications }
+          : {}),
+        ...(patch.afkChannelId !== undefined ? { afkChannelId: patch.afkChannelId } : {}),
+        ...(patch.afkTimeoutSeconds !== undefined
+          ? { afkTimeoutSeconds: patch.afkTimeoutSeconds }
+          : {}),
+        ...(patch.widgetEnabled !== undefined ? { widgetEnabled: patch.widgetEnabled } : {}),
       },
       select: CAMPOS,
     });
@@ -167,6 +218,15 @@ export class OnboardingService {
       "welcomeChannelIds",
       "discoverable",
       "description",
+      "systemWelcomeMessage",
+      "systemWelcomeSticker",
+      "systemBoostMessage",
+      "systemTips",
+      "activityFeed",
+      "defaultNotifications",
+      "afkChannelId",
+      "afkTimeoutSeconds",
+      "widgetEnabled",
     ]);
     if (changes.length > 0) {
       await this.audit.log({
@@ -232,9 +292,10 @@ export class OnboardingService {
   async announceJoin(guildId: string, userId: string): Promise<void> {
     const guild = await this.prisma.guild.findUnique({
       where: { id: guildId },
-      select: { systemChannelId: true },
+      select: { systemChannelId: true, systemWelcomeMessage: true },
     });
-    if (!guild?.systemChannelId) return;
+    // a chave "mensagem de boas-vindas" desligada cala o aviso mesmo com canal
+    if (!guild?.systemChannelId || !guild.systemWelcomeMessage) return;
     const canal = await this.prisma.channel.findFirst({
       where: { id: guild.systemChannelId, guildId, type: "TEXT" },
       select: { id: true },
@@ -320,6 +381,17 @@ export class OnboardingService {
       welcomeChannelIds: g.welcomeChannelIds,
       discoverable: g.discoverable,
       description: g.description,
+      systemWelcomeMessage: g.systemWelcomeMessage,
+      systemWelcomeSticker: g.systemWelcomeSticker,
+      systemBoostMessage: g.systemBoostMessage,
+      systemTips: g.systemTips,
+      activityFeed: g.activityFeed,
+      defaultNotifications: g.defaultNotifications,
+      afkChannelId: g.afkChannelId,
+      afkTimeoutSeconds: isAfkTimeoutSeconds(g.afkTimeoutSeconds)
+        ? g.afkTimeoutSeconds
+        : DEFAULT_AFK_TIMEOUT_SECONDS,
+      widgetEnabled: g.widgetEnabled,
     };
   }
 

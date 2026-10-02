@@ -6,6 +6,7 @@
 // ── Enquetes ─────────────────────────────────────────────────
 
 import { z } from "zod";
+import type { NotificationLevel } from "./conta";
 import type { PublicUser } from "./dominio";
 import type { InviteInfo, InvitePreview } from "./midia";
 
@@ -199,7 +200,36 @@ export interface InviteFullPreview extends InvitePreview {
 export const MAX_WELCOME_DESCRIPTION = 300;
 export const MAX_WELCOME_CHANNELS = 5;
 
-/** Configuração do servidor que governa entrada, regras e descoberta. */
+// ── Engajamento ──────────────────────────────────────────────
+
+/**
+ * Notificação padrão do servidor — o nível de quem nunca escolheu o próprio.
+ *
+ * É um subconjunto de `NotificationLevel` (o `satisfies` trava isso): o
+ * Discord só oferece "Todas as mensagens" e "Somente @menções" aqui, porque um
+ * padrão "Nada" deixaria o servidor mudo para quem acabou de entrar. Mesmos
+ * literais do enum `GuildDefaultNotifications` do Postgres — a equivalência é
+ * travada em `apps/api/src/common/enums.ts`.
+ */
+export const GUILD_DEFAULT_NOTIFICATIONS = ["ALL", "MENTIONS"] as const satisfies readonly NotificationLevel[];
+export type GuildDefaultNotifications = (typeof GUILD_DEFAULT_NOTIFICATIONS)[number];
+
+/**
+ * Tempos de inatividade oferecidos para mover alguém ao canal AFK, em
+ * segundos (1, 5, 15, 30 e 60 minutos). É lista fechada, como no Discord: o
+ * seletor não tem campo livre, então qualquer outro valor só chegaria por
+ * requisição forjada.
+ */
+export const AFK_TIMEOUTS_SECONDS = [60, 300, 900, 1800, 3600] as const;
+export type AfkTimeoutSeconds = (typeof AFK_TIMEOUTS_SECONDS)[number];
+/** O padrão da coluna `Guild.afkTimeoutSeconds` (5 minutos). */
+export const DEFAULT_AFK_TIMEOUT_SECONDS: AfkTimeoutSeconds = 300;
+
+export function isAfkTimeoutSeconds(valor: unknown): valor is AfkTimeoutSeconds {
+  return (AFK_TIMEOUTS_SECONDS as readonly unknown[]).includes(valor);
+}
+
+/** Configuração do servidor que governa entrada, regras, descoberta e engajamento. */
 export interface GuildOnboarding {
   /** canal onde entram as mensagens "X entrou no servidor"; null = desligado. */
   systemChannelId: string | null;
@@ -211,9 +241,60 @@ export interface GuildOnboarding {
   /** aparece em "Descobrir". */
   discoverable: boolean;
   description: string | null;
+
+  // ── Engajamento ──
+  // As quatro chaves `system*` são as mensagens do sistema que caem no
+  // `systemChannelId` (os `SUPPRESS_*` de `system_channel_flags` do Discord,
+  // com o sinal invertido: aqui `true` = enviar). Sem canal de sistema nenhuma
+  // delas tem para onde ir, e a chave só fica gravada.
+  /** "Enviar uma mensagem aleatória de boas-vindas quando alguém entrar". */
+  systemWelcomeMessage: boolean;
+  /** "Incentivar membros a responder às boas-vindas com uma figurinha". */
+  systemWelcomeSticker: boolean;
+  /** "Enviar uma mensagem quando alguém impulsionar este servidor". */
+  systemBoostMessage: boolean;
+  /** "Enviar dicas úteis para a configuração do servidor". */
+  systemTips: boolean;
+  /** mostrar a atividade dos membros (jogos, chamadas) no feed do servidor. */
+  activityFeed: boolean;
+  /** nível de notificação de quem não escolheu o próprio para este servidor. */
+  defaultNotifications: GuildDefaultNotifications;
+  /** canal de voz para onde vai quem ficou inativo; null = sem canal AFK. */
+  afkChannelId: string | null;
+  /** inatividade até mover para o canal AFK; um de `AFK_TIMEOUTS_SECONDS`. */
+  afkTimeoutSeconds: AfkTimeoutSeconds;
+  /** widget do servidor (prévia pública incorporável) ligado. */
+  widgetEnabled: boolean;
 }
 
 export type GuildOnboardingUpdate = Partial<GuildOnboarding>;
+
+/**
+ * Os campos da aba Engajamento no `PATCH /guilds/:id/onboarding`, todos
+ * opcionais (o que não vem não muda). Os campos antigos do onboarding seguem
+ * validados pelo DTO do controller; este schema cobre só o que nasceu com a
+ * aba, para os limites (a lista de tempos de AFK, os dois níveis de
+ * notificação) morarem no contrato e não no handler.
+ *
+ * Que `afkChannelId` seja um canal **de voz deste servidor** não dá para
+ * checar aqui — é o service, com o banco na mão, quem confere.
+ */
+export const guildEngagementUpdateSchema = z.object({
+  systemWelcomeMessage: z.boolean().optional(),
+  systemWelcomeSticker: z.boolean().optional(),
+  systemBoostMessage: z.boolean().optional(),
+  systemTips: z.boolean().optional(),
+  activityFeed: z.boolean().optional(),
+  defaultNotifications: z.enum(GUILD_DEFAULT_NOTIFICATIONS).optional(),
+  afkChannelId: z.string().min(1).max(64).nullable().optional(),
+  afkTimeoutSeconds: z
+    .number()
+    .int()
+    .refine(isAfkTimeoutSeconds, "Tempo de inatividade inválido")
+    .optional(),
+  widgetEnabled: z.boolean().optional(),
+});
+export type GuildEngagementUpdateInput = z.infer<typeof guildEngagementUpdateSchema>;
 
 /** O que o cliente precisa saber sobre *mim* neste servidor. */
 export interface GuildMembership {

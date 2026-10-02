@@ -13,14 +13,20 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
-import { IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
 import type { ServerResponse } from "node:http";
-import { MAX_GUILD_DESCRIPTION, MAX_GUILD_ICON_SIZE } from "@streamz/shared";
+import {
+  guildProfileUpdateSchema,
+  MAX_GUILD_DESCRIPTION,
+  MAX_GUILD_ICON_SIZE,
+} from "@streamz/shared";
+import type { GuildTrait } from "@streamz/shared";
 import type { MemberRole } from "@streamz/shared";
 import { GuildsService } from "./guilds.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { UPLOAD_THROTTLE } from "../../common/throttle";
+import { ZodValidationPipe } from "../../common/zod.pipe";
 
 class CreateGuildDto {
   @IsString()
@@ -69,7 +75,25 @@ class UpdateGuildDto {
   @IsString()
   @Matches(/^(#[0-9a-fA-F]{6})?$/, { message: "Cor inválida (use #rrggbb)" })
   bannerColor?: string | null;
+
+  // Aba Perfil do servidor. O ValidationPipe global usa `whitelist`, então o
+  // campo precisa de decorator para sobreviver; o conteúdo (limites, emoji,
+  // duplicatas) é conferido pelo schema zod do shared em `update()`, a mesma
+  // regra que a web usa para recusar antes do round-trip.
+  @IsOptional()
+  @IsArray()
+  traits?: GuildTrait[];
+
+  @IsOptional()
+  @IsArray()
+  games?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  privateProfile?: boolean;
 }
+
+const perfilPipe = new ZodValidationPipe(guildProfileUpdateSchema);
 
 class TransferDto {
   @IsString()
@@ -125,7 +149,10 @@ export class GuildsController {
     @Param("id") id: string,
     @Body() dto: UpdateGuildDto,
   ) {
-    return this.guilds.update(user.sub, id, dto);
+    // só os três campos do perfil passam pelo zod; o resto já foi validado acima
+    const { traits, games, privateProfile } = dto;
+    const perfil = perfilPipe.transform({ traits, games, privateProfile });
+    return this.guilds.update(user.sub, id, { ...dto, ...perfil });
   }
 
   /** Ícone do servidor (MANAGE_GUILD). 503 claro sem R2 configurado. */
