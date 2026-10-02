@@ -3,9 +3,21 @@
 //!
 //! O caminho preferido é o *process loopback* (Windows 10 build 20348 em
 //! diante): captura tudo o que está tocando (jogo, vídeo, música) **menos** a
-//! árvore de processos do próprio Streamz. Sem essa exclusão, as vozes da
-//! chamada — tocadas pelos processos filhos do WebView2 — voltariam para os
-//! outros participantes dentro do áudio da tela, como eco da própria voz.
+//! árvore de processos do navegador do WebView2, onde roda o serviço de áudio
+//! que toca a chamada. Sem essa exclusão, as vozes da chamada voltariam para
+//! os outros participantes dentro do áudio da tela, como eco da própria voz.
+//!
+//! **Por que o navegador do WebView2, e não o nosso PID.** Do runtime 117 em
+//! diante o `msedgewebview2.exe` é lançado reparentado pelo `explorer.exe` e
+//! não descende mais do Streamz
+//! (<https://github.com/MicrosoftEdge/WebView2Feedback/discussions/3848>).
+//! Excluir a árvore do nosso processo, como era feito, não excluía nada: quem
+//! estava na call se ouvia com atraso na tela que o outro transmitia com áudio
+//! (produção, 2026-10-02). O alvo certo é o `ICoreWebView2::BrowserProcessId`,
+//! que o `lib.rs` entrega no boot a [`registrar_processo_do_webview`]: o
+//! serviço de áudio é filho dele, então cai na árvore excluída. Mesmo defeito
+//! e mesmo conserto noutro app Tauri 2:
+//! <https://github.com/Campfire-Social-App/campfire/pull/17>.
 //!
 //! Onde o process loopback não existe ou falha, cai no loopback clássico do
 //! dispositivo de **saída** padrão, que pega a mistura inteira (e, com ela, o
@@ -22,6 +34,7 @@
 use std::ffi::c_void;
 use std::mem::ManuallyDrop;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -67,6 +80,23 @@ const SUBFORMATO_PCM: windows::core::GUID =
 const SUBFORMATO_IEEE_FLOAT: windows::core::GUID =
     windows::core::GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
 
+/// PID do navegador do WebView2 (`msedgewebview2.exe`), raiz da árvore que o
+/// process loopback deixa de fora; 0 = desconhecido. É só um número lido na
+/// abertura, sem outra memória a sincronizar com ele: `Relaxed` basta.
+static PROCESSO_DO_WEBVIEW: AtomicU32 = AtomicU32::new(0);
+
+/// Guarda o PID do navegador do WebView2 para o process loopback excluir (ver
+/// o topo do arquivo). O `lib.rs` chama no boot, com o
+/// `ICoreWebView2::BrowserProcessId`. Zero é "desconhecido" e é ignorado, para
+/// não apagar um registro bom.
+pub fn registrar_processo_do_webview(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    PROCESSO_DO_WEBVIEW.store(pid, Ordering::Relaxed);
+    log::info!("tela-audio: processo do WebView2 registrado (pid {pid})");
+}
+
 impl From<windows::core::Error> for ErroDeAudio {
     fn from(e: windows::core::Error) -> Self {
         if e.code() == AUDCLNT_E_DEVICE_INVALIDATED {
@@ -77,8 +107,8 @@ impl From<windows::core::Error> for ErroDeAudio {
     }
 }
 
-/// Um cliente de loopback aberto: de processo (sem o Streamz) ou, no
-/// fallback, sobre o dispositivo de saída padrão.
+/// Um cliente de loopback aberto: de processo (sem a árvore do WebView2) ou,
+/// no fallback, sobre o dispositivo de saída padrão.
 pub struct Loopback {
     cliente: IAudioClient,
     captura: IAudioCaptureClient,
@@ -96,21 +126,20 @@ pub struct Loopback {
 }
 
 impl Loopback {
-    /// Abre o loopback: primeiro o de processo, que deixa o som do próprio
-    /// Streamz de fora; se não der, o do dispositivo de saída padrão.
-    /// Inicializa o COM na thread atual (a thread de áudio é nossa e só faz
-    /// isto).
+    /// Abre o loopback: primeiro o de processo, que deixa de fora o som do
+    /// WebView2 (as vozes da chamada); se não der, o do dispositivo de saída
+    /// padrão. Inicializa o COM na thread atual (a thread de áudio é nossa e
+    /// só faz isto).
     pub fn abrir() -> Result<Self, ErroDeAudio> {
         unsafe {
             // S_FALSE ("já inicializado") e RPC_E_CHANGED_MODE (outro modo na
             // mesma thread) não impedem nada: o COM está de pé nos dois casos.
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
+        // O sucesso vai para o log lá dentro, junto com o PID que ficou de
+        // fora e de onde ele veio.
         let erro = match Self::abrir_sem_o_streamz() {
-            Ok(loopback) => {
-                log::info!("tela-audio: loopback via process loopback (sem o Streamz)");
-                return Ok(loopback);
-            }
+            Ok(loopback) => return Ok(loopback),
             Err(e) => e,
         };
         // Fallback: Windows sem process loopback (antes do build 20348) ou
@@ -125,9 +154,23 @@ impl Loopback {
         Self::abrir_dispositivo_padrao()
     }
 
-    /// Process loopback de tudo menos a árvore de processos deste. Qualquer
-    /// erro aqui só faz `abrir` cair no caminho clássico.
+    /// Process loopback de tudo menos a árvore do navegador do WebView2 (ver
+    /// [`registrar_processo_do_webview`]). Sem o PID dele, exclui a deste
+    /// processo, como era antes — o que deixa a chamada passar (ver o topo),
+    /// e por isso avisa no log. Qualquer erro aqui só faz `abrir` cair no
+    /// caminho clássico.
     fn abrir_sem_o_streamz() -> Result<Self, ErroDeAudio> {
+        let (alvo, origem) = match PROCESSO_DO_WEBVIEW.load(Ordering::Relaxed) {
+            0 => {
+                log::warn!(
+                    "tela-audio: processo do WebView2 desconhecido; excluindo o próprio processo \
+                     no lugar dele — as vozes da chamada podem ir na transmissão"
+                );
+                let proprio = unsafe { GetCurrentProcessId() };
+                (proprio, "fallback: o próprio processo")
+            }
+            pid => (pid, "navegador do WebView2"),
+        };
         unsafe {
             // `params` e `prop` vão para o heap e a posse vai para o
             // `AvisoDeAtivacao`: o Windows segura o aviso (AddRef) até chamar
@@ -140,7 +183,7 @@ impl Loopback {
                     ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
                     Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
                         ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-                            TargetProcessId: GetCurrentProcessId(),
+                            TargetProcessId: alvo,
                             ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
                         },
                     },
@@ -261,6 +304,9 @@ impl Loopback {
                 }
             };
 
+            log::info!(
+                "tela-audio: loopback via process loopback, sem a árvore do pid {alvo} ({origem})"
+            );
             Ok(Self {
                 cliente,
                 captura,

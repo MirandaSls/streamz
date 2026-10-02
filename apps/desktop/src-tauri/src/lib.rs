@@ -251,7 +251,32 @@ pub fn run() {
                 }
                 if let Some(janela) = app.get_webview_window("main") {
                     let _ = janela.with_webview(|webview| {
-                        permissoes::liberar_camera_e_microfone(&webview.controller());
+                        let controle = webview.controller();
+                        permissoes::liberar_camera_e_microfone(&controle);
+
+                        // O loopback do áudio da transmissão precisa deixar de fora o
+                        // processo do navegador do WebView2, que é onde a call toca; sem
+                        // isso a voz dos outros vaza para quem assiste. O PID do próprio
+                        // app não serve: o WebView2 não é processo filho dele (desde o
+                        // runtime 117 o explorer.exe é quem adota os processos). Dá para
+                        // ler já aqui, porque o wry só devolve a janela com o controller
+                        // pronto. Falhar não derruba o app: no pior caso a voz vaza.
+                        let mut pid = 0u32;
+                        // SAFETY: `controle` é o controller vivo que o `with_webview`
+                        // entrega na thread da UI, e `pid` é um `u32` local válido
+                        // durante a chamada.
+                        let leitura = unsafe {
+                            controle
+                                .CoreWebView2()
+                                .and_then(|navegador| navegador.BrowserProcessId(&mut pid))
+                        };
+                        match leitura {
+                            Ok(()) => tela::registrar_processo_do_webview(pid),
+                            Err(erro) => log::warn!(
+                                "tela-audio: PID do navegador do WebView2 indisponível \
+                                 ({erro}); a voz da call pode vazar na transmissão"
+                            ),
+                        }
                     });
                 }
             }
