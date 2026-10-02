@@ -51,8 +51,8 @@ import { ui } from "@/stores/ui";
 /**
  * Quanto o clique simples espera pelo segundo antes de trocar o foco.
  *
- * Dois cliques na transmissão alternam a tela cheia (é o gesto do Discord) —
- * ou, no palco de DM que sabe expandir (`onExpandir`), expandem o palco — e
+ * Dois cliques na transmissão alternam a tela cheia (é o gesto do Discord, na
+ * DM e no canal de voz; expandir o palco sobre o chat é só a seta do canto) e
  * **não** podem também fixar o tile: sem esta espera o primeiro dos dois
  * cliques já teria trocado o palco antes de o segundo chegar. 250ms é o
  * intervalo em que um duplo clique de fato acontece; um mais lento que isso
@@ -87,12 +87,6 @@ export interface AcoesDoTile {
   falando: ReadonlySet<string>;
   channelId: string;
   onFocar: (chave: string | null) => void;
-  /**
-   * Presente só no palco de DM que pode expandir: o duplo clique expande/recolhe
-   * o palco com este tile no destaque, em vez de abrir a tela cheia. Ausente
-   * (canal de voz, celular), o duplo clique segue sendo a tela cheia.
-   */
-  onExpandir?: (chave: string) => void;
   onAssistir: (userId: string, chave: string) => void;
   onPararDeAssistir: (userId: string) => void;
 }
@@ -246,7 +240,6 @@ export function VoiceTile({
   falando,
   channelId,
   onFocar,
-  onExpandir,
   onAssistir,
   onPararDeAssistir,
   grande = false,
@@ -496,16 +489,21 @@ export function VoiceTile({
         if (arrastou) return; // soltar o arrasto do zoom não é "clicar no tile"
         if (e.detail > 1) return; // o segundo clique é do `onDoubleClick`
         window.clearTimeout(cliquePendente.current);
-        cliquePendente.current = window.setTimeout(() => onFocar(tile.key), ESPERA_DO_DUPLO_CLIQUE);
+        cliquePendente.current = window.setTimeout(() => {
+          // um duplo clique lento (>250ms) já pode ter posto o tile em tela
+          // cheia: trocar o foco agora remontaria o leiaute por trás dela e
+          // faria o gesto engasgar
+          if (caixa.current?.hasAttribute(ATRIBUTO_DE_TELA_CHEIA)) return;
+          if (caixa.current?.ownerDocument.fullscreenElement === caixa.current) return;
+          onFocar(tile.key);
+        }, ESPERA_DO_DUPLO_CLIQUE);
       }}
       // Dois cliques na transmissão entram/saem da tela cheia, no **mesmo**
       // elemento que o botão "Tela cheia" usa — gesto e botão abrindo caixas
-      // diferentes seriam duas telas cheias distintas. Na DM (`onExpandir`) o
-      // gesto é do palco: expande/recolhe com este tile no destaque; só que
-      // dentro de uma tela cheia (aberta pelo botão) dois cliques continuam
-      // saindo dela, senão o usuário ficaria preso sem o Esc.
+      // diferentes seriam duas telas cheias distintas. Nunca expandem o palco
+      // nem escondem o chat: isso é só da seta de expandir do `CallStage`.
       onDoubleClick={
-        semAcoes || (!podeTelaCheia && !onExpandir)
+        semAcoes || !podeTelaCheia
           ? undefined
           : (e) => {
               // botão de dentro já tem ação própria: dois cliques nele não são
@@ -518,18 +516,6 @@ export function VoiceTile({
               // `dblclick` — e mover a imagem não pode abrir/fechar a tela cheia
               if (arrastoNaSequencia.current) return;
               window.clearTimeout(cliquePendente.current);
-              // o documento do tile: na janela solta é o dela que tem tela cheia
-              const doc = e.currentTarget.ownerDocument as Document & {
-                webkitFullscreenElement?: Element | null;
-              };
-              const algoEmTelaCheia =
-                doc.fullscreenElement ||
-                doc.webkitFullscreenElement ||
-                doc.querySelector(`[${ATRIBUTO_DE_TELA_CHEIA}]`);
-              if (onExpandir && !algoEmTelaCheia) {
-                onExpandir(tile.key);
-                return;
-              }
               void alternarTelaCheiaDe(caixa.current);
             }
       }
