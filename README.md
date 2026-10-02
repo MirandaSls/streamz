@@ -1,13 +1,11 @@
 # Streamz
 
-Clone do Discord: chat em servidores e canais em tempo real, voz/vídeo/tela e
-app desktop (Windows, macOS, Linux e Android). Monorepo com **NestJS** no
-backend, **Next.js** no cliente web e **Tauri 2** para as cascas nativas.
+Plataforma de comunicação: chat em servidores e canais em tempo real,
+voz/vídeo/tela e app desktop (Windows, macOS, Linux e Android). Monorepo com
+**NestJS** no backend, **Next.js** no cliente web e **Tauri 2** para as cascas
+nativas.
 
-Desde a [ADR-0009](docs/adr/0009-paridade-total-com-o-discord-exceto-a-marca.md)
-a meta declarada é paridade total com o Discord — leiaute, densidade, ícones,
-fontes, emojis e comandos — exceto o ícone do Streamz e a cor de destaque
-(verde). A instância de produção roda em `streamz.chat` (ver `PENDENCIAS.md`).
+A instância de produção roda em `streamz.chat` (ver `PENDENCIAS.md`).
 
 ## Stack
 
@@ -18,7 +16,7 @@ fontes, emojis e comandos — exceto o ícone do Streamz e a cor de destaque
 | Banco   | PostgreSQL (dev e prod, um schema só) |
 | Storage | Cloudflare R2 (cliente S3), opcional — anexos |
 | Mídia   | LiveKit self-hosted (ADR-0005); LiveKit Cloud continua suportado via `.env` |
-| Bots    | discord.js + Lavalink (música), runtime próprio em `apps/bots` |
+| Bots    | Lavalink (música), runtime próprio em `apps/bots` |
 | Desktop | Tauri 2 — Windows, macOS, Linux e Android a partir do mesmo crate |
 | Monorepo| pnpm workspaces + Turborepo |
 
@@ -32,8 +30,8 @@ apps/
   desktop/     # Tauri 2 — embrulha a web num instalador; gera também o Android
   bots/        # bots oficiais: música (Lavalink), boas-vindas, moderação,
                #   níveis e cargos por reação
-  ponte-voz/   # serviço em Go que liga bots (voice gateway compatível com o
-               #   Discord) ao LiveKit por UDP/RTP
+  ponte-voz/   # serviço em Go que liga a voz dos bots ao LiveKit por
+               #   UDP/RTP
 packages/
   shared/      # @streamz/shared — tipos + schemas zod + WS_EVENTS; contrato
                #   único entre api e web (consumido pelo dist/ compilado)
@@ -44,9 +42,9 @@ scripts/       # build/publicação de api, web e desktop; passeios e2e; e o
                #   ferramental de paridade visual em scripts/paridade/
 ```
 
-`scripts/paridade/` é a bancada usada para comparar telas do Streamz lado a
-lado com o Discord (semeia um servidor de referência, fotografa as telas e
-monta a folha comparativa) — ver `scripts/paridade/README.md`.
+`scripts/paridade/` é a bancada de comparação visual: semeia um servidor de
+referência, fotografa as telas e monta a folha comparativa — ver
+`scripts/paridade/README.md`.
 
 Não há CI no GitHub além de `.github/workflows/ios.yml` (plano B manual, nunca
 executado) — ver a seção "Deploy e publicação" abaixo.
