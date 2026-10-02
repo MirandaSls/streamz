@@ -450,6 +450,54 @@ export class VozDoGateway {
     }
   }
 
+  // ── tirado da voz ──────────────────────────────────────────
+
+  /**
+   * Alguém foi tirado da voz à força (`VoiceService.expulsarDaVoz`: o
+   * "Desconectar" de um moderador, kick, ban). Se era um bot conectado por
+   * aqui, despacha o `VOICE_STATE_UPDATE` com `channel_id: null` e o
+   * `session_id` **real** de cada sessão dele.
+   *
+   * É esse evento que o lavalink-client lê para destruir o player
+   * (`onDisconnect.destroyPlayer`), e ele exige `session_id` no payload. Sem
+   * isto o bot desconectado pela interface seguia tocando para o Lavalink e o
+   * `/tocar` seguinte achava o player "conectado" e nem pedia para entrar.
+   *
+   * Nunca lança: roda no fim de uma expulsão que já aconteceu.
+   */
+  async acompanharExpulsao(
+    userId: string,
+    canalId: string,
+    guildId: string | null,
+  ): Promise<void> {
+    // conversa direta não tem bot em voz; e sem sessão no gateway compat não
+    // há a quem avisar (humano, ou bot desconectado)
+    if (!guildId) return;
+    const sessoes = this.registro.porBot(userId);
+    if (sessoes.length === 0) return;
+    try {
+      const chave = `${userId}:${guildId}`;
+      // O pedido anotado era do canal de onde ele acabou de sair: sem apagá-lo,
+      // um `voice.state` futuro seria lido como movimento de um canal velho.
+      if (this.canalPedidoPeloBot.get(chave)?.canalId === canalId) {
+        this.canalPedidoPeloBot.delete(chave);
+      }
+      // O canal pode já ter sido apagado (é um dos caminhos da expulsão); o
+      // snowflake do servidor, então, sai direto do servidor.
+      const canal = await this.dados.canalPorCuid(canalId);
+      const bruto = canal?.guildSnowflake ?? (await this.ids.snowflakeDeServidor(guildId));
+      const guildSnowflake = bruto === null || bruto === undefined ? null : String(bruto);
+      if (guildSnowflake === null) {
+        this.logger.warn(`bot ${userId} tirado da voz de ${guildId}, servidor sem snowflake`);
+        return;
+      }
+      await this.despacharSaida(sessoes, guildId, userId, null, guildSnowflake);
+      this.logger.log(`bot ${userId} tirado do canal ${canalId}: avisado com channel_id null`);
+    } catch (erro) {
+      this.logger.error(`não deu para avisar o bot tirado da voz — ${(erro as Error).message}`);
+    }
+  }
+
   // ── sair ───────────────────────────────────────────────────
 
   private async sair(

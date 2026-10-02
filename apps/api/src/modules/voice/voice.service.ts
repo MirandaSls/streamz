@@ -180,6 +180,29 @@ function capacidadesDeMidia(permissions?: number): { podeFalar: boolean; podeTra
 }
 
 /**
+ * Atributo de participante que diz à ponte de voz se a faixa dela está
+ * silenciada pelo servidor (`"1"`) ou liberada (`"0"`). Contrato com
+ * `apps/ponte-voz/livekit.go` (`AtributoDeSilencio`) — os dois lados mudam juntos.
+ *
+ * Existe porque devolver o som pela API (`mutePublishedTrack(..., false)`)
+ * depende de `room.enable_remote_unmute` na config do LiveKit, e sem ela o bot
+ * desmutado no servidor ficava calado até reconectar. Desmutar a **própria**
+ * faixa não depende dessa opção: o atributo é o pedido, e quem desmuta é a ponte.
+ */
+export const ATRIBUTO_DE_SILENCIO_DA_PONTE = "streamz.silenciado";
+
+/**
+ * Aviso de que alguém foi **tirado** da voz (`expulsarDaVoz`), não de que saiu
+ * por conta própria. Quem implementa é a casca do Discord (`VozDoGateway`); ver
+ * `VoiceService.registrarAvisoDeExpulsao` para o porquê de ser um plugue.
+ */
+export type AvisoDeExpulsaoDaVoz = (
+  userId: string,
+  channelId: string,
+  guildId: string | null,
+) => Promise<void>;
+
+/**
  * Voz: token do LiveKit e o **estado de quem está em cada sala**.
  *
  * As duas coisas são independentes de propósito. O estado de voz (quem entrou,
@@ -213,11 +236,34 @@ export class VoiceService {
    */
   private readonly filaUpdatePorUsuario = new Map<string, Promise<void>>();
 
+  /** Ver `registrarAvisoDeExpulsao`. Nulo até a casca do Discord se plugar. */
+  private avisarExpulsao: AvisoDeExpulsaoDaVoz | null = null;
+
   constructor(
     private readonly guilds: GuildsService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
   ) {}
+
+  /**
+   * Plugue da casca do Discord: bot tirado da voz (Desconectar, kick, ban) tem
+   * de **saber** que saiu.
+   *
+   * O `voice.state` que o `leave` emite chega a todo mundo menos ao próprio bot
+   * — a ponte de eventos o exclui de propósito, porque o `join` de um movimento
+   * também passa pelo `connected: false` do canal velho, e o bot que recebesse
+   * esse eco destruiria o player no meio da mudança. Sem um aviso próprio, o
+   * lavalink-client nunca via o `VOICE_STATE_UPDATE` nulo: o player seguia
+   * "conectado", o Lavalink seguia tocando para uma sala da qual a ponte já
+   * tinha sido tirada, e o `/tocar` seguinte nem mandava o op 4 de novo.
+   *
+   * Plugue, e não injeção, pelo mesmo motivo de
+   * `GuildsService.registrarDesligamentoDeVoz`: o `DiscordCompatModule` importa
+   * o `VoiceModule`, e a seta inversa fecharia o ciclo.
+   */
+  registrarAvisoDeExpulsao(fn: AvisoDeExpulsaoDaVoz): void {
+    this.avisarExpulsao = fn;
+  }
 
   /**
    * true só com as três variáveis do LiveKit presentes. Espelha o
@@ -813,9 +859,12 @@ export class VoiceService {
    * Lavalink reconectar.
    *
    * `mutePublishedTrack` mantém a faixa e faz o SFU parar de repassar o áudio.
-   * Devolver o som exige `room.enable_remote_unmute: true` na config do
-   * LiveKit; sem ela o servidor recusa ("remote unmute not enabled") e o bot
-   * segue mudo até reconectar — por isso o aviso nomeia a opção.
+   * Devolver o som pela mesma via exige `room.enable_remote_unmute: true` na
+   * config do LiveKit; sem ela o servidor recusa ("remote unmute not enabled")
+   * e o bot seguia mudo até reconectar. Por isso o pedido também vai no
+   * atributo `ATRIBUTO_DE_SILENCIO_DA_PONTE`: a ponte o lê e muda a **própria**
+   * faixa, o que o LiveKit aceita sem opção nenhuma. Só atributo — sem
+   * `permission` — para não trocar o objeto de permissão (ver acima).
    *
    * Nunca lança, como `aplicarPermissaoNaSala`.
    */
@@ -829,8 +878,11 @@ export class VoiceService {
     // ensurdecer também cala, como em `permissaoDoParticipante`
     const silenciar = moderacao.serverMute || moderacao.serverDeaf;
     let faixas: TrackInfo[];
+    let atributos: Record<string, string>;
     try {
-      faixas = (await client.getParticipant(sala, identity)).tracks;
+      const participante = await client.getParticipant(sala, identity);
+      faixas = participante.tracks;
+      atributos = participante.attributes ?? {};
     } catch (e) {
       const erro = e as { code?: string; message?: string };
       if (erro?.code === "not_found") {
@@ -844,15 +896,45 @@ export class VoiceService {
       }
       return;
     }
-    for (const faixa of faixas) {
-      // Só o que muda de estado: o join do bot também passa por aqui, e pedir
-      // "desmutar" uma faixa que já está no ar bateria à toa na recusa do
-      // `enable_remote_unmute`.
-      if (faixa.source !== TrackSource.MICROPHONE || faixa.muted === silenciar) continue;
+    // Só o que muda de estado: o join do bot também passa por aqui, e pedir
+    // "desmutar" uma faixa que já está no ar bateria à toa na recusa do
+    // `enable_remote_unmute`.
+    const fora = faixas.filter(
+      (f) => f.source === TrackSource.MICROPHONE && f.muted !== silenciar,
+    );
+    const valor = silenciar ? "1" : "0";
+    // Ausente vale "0": a ponte nasce liberada. Mas faixa calada sem o atributo
+    // (silenciada antes de ele existir) também precisa do "0", senão a ponte
+    // nunca recebe o pedido de voltar.
+    const atual = atributos[ATRIBUTO_DE_SILENCIO_DA_PONTE] ?? "0";
+    let pontePediu = false;
+    if (atual !== valor || fora.length > 0) {
+      try {
+        await client.updateParticipant(sala, identity, {
+          attributes: { [ATRIBUTO_DE_SILENCIO_DA_PONTE]: valor },
+        });
+        pontePediu = true;
+      } catch (e) {
+        this.logger.warn(
+          `LiveKit não gravou o pedido de silêncio=${valor} para ${identity} em ${sala}: ${
+            (e as { message?: string })?.message ?? String(e)
+          }`,
+        );
+      }
+    }
+    for (const faixa of fora) {
       try {
         await client.mutePublishedTrack(sala, identity, faixa.sid, silenciar);
       } catch (e) {
         const detalhe = (e as { message?: string })?.message ?? String(e);
+        if (!silenciar && pontePediu) {
+          // Esperado sem `enable_remote_unmute`: quem devolve o som é a ponte,
+          // pelo atributo gravado acima.
+          this.logger.debug(
+            `LiveKit recusou devolver o som de ${identity} pela API; a ponte desmuta pelo atributo: ${detalhe}`,
+          );
+          continue;
+        }
         this.logger.warn(
           silenciar
             ? `LiveKit não silenciou a faixa de ${identity} em ${sala}: ${detalhe}`
@@ -1104,10 +1186,11 @@ export class VoiceService {
     // canal já apagado (o último a sair de um grupo leva o grupo junto) cai no
     // prefixo de conversa, que é o que ele tinha: `salaDe` só olha o tipo
     const sala = this.salaDe(canal?.type ?? "DM", channelId);
+    let saiu = false;
     try {
       // o estado primeiro: é ele que emite `voice.state` com `connected: false`
       // e some com a pessoa do palco de quem ficou
-      await this.leave(userId, channelId);
+      saiu = (await this.leave(userId, channelId)) !== null;
     } catch (e) {
       this.logger.error(
         `Falha ao tirar ${userId} do estado de voz de ${channelId}`,
@@ -1130,6 +1213,19 @@ export class VoiceService {
       if (u?.snowflake != null) await this.removerDaSala(sala, `bot:${u.snowflake}`);
     } catch (e) {
       this.logger.warn(`Sem snowflake de ${userId} para tirar a identidade de bot da sala: ${e}`);
+    }
+    // Só quando havia mesmo de onde sair: reavisar um bot que já tinha saído
+    // destruiria um player que ele acabou de abrir noutro canal.
+    if (saiu && this.avisarExpulsao) {
+      try {
+        await this.avisarExpulsao(userId, channelId, canal?.guildId ?? null);
+      } catch (e) {
+        this.logger.warn(
+          `Falha ao avisar a saída forçada de ${userId} de ${channelId}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+      }
     }
   }
 

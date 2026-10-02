@@ -11,6 +11,7 @@ import type { LinhaDeMembro, LinhaDeServidor } from "../tipos";
 import { INTENT } from "../tipos";
 import { PonteDeEventos } from "./dispatch";
 import type { RegistroDeSessoes, SessaoDoBot } from "./sessao";
+import type { VozDoGateway } from "./voz";
 
 /**
  * Os dois lugares em que a voz entra na ponte de eventos (F2):
@@ -227,6 +228,38 @@ describe("voice.state → VOICE_STATE_UPDATE", () => {
     ligar("s1", "u_bot", INTENT.GUILD_VOICE_STATES);
     await emitir(WS_EVENTS.VOICE_STATE, { ...ESTADO_DA_ANA, guildId: null });
     expect(despachados).toEqual([]);
+  });
+});
+
+describe("o próprio bot tirado da voz — o aviso que a ponte de eventos não dá", () => {
+  /**
+   * A ponte de eventos pula o `voice.state` do próprio bot (teste acima): um
+   * movimento emite `connected:false` antes do `connected:true`, e repassar o
+   * primeiro destruiria o player. A saída forçada (moderador, kick, ban, canal
+   * apagado) chega ao bot por outro fio: o `DiscordCompatModule` pluga o
+   * `VozDoGateway.acompanharExpulsao` no `VoiceService` ao subir.
+   */
+  it("o módulo liga o aviso de expulsão do VoiceService ao VozDoGateway", async () => {
+    const { DiscordCompatModule } = await import("../discord-compat.module");
+    let aviso: ((u: string, c: string, g: string | null) => Promise<void> | void) | null = null;
+    const chamadas: unknown[][] = [];
+    const ponte = { iniciar: () => undefined } as unknown as PonteDeEventos;
+    const voice = {
+      registrarAvisoDeExpulsao(fn: typeof aviso) {
+        aviso = fn;
+      },
+    } as unknown as VoiceService;
+    const vozDoGateway = {
+      async acompanharExpulsao(...args: unknown[]) {
+        chamadas.push(args);
+      },
+    } as unknown as VozDoGateway;
+
+    new DiscordCompatModule(ponte, voice, vozDoGateway).onModuleInit();
+    expect(aviso).not.toBeNull();
+    await aviso!("u_bot", "c_voz", "g1");
+
+    expect(chamadas).toEqual([["u_bot", "c_voz", "g1"]]);
   });
 });
 

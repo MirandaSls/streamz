@@ -8,6 +8,7 @@ import { ModerationModule } from "../moderation/moderation.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { RolesModule } from "../roles/roles.module";
 import { VoiceModule } from "../voice/voice.module";
+import { VoiceService } from "../voice/voice.service";
 import { BotTokenGuard } from "./bot-token.guard";
 import { DadosDeCompatService } from "./dados.service";
 import {
@@ -129,7 +130,11 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
   exports: [GatewayCompatService, RegistroDeSessoes, IdsService, DadosDeCompatService],
 })
 export class DiscordCompatModule implements OnModuleInit {
-  constructor(private readonly ponte: PonteDeEventos) {}
+  constructor(
+    private readonly ponte: PonteDeEventos,
+    private readonly voice: VoiceService,
+    private readonly vozDoGateway: VozDoGateway,
+  ) {}
 
   /**
    * Liga a ponte de eventos assim que o módulo sobe.
@@ -137,8 +142,14 @@ export class DiscordCompatModule implements OnModuleInit {
    * Aqui, e não no `main.ts`, porque não depende do servidor HTTP — depende só
    * do `RealtimeService`, que é um provider. O que depende do servidor HTTP é o
    * `'upgrade'` do gateway, e esse o `main.ts` liga depois do `listen()`.
+   *
+   * O aviso de expulsão também se pluga daqui: este módulo importa o
+   * `VoiceModule`, e não o contrário (ver `VoiceService.registrarAvisoDeExpulsao`).
    */
   onModuleInit() {
     this.ponte.iniciar();
+    this.voice.registrarAvisoDeExpulsao((userId, canalId, guildId) =>
+      this.vozDoGateway.acompanharExpulsao(userId, canalId, guildId),
+    );
   }
 }

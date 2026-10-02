@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Logger } from "@nestjs/common";
 import {
   DEFAULT_PERMISSIONS,
   DM_PERMISSIONS,
@@ -422,23 +422,43 @@ describe("VoiceService.moderarVoz", () => {
 
 describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
   let faixa: ReturnType<typeof faixaDaPonte>;
+  /** Os atributos do participante da ponte no LiveKit, como o servidor os guarda. */
+  let atributos: Record<string, string>;
+  /**
+   * `true` imita o LiveKit de produção: sem `room.enable_remote_unmute`, o
+   * `mutePublishedTrack(…, false)` é recusado e só a própria ponte desmuta.
+   */
+  let semRemoteUnmute: boolean;
 
   beforeEach(() => {
     process.env.LIVEKIT_API_KEY = "key-de-teste";
     process.env.LIVEKIT_API_SECRET = "segredo-de-teste";
     process.env.LIVEKIT_URL = "wss://livekit.teste";
     roomServiceClientMock.mockClear();
-    updateParticipantMock.mockReset().mockResolvedValue(undefined);
     faixa = faixaDaPonte();
+    atributos = {};
+    semRemoteUnmute = false;
+    updateParticipantMock
+      .mockReset()
+      .mockImplementation(
+        async (_sala: string, identity: string, opcoes?: { attributes?: Record<string, string> }) => {
+          if (identity === IDENTIDADE_DO_BOT && opcoes?.attributes) {
+            atributos = { ...atributos, ...opcoes.attributes };
+          }
+        },
+      );
     // só a identidade da ponte existe na sala; o cuid do bot dá `not_found`,
     // que é exatamente o que o LiveKit de produção respondia
     getParticipantMock.mockReset().mockImplementation(async (_sala: string, identity: string) => {
       if (identity !== IDENTIDADE_DO_BOT) throw { code: "not_found", message: "participant not found" };
-      return { identity, tracks: [{ ...faixa }] };
+      return { identity, tracks: [{ ...faixa }], attributes: { ...atributos } };
     });
     mutePublishedTrackMock
       .mockReset()
       .mockImplementation(async (_sala: string, _identity: string, _sid: string, muted: boolean) => {
+        if (!muted && semRemoteUnmute) {
+          throw { code: "failed_precondition", message: "remote unmute not enabled" };
+        }
         faixa.muted = muted;
         return { ...faixa };
       });
@@ -453,7 +473,12 @@ describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
     return s;
   }
 
-  it("join do bot sem moderação não mexe na faixa nem na permissão dele", async () => {
+  /** O pedido que a ponte lê: só atributo, nunca `permission` (ver abaixo). */
+  function pedidoAPonte(valor: "0" | "1") {
+    return ["voice:voz-1", IDENTIDADE_DO_BOT, { attributes: { "streamz.silenciado": valor } }];
+  }
+
+  it("join do bot sem moderação não mexe na faixa, na permissão nem no atributo", async () => {
     await botNaVoz(0);
 
     expect(mutePublishedTrackMock).not.toHaveBeenCalled();
@@ -461,7 +486,7 @@ describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
     expect(updateParticipantMock).not.toHaveBeenCalled();
   });
 
-  it("silenciar no servidor cala a faixa de `bot:<snowflake>`, não o cuid", async () => {
+  it("silenciar no servidor cala a faixa de `bot:<snowflake>` e grava o pedido para a ponte", async () => {
     const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
 
     await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
@@ -474,16 +499,21 @@ describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
       "TR_musica",
       true,
     );
-    expect(updateParticipantMock).not.toHaveBeenCalled();
+    expect(updateParticipantMock).toHaveBeenCalledTimes(1);
+    expect(updateParticipantMock).toHaveBeenCalledWith(...pedidoAPonte("1"));
+    // sem `permission`: trocá-la daria ao bot o que o token da ponte nega
+    expect(updateParticipantMock.mock.calls[0][2]).not.toHaveProperty("permission");
   });
 
-  it("desfazer o silêncio devolve o som da mesma faixa", async () => {
+  it("desfazer o silêncio pede à ponte que volte e tenta a mesma faixa pela API", async () => {
     const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
     await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
     mutePublishedTrackMock.mockClear();
+    updateParticipantMock.mockClear();
 
     await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false });
 
+    expect(updateParticipantMock).toHaveBeenCalledWith(...pedidoAPonte("0"));
     expect(mutePublishedTrackMock).toHaveBeenCalledTimes(1);
     expect(mutePublishedTrackMock).toHaveBeenCalledWith(
       "voice:voz-1",
@@ -504,21 +534,77 @@ describe("VoiceService.moderarVoz — alvo bot (ponte de voz)", () => {
       "TR_musica",
       true,
     );
+    expect(updateParticipantMock).toHaveBeenCalledWith(...pedidoAPonte("1"));
   });
 
-  it("LiveKit recusando devolver o som (sem enable_remote_unmute) não derruba a moderação", async () => {
+  it("LiveKit sem enable_remote_unmute: o pedido \"0\" chega à ponte e a recusa não vira aviso", async () => {
+    semRemoteUnmute = true;
     const { voice, guildMemberUpdate } = await botNaVoz(Permission.MUTE_MEMBERS);
     await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
-    mutePublishedTrackMock.mockRejectedValueOnce({
-      code: "failed_precondition",
-      message: "remote unmute not enabled",
-    });
+    const aviso = vi.spyOn(Logger.prototype, "warn");
 
-    await expect(
-      voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false }),
-    ).resolves.toBeUndefined();
+    try {
+      await expect(
+        voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false }),
+      ).resolves.toBeUndefined();
+
+      expect(guildMemberUpdate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: { voiceMuted: false } }),
+      );
+      // é este atributo que a ponte lê para desmutar a própria faixa — o que o
+      // LiveKit aceita sem opção nenhuma (a causa do "desmutei e não voltou")
+      expect(atributos["streamz.silenciado"]).toBe("0");
+      expect(aviso).not.toHaveBeenCalled();
+    } finally {
+      aviso.mockRestore();
+    }
+  });
+
+  it("faixa calada sem o atributo (silenciada antes dele) também recebe o \"0\"", async () => {
+    const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
+    faixa.muted = true;
+    updateParticipantMock.mockClear();
+
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: false });
+
+    expect(updateParticipantMock).toHaveBeenCalledWith(...pedidoAPonte("0"));
+  });
+
+  it("repetir o silêncio já aplicado não bate de novo no LiveKit", async () => {
+    const { voice } = await botNaVoz(Permission.MUTE_MEMBERS);
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
+    updateParticipantMock.mockClear();
+    mutePublishedTrackMock.mockClear();
+
+    await voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true });
+
+    expect(updateParticipantMock).not.toHaveBeenCalled();
+    expect(mutePublishedTrackMock).not.toHaveBeenCalled();
+  });
+
+  it("falha ao gravar o atributo não impede calar a faixa pela API", async () => {
+    const { voice, guildMemberUpdate } = await botNaVoz(Permission.MUTE_MEMBERS);
+    updateParticipantMock.mockRejectedValueOnce({ code: "internal", message: "fora do ar" });
+    const aviso = vi.spyOn(Logger.prototype, "warn");
+
+    try {
+      await expect(
+        voice.moderarVoz("dono", "g1", { userId: BOT.id, mute: true }),
+      ).resolves.toBeUndefined();
+      // este, sim, é aviso: sem o atributo a ponte não desmuta sozinha depois
+      expect(aviso).toHaveBeenCalledWith(expect.stringContaining("silêncio=1"));
+    } finally {
+      aviso.mockRestore();
+    }
+
+    expect(mutePublishedTrackMock).toHaveBeenCalledWith(
+      "voice:voz-1",
+      IDENTIDADE_DO_BOT,
+      "TR_musica",
+      true,
+    );
     expect(guildMemberUpdate).toHaveBeenLastCalledWith(
-      expect.objectContaining({ data: { voiceMuted: false } }),
+      expect.objectContaining({ data: { voiceMuted: true } }),
     );
   });
 });
@@ -551,6 +637,10 @@ describe("VoiceService.aoPublicarNoLivekit — bot que entra já silenciado", ()
       "TR_musica",
       true,
     );
+    // e a ponte fica sabendo: é o "1" gravado que o desmutar troca por "0"
+    expect(updateParticipantMock).toHaveBeenCalledWith("voice:voz-1", IDENTIDADE_DO_BOT, {
+      attributes: { "streamz.silenciado": "1" },
+    });
   });
 
   it("bot sem moderação: nem consulta o LiveKit", async () => {

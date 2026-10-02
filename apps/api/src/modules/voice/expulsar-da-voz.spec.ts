@@ -129,6 +129,66 @@ describe("expulsarDaVoz sem LiveKit configurado", () => {
   });
 });
 
+/**
+ * O aviso que a casca do Discord pluga (`registrarAvisoDeExpulsao`). Sem ele o
+ * bot de música tirado da voz por um moderador, kick ou ban nunca recebia o
+ * `VOICE_STATE_UPDATE` com `channel_id: null`: o player do Lavalink ficava
+ * "conectado" e o `/tocar` seguinte não pedia para entrar de novo.
+ */
+describe("expulsarDaVoz — aviso de saída forçada", () => {
+  beforeEach(() => {
+    delete process.env.LIVEKIT_API_KEY;
+    delete process.env.LIVEKIT_API_SECRET;
+    delete process.env.LIVEKIT_URL;
+  });
+
+  it("depois de tirar do estado, avisa com usuário, canal e servidor", async () => {
+    const { voice } = servico();
+    const aviso = vi.fn();
+    voice.registrarAvisoDeExpulsao(aviso);
+    await voice.join("ana", "voz-1");
+
+    await voice.expulsarDaVoz("ana", "voz-1");
+
+    expect(aviso).toHaveBeenCalledTimes(1);
+    expect(aviso).toHaveBeenCalledWith("ana", "voz-1", "g1");
+    // o aviso vem depois do estado: quem o recebe já não vê a pessoa na sala
+    expect(await voice.membrosDaSala("voz-1")).toEqual([]);
+  });
+
+  it("kick/ban (`desligarDoServidor`) passa pelo mesmo aviso", async () => {
+    const { voice } = servico();
+    const aviso = vi.fn();
+    voice.registrarAvisoDeExpulsao(aviso);
+    await voice.join("ana", "voz-2");
+
+    await voice.desligarDoServidor("ana", "g1");
+
+    expect(aviso).toHaveBeenCalledWith("ana", "voz-2", "g1");
+  });
+
+  it("quem já não estava no canal não é avisado — o player novo de outro canal ficaria de pé", async () => {
+    const { voice } = servico();
+    const aviso = vi.fn();
+    voice.registrarAvisoDeExpulsao(aviso);
+
+    await voice.expulsarDaVoz("caio", "voz-1");
+
+    expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it("aviso que lança não derruba a expulsão", async () => {
+    const { voice } = servico();
+    voice.registrarAvisoDeExpulsao(async () => {
+      throw new Error("gateway compat fora");
+    });
+    await voice.join("ana", "voz-1");
+
+    await expect(voice.expulsarDaVoz("ana", "voz-1")).resolves.toBeUndefined();
+    expect(await voice.membrosDaSala("voz-1")).toEqual([]);
+  });
+});
+
 describe("desligarDoServidor", () => {
   it("acha o canal de voz do servidor em que a pessoa está e a desliga", async () => {
     const { voice, emitToGuild } = servico();
