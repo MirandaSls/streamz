@@ -497,3 +497,41 @@ describe("op 4 no fio: do quadro do bot aos dois dispatches", () => {
     soquete.close();
   });
 });
+
+describe("VozDoGateway.acompanharMovimento — bot movido por moderador", () => {
+  async function botEmVoz() {
+    const amb = ambiente();
+    const { sessao, despachados } = sessaoFalsa("9f3c");
+    amb.registro.registrar(sessao);
+    await amb.servico.tratarAtualizacaoDeVoz(sessao, {
+      guild_id: SF_SERVIDOR,
+      channel_id: SF_CANAL_VOZ,
+      self_deaf: true,
+      self_mute: false,
+    });
+    despachados.length = 0;
+    return { ...amb, despachados };
+  }
+
+  it("canal novo: reenvia VOICE_STATE_UPDATE e VOICE_SERVER_UPDATE com token novo", async () => {
+    const { servico, despachados } = await botEmVoz();
+    const tratou = await servico.acompanharMovimento("u_bot", "g1", "c_de_outro");
+    expect(tratou).toBe(true);
+    expect(despachados.map((d) => d.evento)).toEqual([
+      "VOICE_STATE_UPDATE",
+      "VOICE_SERVER_UPDATE",
+    ]);
+    expect((despachados[1].dados as Record<string, unknown>).token).toBe("jwt.da.ponte");
+  });
+
+  it("o eco do próprio join do op 4 (mesmo canal) não reabre nada", async () => {
+    const { servico, despachados } = await botEmVoz();
+    expect(await servico.acompanharMovimento("u_bot", "g1", "c_voz")).toBe(false);
+    expect(despachados).toEqual([]);
+  });
+
+  it("bot que nunca pediu canal por aqui não é tocado", async () => {
+    const { servico } = ambiente();
+    expect(await servico.acompanharMovimento("u_bot", "g1", "c_voz")).toBe(false);
+  });
+});

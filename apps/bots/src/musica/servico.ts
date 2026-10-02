@@ -158,6 +158,25 @@ export class ServicoDeMusica {
       void this.manager.sendRawData(dado as never);
     });
 
+    // Bot expulso (ou instalação removida): o API manda `GUILD_DELETE`, não um
+    // `VOICE_STATE_UPDATE` nulo — então a lib não destrói o player sozinha e o
+    // Lavalink seguia tocando para uma sala que já não nos pertence. `available`
+    // falso é queda do servidor do Discord, não saída: aí o player fica.
+    cliente.on(Events.GuildDelete, (servidor) => {
+      if (servidor.available === false) return;
+      this.pontesVistas.delete(servidor.id);
+      this.aguardando.delete(servidor.id);
+      const jogador = this.manager.getPlayer(servidor.id);
+      if (jogador) {
+        void jogador.destroy("o bot saiu do servidor").catch((erro) => {
+          this.ctx.log.aviso("não deu para destruir o player ao sair do servidor", {
+            servidor: servidor.id,
+            erro: String(erro),
+          });
+        });
+      }
+    });
+
     this.manager.nodeManager.on("connect", (no) => {
       this.ctx.log.info("lavalink conectado", {
         no: no.id,

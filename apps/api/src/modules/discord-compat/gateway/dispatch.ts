@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { WS_EVENTS } from "@streamz/shared";
 import { GuildsService } from "../../guilds/guilds.service";
 import type { AlvoDoEvento } from "../../realtime/realtime.service";
@@ -16,7 +16,7 @@ import { usuarioParaDiscord } from "../traducao/usuario";
 import type { JsonDoDiscord, LinhaDeServidor } from "../tipos";
 import { INTENT } from "../tipos";
 import { RegistroDeSessoes, type SessaoDoBot } from "./sessao";
-import { estadoDeVozParaDiscord } from "./voz";
+import { estadoDeVozParaDiscord, VozDoGateway } from "./voz";
 
 /**
  * A ponte entre o tempo real de hoje e os dispatches do gateway compat.
@@ -177,6 +177,8 @@ export class PonteDeEventos {
     private readonly voz: VoiceService,
     // F5: quem resolve o emoji personalizado (token interno ↔ snowflake).
     private readonly reacoes: ReacoesDeCompatService,
+    // Bot movido por moderador: só o `VozDoGateway` sabe reabrir o áudio.
+    @Optional() private readonly vozDoGateway?: VozDoGateway,
   ) {}
 
   /**
@@ -832,7 +834,8 @@ export class PonteDeEventos {
    * ponte. **Limitação registrada:** um bot **movido** por um moderador
    * (`VoiceService.move`) não recebe evento nenhum — e não adiantaria receber,
    * porque a ponte não tem como trocar de sala sem um `VOICE_SERVER_UPDATE`
-   * novo. É dívida da fase, não descuido.
+   * novo. Esse caso é de `VozDoGateway.acompanharMovimento`, chamado abaixo:
+   * ele manda o par `VOICE_STATE_UPDATE` + `VOICE_SERVER_UPDATE` com token novo.
    *
    * Conversa direta (`guildId` nulo) não gera evento: `VOICE_STATE_UPDATE` é de
    * servidor, e a F2 não abre chamada em DM com bot.
@@ -843,6 +846,13 @@ export class PonteDeEventos {
     const servidorId = cadeia(payload, "guildId");
     const usuarioId = cadeia(objeto(payload?.["user"]), "id");
     if (!canalId || !servidorId || !usuarioId) return;
+
+    // O estado do próprio bot não sai por aqui (ver acima), mas um bot que
+    // **mudou de canal sem pedir** precisa de `VOICE_SERVER_UPDATE` novo —
+    // senão o áudio fica na sala antiga.
+    if (payload?.["connected"] === true && this.vozDoGateway) {
+      await this.vozDoGateway.acompanharMovimento(usuarioId, servidorId, canalId);
+    }
 
     const bots = await this.botsComAcessoAoCanal(canalId, INTENT.GUILD_VOICE_STATES);
     // Nada de consulta quando ninguém pediu o intent — este ouvinte roda em
