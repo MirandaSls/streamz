@@ -165,36 +165,53 @@ const tocar: Comando = {
       return;
     }
 
-    // Buscar e conectar levam mais que os ~2 s do relógio da interação.
-    await ctx.pensando();
+    // Buscar e conectar levam mais que os ~2 s do relógio da interação. O defer é
+    // um round-trip ao Discord que não depende de nada abaixo: dispara junto.
+    const adiado = ctx.pensando();
 
-    const jogador =
-      servico.jogador(ctx.guildId!) ??
-      servico.manager.createPlayer({
-        guildId: ctx.guildId!,
-        voiceChannelId: canal,
-        textChannelId: ctx.canalId,
-        selfDeaf: true,
-        volume: Number(process.env.MUSICA_VOLUME_PADRAO ?? 60),
-      });
+    const { jogador, recomecou } = await servico.prepararJogador({
+      guildId: ctx.guildId!,
+      voiceChannelId: canal,
+      textChannelId: ctx.canalId,
+    });
 
-    if (!jogador.connected) {
+    // A busca (HTTP ao Lavalink, às vezes vários saltos no Spotify) e a conexão
+    // de voz (op 4 → `VOICE_SERVER_UPDATE`, até `LIMITE_DA_PONTE_MS`) não
+    // dependem uma da outra, então correm juntas: o tempo até o som passa a ser
+    // o maior dos dois, e não a soma. `allSettled` para nenhuma das pontas virar
+    // rejeição sem dono enquanto a outra ainda corre.
+    const conectar = async (): Promise<boolean> => {
+      if (jogador.connected) return true;
+      // Registra a espera **antes** do `connect()`: o evento pode chegar antes
+      // de o `await` dele voltar, e `marcarPonte` cobre isso, mas assim nem
+      // dependemos disso.
+      const ponte = servico.esperarPonte(ctx.guildId!);
       await jogador.connect();
       // **A dependência declarada**: sem a ponte de voz no ar a API nem chega a
       // mandar o `VOICE_SERVER_UPDATE` (ela recusa assinar o token e registra no
       // log). Sem esta espera, o bot ficaria pendurado até o relógio do Lavalink.
-      const temPonte = await servico.esperarPonte(ctx.guildId!);
-      if (!temPonte) {
-        ctx.bot.log.aviso("sem VOICE_SERVER_UPDATE: a ponte de voz não está no ar", {
-          servidor: ctx.guildId,
-        });
-        await jogador.destroy("sem ponte de voz").catch(() => undefined);
-        await ctx.responder({ conteudo: SEM_PONTE_DE_VOZ });
-        return;
-      }
+      return ponte;
+    };
+    const [fimDoAdiado, fimDaConexao, fimDaBusca] = await Promise.allSettled([
+      adiado,
+      conectar(),
+      servico.buscar(jogador, consulta, ctx.usuarioId),
+    ]);
+    if (fimDoAdiado.status === "rejected") throw fimDoAdiado.reason;
+    if (fimDaConexao.status === "rejected") throw fimDaConexao.reason;
+    if (!fimDaConexao.value) {
+      ctx.bot.log.aviso("sem VOICE_SERVER_UPDATE: a ponte de voz não está no ar", {
+        servidor: ctx.guildId,
+      });
+      await jogador.destroy("sem ponte de voz").catch(() => undefined);
+      await ctx.responder({ conteudo: SEM_PONTE_DE_VOZ });
+      return;
     }
-
-    const resultado = await servico.buscar(jogador, consulta, ctx.usuarioId);
+    if (fimDaBusca.status === "rejected") throw fimDaBusca.reason;
+    const resultado = fimDaBusca.value;
+    // Player que acabou de recomeçar toca do início, sem pausa herdada. Explícito
+    // porque o `play()` da lib só manda `paused`/`position` quando recebe a opção.
+    const inicio = recomecou ? ({ paused: false, position: 0 } as const) : {};
     if (!resultado.tracks?.length) {
       // Playlist do Spotify sem faixas (mesmo após o fallback pelo embed) pode
       // ser privada, gerada pelo Spotify (Daily Mix etc.) ou o Spotify fora do
@@ -214,7 +231,7 @@ const tocar: Comando = {
       else jogador.queue.add(resultado.tracks);
       const total = resultado.tracks.length;
       const primeira = resultado.tracks[0]!;
-      if (!jogador.playing) await jogador.play();
+      if (!jogador.playing) await jogador.play(inicio);
       const botao = botaoDoSite();
       await ctx.responder({
         embeds: [
@@ -234,7 +251,7 @@ const tocar: Comando = {
     const faixa = resultado.tracks[0]!;
     if (noTopo) await jogador.queue.splice(0, 0, faixa);
     else jogador.queue.add(faixa);
-    if (!jogador.playing) await jogador.play();
+    if (!jogador.playing) await jogador.play(inicio);
 
     const botao = botaoDoSite();
     await ctx.responder({
