@@ -79,11 +79,9 @@ plugins:
 
   lavasrc:
     providers:
-      - 'ytsearch:"%ISRC%"'
-      - "ytsearch:%QUERY%"
-      # Fallbacks de áudio: o YouTube bloqueia o IP deste servidor ("Sign in to
-      # confirm you're not a bot"), então, quando os dois acima falham, o
-      # LavaSrc tenta o SoundCloud (source nativo do Lavalink, `scsearch`) e o
+      # Sem YouTube: ele bloqueia o IP deste servidor ("Sign in to confirm
+      # you're not a bot") e a decisão é não depender dele. O LavaSrc procura a
+      # faixa no SoundCloud (source nativo do Lavalink, `scsearch`) e no
       # JioSaavn (`jssearch`, prefixo do README do LavaSrc). A ordem importa:
       # o primeiro provider que achar a faixa vence.
       - "scsearch:%QUERY%"

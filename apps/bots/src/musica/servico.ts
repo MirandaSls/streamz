@@ -4,10 +4,11 @@ import type { ContextoDoBot } from "../runtime/tipos";
 import { escaparMarkdown, truncar } from "./formatar";
 import {
   MemoriaDeBloqueio,
-  consultasAlternativas,
+  PREFIXOS_ALTERNATIVOS,
   ehFonteAlternativa,
   limparTitulo,
 } from "./fontes-alternativas";
+import { ordenarPorPontuacao } from "./escolher-faixa";
 import { idDePlaylistDoSpotify, buscarPlaylistPeloEmbed } from "./spotify-embed";
 import { resolverEmOrdem } from "./playlist-spotify";
 import { embedDeInatividade } from "./embeds";
@@ -362,29 +363,17 @@ export class ServicoDeMusica {
    */
   private async tocarPorFonteAlternativa(jogador: Player, faixa: Track): Promise<Track | null> {
     try {
-      const original = faixa.info.duration ?? 0;
-      for (const consulta of consultasAlternativas(faixa.info)) {
-        // A lib monta "<source>:<query>" sozinha; separamos o prefixo para não
-        // duplicá-lo.
-        const corte = consulta.indexOf(":");
-        const origem = corte > 0 ? consulta.slice(0, corte) : undefined;
-        const termo = corte > 0 ? consulta.slice(corte + 1) : consulta;
-        const resultado = (await jogador.search(
-          origem ? { query: termo, source: origem as never } : { query: termo },
-          faixa.requester,
-        )) as SearchResult;
-        const achada = resultado.tracks.find((t) => {
-          if (!ehFonteAlternativa(t.info.sourceName)) return false;
-          // Versão de outra duração costuma ser remix, cover ou trecho: melhor
-          // tentar a próxima consulta do que tocar a errada.
-          const duracao = t.info.duration ?? 0;
-          if (original > 0 && duracao > 0 && Math.abs(duracao - original) / original > 0.4) {
-            return false;
-          }
-          return true;
-        });
-        if (!achada) continue;
-
+      const titulo = limparTitulo(faixa.info.title ?? "");
+      if (!titulo) return null;
+      // O autor do YouTube costuma ser o canal ("TraptVEVO"): só vale como dica.
+      const achada = await this.buscarTextoSemYoutube(
+        jogador,
+        titulo,
+        faixa.info.author || undefined,
+        faixa.info.duration || undefined,
+        faixa.requester,
+      );
+      if (achada) {
         const atual = jogador.queue.current;
         if (atual && atual.encoded !== faixa.encoded) await jogador.queue.add(atual, 0);
         await jogador.play({ clientTrack: achada, noReplace: false });
@@ -506,17 +495,9 @@ export class ServicoDeMusica {
     if (!embed || embed.faixas.length === 0) return resultado;
 
     const { achadas, puladas } = await resolverEmOrdem(embed.faixas, async (f) => {
-      // SoundCloud/JioSaavn primeiro: `buscarSimples` só evita o YouTube depois
-      // de o bloqueio ser marcado, e na 1ª rodada as faixas viravam ytsearch
-      // e não tocavam (o YouTube barra o IP).
-      const titulo = limparTitulo(f.titulo);
-      const consulta = `${f.artista} ${titulo}`.trim();
-      for (const source of ["scsearch", "jssearch"]) {
-        const alt = (await jogador.search({ query: consulta, source: source as never }, quemPediu)) as SearchResult;
-        if (alt.tracks?.length) return alt.tracks[0] ?? null;
-      }
-      const r = await this.buscarSimples(jogador, consulta, quemPediu);
-      return r.tracks?.[0] ?? null;
+      // Sem YouTube: SoundCloud + JioSaavn, escolhendo a melhor candidata
+      // (artista, título e duração do embed), não a primeira.
+      return this.buscarTextoSemYoutube(jogador, f.titulo, f.artista, f.duracaoMs, quemPediu);
     });
     this.ctx.log.info("playlist do spotify resolvida pelo embed", {
       faixasNoEmbed: embed.faixas.length,
@@ -534,17 +515,64 @@ export class ServicoDeMusica {
     } as unknown as SearchResult;
   }
 
-  /** Busca de uma consulta só: link direto, ou texto na fonte que está viva. */
+  /** Busca de uma consulta só: link direto, ou texto só em SoundCloud/JioSaavn (nunca YouTube). */
   private async buscarSimples(jogador: Player, consulta: string, quemPediu: unknown): Promise<SearchResult> {
-    // Com o YouTube barrando o IP, a busca por texto no YouTube acha faixas que
-    // depois não tocam; o SoundCloud acha e toca. Link segue direto, sem prefixo.
-    if (!/^https?:\/\//i.test(consulta.trim()) && this.youtubeBloqueado.ativo()) {
-      return (await jogador.search(
-        { query: consulta, source: "scsearch" as never },
-        quemPediu,
-      )) as SearchResult;
+    if (/^https?:\/\//i.test(consulta.trim())) {
+      return (await jogador.search({ query: consulta }, quemPediu)) as SearchResult;
     }
-    return (await jogador.search({ query: consulta }, quemPediu)) as SearchResult;
+    const { tracks } = await this.candidatasSemYoutube(jogador, consulta, undefined, undefined, quemPediu);
+    return {
+      loadType: tracks.length > 0 ? "search" : "empty",
+      tracks,
+      playlist: null,
+      exception: null,
+    } as unknown as SearchResult;
+  }
+
+  /**
+   * Candidatas de SoundCloud e JioSaavn, juntas, com as aceitas por
+   * `escolherMelhor` na frente (melhor primeiro) e o resto depois, na ordem da
+   * fonte. Texto livre digitado pelo usuário não tem alvo confiável, então não
+   * se descarta nada; quem precisa de rigor usa `buscarTextoSemYoutube`.
+   */
+  private async candidatasSemYoutube(
+    jogador: Player,
+    titulo: string,
+    artista: string | undefined,
+    duracaoMs: number | undefined,
+    quemPediu: unknown,
+  ): Promise<{ tracks: Track[]; melhor: Track | null }> {
+    const consulta = `${artista ?? ""} ${limparTitulo(titulo)}`.trim();
+    const respostas = await Promise.allSettled(
+      PREFIXOS_ALTERNATIVOS.map(
+        (source) => jogador.search({ query: consulta, source: source as never }, quemPediu) as Promise<SearchResult>,
+      ),
+    );
+    const todas: Track[] = [];
+    for (const r of respostas) {
+      if (r.status === "fulfilled") todas.push(...(r.value.tracks ?? []).slice(0, 10));
+    }
+    const ranking = ordenarPorPontuacao(
+      todas.map((t) => t.info),
+      { titulo, artista, duracaoMs },
+    );
+    const aceitas = new Set(ranking.map((r) => r.indice));
+    const ordenadas = [
+      ...ranking.map((r) => todas[r.indice]!),
+      ...todas.filter((_, i) => !aceitas.has(i)),
+    ];
+    return { tracks: ordenadas, melhor: ranking.length > 0 ? todas[ranking[0]!.indice]! : null };
+  }
+
+  /** Melhor faixa para um título (e artista/duração, se conhecidos) sem tocar no YouTube; `null` se nenhuma serve. */
+  private async buscarTextoSemYoutube(
+    jogador: Player,
+    titulo: string,
+    artista: string | undefined,
+    duracaoMs: number | undefined,
+    quemPediu: unknown,
+  ): Promise<Track | null> {
+    return (await this.candidatasSemYoutube(jogador, titulo, artista, duracaoMs, quemPediu)).melhor;
   }
 
   async desligar(): Promise<void> {
