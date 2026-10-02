@@ -416,6 +416,9 @@ describe("entrar por Descobrir", () => {
             ownerId: "bia",
             description: null,
             bannerColor: null,
+            traits: [],
+            games: [],
+            privateProfile: false,
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
           };
         },

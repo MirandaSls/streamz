@@ -56,6 +56,7 @@ import type {
   FriendLists,
   FriendRequest,
   Guild,
+  GuildUpdate,
   GuildChannelType,
   GuildMembership,
   GuildMemberView,
@@ -183,7 +184,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) throw await comoApiError(res);
-  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+  // Nest devolve 201 com corpo vazio em rotas sem retorno (ex.: voice/moderar);
+  // só 204 não basta — `res.json()` estoura com "Unexpected end of JSON input".
+  if (res.status === 204 || res.status === 205) return undefined as T;
+  const texto = await res.text();
+  return (texto ? JSON.parse(texto) : undefined) as T;
 }
 
 /** Mensagem da API quando houver; senão, algo legível com o status. */
@@ -324,7 +329,7 @@ export const api = {
   // ── configurações do servidor (c-cargos) ──
   updateGuild: (
     guildId: string,
-    body: { name?: string; description?: string | null; bannerColor?: string | null },
+    body: GuildUpdate & { bannerColor?: string | null },
   ) =>
     request<Guild>(`/guilds/${guildId}`, patch(body)),
   updateGuildIcon: (guildId: string, file: File) => {

@@ -116,7 +116,9 @@ function Acao({
  * não lida", "Fixar"/"Desafixar" (só com `podeFixar`), "Adicionar reação",
  * "Responder", "Encaminhar" e "Mais"; na mensagem própria o "Responder" vem
  * antes da reação, entram "Editar" e "Excluir mensagem" (em vermelho) no lugar
- * do "Mais". Sem reações rápidas nem separador. As mesmas regras de permissão
+ * do "Mais". Na mensagem alheia o "Excluir mensagem" também aparece, antes do
+ * "Mais", quando `onApagar` vem (quem tem permissão de moderar). Sem reações
+ * rápidas nem separador. As mesmas regras de permissão
  * valem, e a linha de `sistema` nunca muda.
  *
  * **Narração** (`sistema`): a linha de sistema só tem "Adicionar reação" e
@@ -250,6 +252,12 @@ export default function BarraDeAcoes({
                 {onEncaminhar && (
                   <Acao rotulo="Encaminhar" onClick={onEncaminhar}>
                     <CornerUpRight size={20} />
+                  </Acao>
+                )}
+                {/* `onApagar` só chega com `canDelete`: moderador apaga a mensagem de outro */}
+                {onApagar && (
+                  <Acao rotulo="Excluir mensagem" onClick={onApagar} perigo>
+                    <Trash2 size={20} />
                   </Acao>
                 )}
                 <Acao rotulo="Mais" onClick={onMais}>

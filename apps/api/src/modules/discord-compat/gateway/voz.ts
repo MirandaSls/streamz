@@ -171,6 +171,17 @@ const FLAGS_DO_BOT = { muted: false, deafened: true, video: false, screen: false
 export class VozDoGateway {
   private readonly logger = new Logger(VozDoGateway.name);
 
+  /**
+   * Onde cada bot **pediu** para estar (`botUserId:guildId` → canal e sessão).
+   *
+   * É o que separa "o bot entrou pelo op 4" (o `voice.state` que o próprio
+   * `join` emite, já tratado) de "um moderador moveu o bot" (um `voice.state`
+   * para um canal que o bot não pediu). Só neste segundo caso o áudio precisa
+   * de token novo: o Lavalink segue preso à sala velha da ponte até receber
+   * um `VOICE_SERVER_UPDATE` com o endpoint/token da sala nova.
+   */
+  private readonly canalPedidoPeloBot = new Map<string, { canalId: string; sessaoId: string }>();
+
   constructor(
     private readonly ids: IdsService,
     private readonly dados: DadosDeCompatService,
@@ -224,6 +235,7 @@ export class VozDoGateway {
       return false;
     }
 
+    if (canal?.guildId) this.canalPedidoPeloBot.delete(`${botUserId}:${canal.guildId}`);
     this.logger.log(`ponte caiu: ${botSnowflake} tirado do canal ${canalSnowflake}`);
     await this.despacharSaida(
       this.registro.porBot(botUserId),
@@ -321,6 +333,12 @@ export class VozDoGateway {
       );
     }
 
+    // Antes do `join`: o `voice.state` dele chega à ponte de eventos depois, e
+    // já tem de encontrar o canal anotado para não tomá-lo por uma mudança.
+    this.canalPedidoPeloBot.set(`${sessao.botUserId}:${guildId}`, {
+      canalId: alvo.id,
+      sessaoId: sessao.id,
+    });
     await this.voz.join(sessao.botUserId, alvo.id, { ...FLAGS_DO_BOT });
 
     const membro = await this.dados.membroDoServidor(guildId, sessao.botUserId);
@@ -351,6 +369,87 @@ export class VozDoGateway {
     );
   }
 
+  // ── movido por um moderador ────────────────────────────────
+
+  /**
+   * O bot caiu num canal que ele não pediu (`VoiceService.move`): reabre o
+   * áudio lá.
+   *
+   * Sem isto o bot movido não recebia evento nenhum e o Lavalink continuava
+   * ligado à sala antiga da ponte, tocando no canal velho. Manda o par de
+   * sempre — `VOICE_STATE_UPDATE` (a lib atualiza `voiceChannelId`) e, colado,
+   * `VOICE_SERVER_UPDATE` com token novo (o Lavalink reconecta na sala nova).
+   *
+   * Devolve `true` quando tratou o movimento. Nunca lança: roda na fila da
+   * ponte de eventos.
+   */
+  async acompanharMovimento(
+    botUserId: string,
+    guildId: string,
+    canalId: string,
+  ): Promise<boolean> {
+    const chave = `${botUserId}:${guildId}`;
+    const pedido = this.canalPedidoPeloBot.get(chave);
+    // Sem pedido anotado o bot nem entrou por aqui (ex.: entrada pela web);
+    // com o mesmo canal é o eco do próprio `join` do op 4.
+    if (!pedido || pedido.canalId === canalId) return false;
+
+    const sessao = this.registro.porBot(botUserId).find((s) => s.id === pedido.sessaoId);
+    if (!sessao) {
+      this.canalPedidoPeloBot.delete(chave);
+      return false;
+    }
+    try {
+      const [canal, aplicacao] = await Promise.all([
+        this.dados.canalPorCuid(canalId),
+        this.dados.aplicacaoPorCuid(sessao.applicationId),
+      ]);
+      const alvo = canal?.snowflake ?? null;
+      const botSnowflake = aplicacao?.bot.snowflake;
+      if (alvo === null || !canal || canal.guildSnowflake == null || !aplicacao || botSnowflake === undefined) {
+        this.logger.warn(`bot movido para ${canalId}, mas faltou dado para reabrir o áudio`);
+        return false;
+      }
+      const guildSnowflake = String(canal.guildSnowflake);
+      const assinado = await this.voz.assinarTokenDaPonte({
+        botSnowflake: String(botSnowflake),
+        guildSnowflake,
+        sessionId: sessao.id,
+        canalId,
+        canalSnowflake: String(alvo),
+        nome: aplicacao.name,
+        botUserId,
+      });
+      this.canalPedidoPeloBot.set(chave, { canalId, sessaoId: sessao.id });
+
+      const membro = await this.dados.membroDoServidor(guildId, botUserId);
+      sessao.despachar(
+        "VOICE_STATE_UPDATE",
+        estadoDeVozParaDiscord({
+          guildSnowflake,
+          canalSnowflake: String(alvo),
+          usuarioSnowflake: String(botSnowflake),
+          sessionId: sessao.id,
+          membro: membro ? membroParaDiscord(membro, true) : null,
+          selfMute: FLAGS_DO_BOT.muted,
+          selfDeaf: FLAGS_DO_BOT.deafened,
+          selfVideo: FLAGS_DO_BOT.video,
+          selfStream: FLAGS_DO_BOT.screen,
+        }),
+      );
+      sessao.despachar("VOICE_SERVER_UPDATE", {
+        token: assinado.token,
+        guild_id: guildSnowflake,
+        endpoint: assinado.endpoint,
+      });
+      this.logger.log(`bot movido: ${aplicacao.name} agora no canal ${alvo} do servidor ${guildSnowflake}`);
+      return true;
+    } catch (erro) {
+      this.logger.error(`não deu para reabrir o áudio do bot movido — ${(erro as Error).message}`);
+      return false;
+    }
+  }
+
   // ── sair ───────────────────────────────────────────────────
 
   private async sair(
@@ -363,6 +462,7 @@ export class VozDoGateway {
       this.logger.debug(`op 4 com channel_id null, mas o bot não estava em voz em ${guildId}`);
       return;
     }
+    this.canalPedidoPeloBot.delete(`${sessao.botUserId}:${guildId}`);
     await this.voz.leave(sessao.botUserId, canalId);
     await this.despacharSaida([sessao], guildId, sessao.botUserId, null, guildSnowflake);
     this.logger.log(`op 4: o bot saiu do canal de voz do servidor ${guildSnowflake}`);

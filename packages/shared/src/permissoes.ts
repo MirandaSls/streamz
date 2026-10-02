@@ -3,6 +3,8 @@
 // Parte do contrato de `@streamz/shared`. Importe sempre pelo pacote
 // (`@streamz/shared`), nunca por este caminho: o índice é a fronteira.
 
+import type { GuildTrait } from "./dominio";
+
 // ── c-cargos ─────────────────────────────────────────────────
 /**
  * Permissões como bitfield (ver `docs/adr/0002-cargos-e-permissoes.md`).
@@ -470,10 +472,18 @@ export interface RoleInput {
   mentionable?: boolean;
 }
 
-/** Campos editáveis do servidor (PATCH /guilds/:id). */
+/**
+ * Campos editáveis do servidor (PATCH /guilds/:id).
+ *
+ * `traits`, `games` e `privateProfile` são da aba Perfil do servidor; os
+ * limites e a validação moram em `guildProfileUpdateSchema` (`dominio.ts`).
+ */
 export interface GuildUpdate {
   name?: string;
   description?: string | null;
+  traits?: GuildTrait[];
+  games?: string[];
+  privateProfile?: boolean;
 }
 
 /** Regra de canal gravada por PUT /guilds/:id/channels/:cid/overrides. */

@@ -235,6 +235,19 @@ export type MenuItem =
        * esmaecê-la aproxima os quatro estados.
        */
       forte?: boolean;
+      /**
+       * Escolher o item **não fecha** o menu — os interruptores do menu de
+       * participante (Silenciar, Silenciar efeitos sonoros, Silenciar voz no
+       * servidor…), que no Discord se ligam em sequência sem reabrir nada.
+       *
+       * Com `control: "checkbox"`, o host inverte a caixa na hora do clique,
+       * antes de a verdade voltar (o `voice.state` da moderação vem do
+       * servidor): se `onSelect` devolver uma `Promise` que resolve `false` ou
+       * rejeita, a caixa volta ao que era. Num menu vivo (`abrirMenuVivo`) a
+       * remontagem da lista confirma a marca; num menu comum, a marca otimista
+       * é o que fica até ele fechar.
+       */
+      manterAberto?: boolean;
     }
   | {
       label: string;
@@ -297,10 +310,36 @@ export function isSlider(
   return "slider" in item;
 }
 
+/**
+ * Um menu que se remonta quando o estado que ele mostra muda — o menu de
+ * participante de voz, aberto enquanto a pessoa é silenciada pelo servidor, liga
+ * a câmera ou vira amiga. Menu comum é retrato do momento em que abriu; este
+ * acompanha a sala.
+ */
+export interface MenuVivo {
+  /** a lista inteira, lida das stores **agora**. */
+  montar: () => MenuItem[];
+  /**
+   * Assina as stores de que `montar` depende e chama `aoMudar` quando alguma
+   * delas muda. Devolve o cancelamento — o host assina ao abrir e cancela ao
+   * fechar, então o chamador não guarda nada.
+   */
+  assinar: (aoMudar: () => void) => () => void;
+}
+
 export interface ContextMenuState {
+  /**
+   * Número desta abertura. Abrir um menu com outro na tela troca o estado sem
+   * passar por `null`; é o `id` que diz ao host que é **outro** menu (foco,
+   * submenu aberto e carência do toque recomeçam), e não o mesmo menu com a
+   * lista remontada.
+   */
+  id: number;
   x: number;
   y: number;
   items: MenuItem[];
+  /** presente só nos menus abertos por `abrirMenuVivo`. */
+  vivo?: MenuVivo;
   /** largura da caixa; o Discord varia entre ~188px e ~220px por tipo de menu. */
   width?: number;
   /**
@@ -461,6 +500,10 @@ interface UIState {
     /** quem abriu (ver `ContextMenuState.dono`). */
     dono?: string,
   ) => void;
+  /** Abre um menu que se remonta sozinho (ver `MenuVivo`). */
+  abrirMenuVivo: (x: number, y: number, vivo: MenuVivo, width?: number) => void;
+  /** Remonta a lista do menu vivo aberto; não faz nada com menu comum. */
+  atualizarMenuVivo: () => void;
   closeContextMenu: () => void;
   openPins: (channelId: string) => void;
   closePins: () => void;
@@ -495,6 +538,8 @@ const canalDeVozAtual = () => useChannels.getState().voiceChannelId;
 
 let toastSeq = 0;
 const TOAST_MS = 5000;
+/** contador de `ContextMenuState.id`. */
+let aberturasDeMenu = 0;
 
 export const useUI = create<UIState>((set, get) => ({
   // o app abre em "mensagens diretas", que é onde mora a página Amigos
@@ -569,9 +614,18 @@ export const useUI = create<UIState>((set, get) => ({
 
   openContextMenu: (x, y, items, width, manterPopover, dono) =>
     set((s) => ({
-      contextMenu: { x, y, items, width, dono },
+      contextMenu: { id: ++aberturasDeMenu, x, y, items, width, dono },
       popover: manterPopover ? s.popover : null,
     })),
+  abrirMenuVivo: (x, y, vivo, width) =>
+    set({
+      contextMenu: { id: ++aberturasDeMenu, x, y, items: vivo.montar(), width, vivo },
+      popover: null,
+    }),
+  atualizarMenuVivo: () =>
+    set((s) =>
+      s.contextMenu?.vivo ? { contextMenu: { ...s.contextMenu, items: s.contextMenu.vivo.montar() } } : {},
+    ),
   closeContextMenu: () => set({ contextMenu: null }),
   openPins: (channelId) => set({ fixadasAbertasEm: channelId }),
   closePins: () => set({ fixadasAbertasEm: null }),
@@ -675,6 +729,8 @@ export const ui = {
     manterPopover?: boolean,
     dono?: string,
   ) => useUI.getState().openContextMenu(x, y, items, width, manterPopover, dono),
+  abrirMenuVivo: (x: number, y: number, vivo: MenuVivo, width?: number) =>
+    useUI.getState().abrirMenuVivo(x, y, vivo, width),
   openPins: (channelId: string) => useUI.getState().openPins(channelId),
   closePins: () => useUI.getState().closePins(),
   pedirFocoNaBusca: () => useUI.getState().pedirFocoNaBusca(),

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import {
   BadRequestException,
   ForbiddenException,
@@ -24,6 +25,7 @@ import {
   isGuildBannerColor,
   overridesEfetivos,
 } from "@streamz/shared";
+import type { GuildTrait } from "@streamz/shared";
 import type {
   ChannelType,
   Guild,
@@ -847,7 +849,14 @@ export class GuildsService {
   async update(
     actorId: string,
     guildId: string,
-    patch: { name?: string; description?: string | null; bannerColor?: string | null },
+    patch: {
+      name?: string;
+      description?: string | null;
+      bannerColor?: string | null;
+      traits?: GuildTrait[];
+      games?: string[];
+      privateProfile?: boolean;
+    },
   ): Promise<Guild> {
     await this.assertCanModerate(actorId, guildId, Permission.MANAGE_GUILD);
     const name = patch.name?.trim();
@@ -872,6 +881,10 @@ export class GuildsService {
         ...(name ? { name } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(bannerColor !== undefined ? { bannerColor } : {}),
+        // `traits` é coluna Json: o controller já validou com o schema do shared
+        ...(patch.traits !== undefined ? { traits: patch.traits as unknown as Prisma.InputJsonValue } : {}),
+        ...(patch.games !== undefined ? { games: patch.games } : {}),
+        ...(patch.privateProfile !== undefined ? { privateProfile: patch.privateProfile } : {}),
       },
     });
     const dto = toGuildDTO(guild);

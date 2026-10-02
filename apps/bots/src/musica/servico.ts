@@ -15,6 +15,12 @@ import { embedDeInatividade } from "./embeds";
 import { ehPrevia } from "./previa";
 import { ArmazemDeConfiguracao } from "./configuracao";
 import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
+import {
+  esperarAte,
+  estaOcioso,
+  estaSendoDestruido,
+  zerarJogadorOcioso,
+} from "./estado-do-jogador";
 
 /**
  * O serviço de áudio do bot de música: o cliente do Lavalink e a ligação dele
@@ -162,6 +168,25 @@ export class ServicoDeMusica {
       void this.manager.sendRawData(dado as never);
     });
 
+    // Bot expulso (ou instalação removida): o API manda `GUILD_DELETE`, não um
+    // `VOICE_STATE_UPDATE` nulo — então a lib não destrói o player sozinha e o
+    // Lavalink seguia tocando para uma sala que já não nos pertence. `available`
+    // falso é queda do servidor do Discord, não saída: aí o player fica.
+    cliente.on(Events.GuildDelete, (servidor) => {
+      if (servidor.available === false) return;
+      this.pontesVistas.delete(servidor.id);
+      this.aguardando.delete(servidor.id);
+      const jogador = this.manager.getPlayer(servidor.id);
+      if (jogador) {
+        void jogador.destroy("o bot saiu do servidor").catch((erro) => {
+          this.ctx.log.aviso("não deu para destruir o player ao sair do servidor", {
+            servidor: servidor.id,
+            erro: String(erro),
+          });
+        });
+      }
+    });
+
     this.manager.nodeManager.on("connect", (no) => {
       this.ctx.log.info("lavalink conectado", {
         no: no.id,
@@ -216,6 +241,12 @@ export class ServicoDeMusica {
       this.autoplaySeguidas.delete(jogador.guildId);
       this.autoplayPendente.delete(jogador.guildId);
       this.execucao.delete(jogador.guildId);
+      this.jaTentouDeNovo.delete(jogador.guildId);
+      // Sem isto o próximo `/tocar` achava a ponte "já vista" de uma sessão que
+      // acabou, pulava a espera do `VOICE_SERVER_UPDATE` e mandava o `play`
+      // antes de a voz existir. Vale para /parar, fim de fila (`QueueEmpty`),
+      // kick do canal (`Disconnected`) e canal apagado: todos passam por aqui.
+      this.pontesVistas.delete(jogador.guildId);
       // `QueueEmpty` só nasce do timer de fila vazia da lib; /parar, /desconectar
       // e troca de canal destroem com outro motivo, então não há falso positivo.
       if (motivo === "QueueEmpty") {
@@ -557,6 +588,50 @@ export class ServicoDeMusica {
 
   jogador(guildId: string): Player | undefined {
     return this.manager.getPlayer(guildId);
+  }
+
+  /**
+   * O player para um `/tocar`, **sempre começando do zero**.
+   *
+   * - A lib só tira o player do mapa no fim do `destroy()` (depois de `await`s).
+   *   Um `/tocar` nessa janela pegava o player moribundo e a faixa nova sumia
+   *   com ele; esperamos o destroy terminar e criamos outro.
+   * - Player vivo e ocioso (fila acabou, 30 s de carência ou 24/7) é reaproveitado
+   *   para não pagar a reconexão de voz, mas com pausa, repetição, histórico e
+   *   timers zerados (ver `estado-do-jogador.ts`).
+   * - Player com faixa ou fila segue como está: é o caso "entra na fila".
+   */
+  async prepararJogador(opcoes: {
+    guildId: string;
+    voiceChannelId: string;
+    textChannelId: string;
+  }): Promise<{ jogador: Player; recomecou: boolean }> {
+    let existente = this.manager.getPlayer(opcoes.guildId);
+    if (existente && estaSendoDestruido(existente)) {
+      await esperarAte(() => !this.manager.getPlayer(opcoes.guildId), 3_000);
+      existente = this.manager.getPlayer(opcoes.guildId);
+    }
+    if (existente && !estaSendoDestruido(existente)) {
+      const ocioso = estaOcioso(existente);
+      if (ocioso) {
+        zerarJogadorOcioso(existente);
+        // Ocioso e sem voz (conexão caiu): reconecta no canal de quem pediu, não
+        // no antigo.
+        if (!existente.connected) existente.options.voiceChannelId = opcoes.voiceChannelId;
+      }
+      // O canal de texto é o de **quem pediu agora**: os avisos de erro e de
+      // inatividade têm de ir para onde o usuário está olhando.
+      existente.textChannelId = opcoes.textChannelId;
+      return { jogador: existente, recomecou: ocioso };
+    }
+    const jogador = this.manager.createPlayer({
+      guildId: opcoes.guildId,
+      voiceChannelId: opcoes.voiceChannelId,
+      textChannelId: opcoes.textChannelId,
+      selfDeaf: true,
+      volume: Number(process.env.MUSICA_VOLUME_PADRAO ?? 60),
+    });
+    return { jogador, recomecou: true };
   }
 
   /**

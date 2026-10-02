@@ -112,16 +112,22 @@ export async function desconectarDaVoz(guildId: string, userId: string): Promise
  * que o gateway manda de volta (mesmo padrão de `moverParaCanalDeVoz` em
  * `ChannelSidebar.tsx`) — aqui só confirma a ação e, se a API recusar
  * (permissão, hierarquia, alvo que já saiu da voz), avisa por toast.
+ *
+ * Devolve se a API aceitou: o menu de participante vira a caixa na hora do
+ * clique, antes do `voice.state` chegar, e é o `false` daqui que a desvira
+ * quando a ação não pegou (ver `manterAberto` em `stores/ui.ts`).
  */
 export async function alternarSilencioDoServidor(
   guildId: string,
   userId: string,
   atual: boolean,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await api.moderarVoz(guildId, { userId, mute: !atual });
+    return true;
   } catch (e) {
     ui.toast(errorMessage(e, "Não foi possível silenciar esta pessoa"), "error");
+    return false;
   }
 }
 
@@ -130,10 +136,12 @@ export async function alternarSurdezDoServidor(
   guildId: string,
   userId: string,
   atual: boolean,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await api.moderarVoz(guildId, { userId, deaf: !atual });
+    return true;
   } catch (e) {
     ui.toast(errorMessage(e, "Não foi possível desativar o áudio desta pessoa"), "error");
+    return false;
   }
 }

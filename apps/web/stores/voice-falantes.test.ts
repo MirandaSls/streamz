@@ -10,10 +10,12 @@ import {
   falantesDeIdentidades,
   falantesDeParticipantes,
   mesmoConjunto,
+  participantesDoDono,
   passoDeFala,
   proximoConjunto,
   rmsDeAmostras,
 } from "./voice-falantes";
+import { ouvintesRemotos } from "../components/voice/audio-remoto";
 
 describe("falantesDeIdentidades", () => {
   it("leva a identidade do LiveKit para o userId", () => {
@@ -65,6 +67,30 @@ describe("donoDoParticipante", () => {
       { identity: identidadeDeTela("u1") },
     ]);
     expect([...c]).toEqual(["cuid1", "u1"]);
+  });
+});
+
+describe("participantesDoDono", () => {
+  // o bot de música entra no LiveKit como `bot:<snowflake>`, mas o menu grava
+  // volume e "Silenciar" sob o userId interno (o do metadata)
+  const bot = { identity: "bot:1", metadata: '{"userId":"cuid-bot"}' };
+  const sala = [{ identity: identidadeDeTela("u1") }, bot, { identity: "u1" }];
+
+  it("acha o bot pelo userId interno, não pela identidade crua", () => {
+    expect(participantesDoDono(sala, "cuid-bot")).toEqual([bot]);
+    expect(participantesDoDono(sala, "bot:1")).toEqual([]);
+  });
+
+  it("a pessoa vem antes do participante de tela dela", () => {
+    expect(participantesDoDono(sala, "u1").map((p) => p.identity)).toEqual(["u1", "u1#tela"]);
+  });
+
+  it("o <audio> do bot nasce sob a chave em que o volume é gravado", () => {
+    // regressão: com a identidade crua, nasciam dois ouvintes — "cuid-bot"
+    // (sem faixa) e "bot:1" (com a faixa, mas lendo volumes["bot:1"], que o
+    // controle deslizante nunca escreve) — e o volume do bot não descia
+    const donos = sala.map(donoDoParticipante);
+    expect(ouvintesRemotos([{ user: { id: "cuid-bot" } }], donos, "eu")).toEqual(["cuid-bot", "u1"]);
   });
 });
 

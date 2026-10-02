@@ -3,8 +3,9 @@
 /**
  * Itens de menu de clique direito em cima de uma PESSOA, fora do menu de
  * mensagem — compartilhados entre a lista de membros (`MemberList.tsx`,
- * `docs/CONTRATO-MENUS.md` item J) e, mais tarde, o participante de canal de
- * voz (item N da mesma ESPEC), que repete os mesmos itens sociais.
+ * `docs/CONTRATO-MENUS.md` item J) e o participante de canal de voz
+ * (`components/voice/participant-menu.tsx`, item N da mesma ESPEC), que repete
+ * os mesmos itens sociais e a mesma moderação de membro.
  *
  * Referência pronta (só lida, não editada por este cartão): `DMList.tsx` já
  * monta nota, apelido de amigo, ignorar, bloquear, convidar para o servidor e
@@ -17,10 +18,13 @@
  * (ESPEC item J) pede os itens de usuário sem `icon`.
  */
 import {
+  TIMEOUT_PRESETS,
   TIPO_DE_COMANDO_DE_APP,
   WS_EVENTS,
+  isTimedOut,
   type ComandoDeApp,
   type Guild,
+  type GuildMemberView,
   type PublicUser,
 } from "@streamz/shared";
 import { api } from "@/lib/api";
@@ -158,6 +162,73 @@ export function submenuConvidarParaOServidor(
       label: g.name,
       onSelect: () => void enviarConviteParaUsuario(userId, g.id),
     })),
+  };
+}
+
+/**
+ * O prompt de "Alterar apelido": o mesmo de texto do resto do app, iniciado
+ * com o apelido atual; string vazia apaga (`api.alterarApelidoDeMembro`,
+ * `docs/CONTRATO-MENUS.md` §5 — a rota já é a mesma de "Editar perfil por
+ * servidor", só que para outro `userId`).
+ */
+async function alterarApelidoDeMembro(guildId: string, membro: GuildMemberView, nome: string) {
+  const valor = await ui.prompt({
+    title: `Alterar apelido de ${nome}`,
+    label: "APELIDO NO SERVIDOR",
+    initial: membro.nickname ?? "",
+    placeholder: membro.user.username,
+    confirmLabel: "Salvar",
+  });
+  if (valor === null) return;
+  try {
+    await api.alterarApelidoDeMembro(guildId, membro.user.id, valor.trim() ? valor.trim() : null);
+    ui.toast("Apelido alterado.");
+  } catch (e) {
+    ui.toast(errorMessage(e, "Não foi possível alterar o apelido"), "error");
+  }
+}
+
+/**
+ * "Alterar apelido" de outro membro. Quem decide se o item entra é o chamador
+ * (`MANAGE_NICKNAMES`; no meu próprio menu o item é "Editar perfil por
+ * servidor"): a lista de membros e o menu de participante de voz leem a
+ * permissão de jeitos diferentes (hook num, `getState()` no outro).
+ */
+export function itemAlterarApelido(guildId: string, membro: GuildMemberView, nome: string): MenuItem {
+  return { label: "Alterar apelido", onSelect: () => void alterarApelidoDeMembro(guildId, membro, nome) };
+}
+
+/** As ações de castigo de `useGuilds` — todas sobre o servidor **ativo**. */
+export interface AcoesDeCastigo {
+  applyTimeout: (userId: string, minutes: number) => Promise<void>;
+  removeTimeout: (userId: string) => Promise<void>;
+  /** o modal da duração personalizada. */
+  timeout: (userId: string) => void;
+}
+
+/**
+ * "Castigar <nome> ›" (vermelho, durações prontas aplicadas direto + "Duração
+ * personalizada…" no modal) ou, com o castigo valendo, "Remover castigo". Em
+ * submenu como no Discord: dez durações soltas no menu raiz empurrariam
+ * expulsar/banir para fora da tela. `MODERATE_MEMBERS` e hierarquia ficam com
+ * o chamador.
+ */
+export function itemCastigar(membro: GuildMemberView, nome: string, acoes: AcoesDeCastigo): MenuItem {
+  const userId = membro.user.id;
+  if (isTimedOut(membro.timeoutUntil)) {
+    return { label: "Remover castigo", onSelect: () => void acoes.removeTimeout(userId) };
+  }
+  return {
+    label: `Castigar ${nome}`,
+    danger: true,
+    submenu: [
+      ...TIMEOUT_PRESETS.map((p) => ({
+        label: p.label,
+        onSelect: () => void acoes.applyTimeout(userId, p.minutes),
+      })),
+      { separator: true as const },
+      { label: "Duração personalizada…", onSelect: () => acoes.timeout(userId) },
+    ],
   };
 }
 

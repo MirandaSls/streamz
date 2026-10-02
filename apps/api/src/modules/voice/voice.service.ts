@@ -981,6 +981,19 @@ export class VoiceService {
     // a tela do app de desktop é um segundo participante, com token próprio:
     // sem esta linha a pessoa sai da chamada e continua transmitindo a tela
     await this.removerDaSala(sala, identidadeDeTela(userId));
+    // Bot entra pela ponte com identity `bot:<snowflake>` (ver
+    // `assinarTokenDaPonte`), e não com o cuid. Sem esta linha o bot expulso do
+    // servidor seguia publicando na sala: o `removeParticipant` acima errava a
+    // identidade, caía em `not_found` (que é só debug) e o áudio continuava.
+    try {
+      const u = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { snowflake: true },
+      });
+      if (u?.snowflake != null) await this.removerDaSala(sala, `bot:${u.snowflake}`);
+    } catch (e) {
+      this.logger.warn(`Sem snowflake de ${userId} para tirar a identidade de bot da sala: ${e}`);
+    }
   }
 
   /**

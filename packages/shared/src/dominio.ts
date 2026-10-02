@@ -3,6 +3,8 @@
 // Parte do contrato de `@streamz/shared`. Importe sempre pelo pacote
 // (`@streamz/shared`), nunca por este caminho: o índice é a fronteira.
 
+import { z } from "zod";
+
 // ── Domínio ──────────────────────────────────────────────────
 
 export type UserStatus = "ONLINE" | "IDLE" | "DND" | "OFFLINE";
@@ -143,6 +145,20 @@ export interface Guild {
   bannerColor: string | null;
   /** quando o servidor foi criado (ISO) — o "Desde …" do cartão de prévia. */
   createdAt: string;
+  /**
+   * "Características" do Perfil do servidor: até `MAX_GUILD_TRAITS` etiquetas
+   * curtas (emoji + texto) no cartão de prévia, na ordem escolhida.
+   */
+  traits: GuildTrait[];
+  /** "Jogos" do Perfil do servidor: nomes livres, até `MAX_GUILD_GAMES`. */
+  games: string[];
+  /**
+   * Chave "perfil privado" da aba Perfil do servidor. Aqui é só a preferência
+   * gravada: o que deixa de aparecer para quem não é membro é decidido por
+   * quem monta o cartão de prévia. Não muda quem pode entrar — isso continua
+   * sendo convite e descoberta.
+   */
+  privateProfile: boolean;
   /** há mensagem nova em algum canal visível (por espectador). */
   unread: boolean;
   /** menções a mim não lidas, somadas nos canais visíveis (por espectador). */
@@ -194,6 +210,122 @@ export function guildBannerBackground(cor: string | null | undefined): string | 
   const alvo = cor.toLowerCase();
   const par = GUILD_BANNER_COLORS.find((c) => c.de === alvo);
   return par ? `linear-gradient(to bottom, ${par.de}, ${par.ate})` : alvo;
+}
+
+// ── Perfil do servidor: características e jogos ──────────────
+
+export const MAX_GUILD_TRAITS = 5;
+export const MAX_TRAIT_TEXT = 24;
+/**
+ * Teto do emoji de uma característica, em unidades UTF-16 (`.length`). Cabe
+ * bandeira, tom de pele e as sequências ZWJ curtas; o que passa disso (família
+ * de quatro pessoas, `<:nome:id>`) fica de fora — emoji personalizado não entra
+ * aqui de propósito, porque o cartão de prévia aparece para quem não é membro
+ * e não enxerga os emojis do servidor.
+ */
+export const MAX_TRAIT_EMOJI = 8;
+export const MAX_GUILD_GAMES = 10;
+export const MAX_GUILD_GAME_NAME = 64;
+
+/** Uma característica do servidor. `emoji` vazio = etiqueta só com texto. */
+export interface GuildTrait {
+  emoji: string;
+  texto: string;
+}
+
+/**
+ * Pictogramas, indicadores regionais (bandeiras), keycaps e os modificadores
+ * que costuram uma sequência. Dígito, `#` e `*` só valem como base de keycap —
+ * sem isso "12" passaria por emoji. ZWJ, VS16 e o keycap ficam fora da classe
+ * de caracteres, como alternativas: dentro dela o lint os acusa de marca
+ * combinante "enganosa" (`no-misleading-character-class`).
+ */
+const EMOJI_DE_TRAIT_RE =
+  /^(?:[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\u{E0020}-\u{E007F}]|‍|️|⃣|[0-9#*](?=️?⃣))+$/u;
+
+/**
+ * Quantos grafemas (o que a pessoa vê como "um caractere") há no texto.
+ *
+ * `Intl.Segmenter` existe no Node da API e nos navegadores atuais; onde ele
+ * faltar, devolve 1 e deixa a palavra final com o servidor — recusar no
+ * cliente uma bandeira válida seria pior do que deixar a API recusar depois.
+ */
+function grafemas(valor: string): number {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return 1;
+  return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(valor)).length;
+}
+
+/** true para um único emoji unicode que caiba em `MAX_TRAIT_EMOJI`. */
+export function ehEmojiDeTrait(valor: string): boolean {
+  if (!valor || valor.length > MAX_TRAIT_EMOJI) return false;
+  if (!EMOJI_DE_TRAIT_RE.test(valor)) return false;
+  // Só modificadores (um VS16 solto, um tom de pele sozinho) não é emoji.
+  if (!/[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u.test(valor)) return false;
+  return grafemas(valor) === 1;
+}
+
+export const guildTraitSchema = z.object({
+  emoji: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || ehEmojiDeTrait(v), "Use um único emoji"),
+  texto: z
+    .string()
+    .trim()
+    .min(1, "Escreva a característica")
+    .max(MAX_TRAIT_TEXT, `Máximo de ${MAX_TRAIT_TEXT} caracteres`),
+});
+
+export const guildTraitsSchema = z
+  .array(guildTraitSchema)
+  .max(MAX_GUILD_TRAITS, `Máximo de ${MAX_GUILD_TRAITS} características`);
+
+export const guildGamesSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, "Nome do jogo vazio")
+      .max(MAX_GUILD_GAME_NAME, `Máximo de ${MAX_GUILD_GAME_NAME} caracteres`),
+  )
+  .max(MAX_GUILD_GAMES, `Máximo de ${MAX_GUILD_GAMES} jogos`)
+  // Sem diferença de caixa: "Minecraft" e "minecraft" seriam a mesma etiqueta
+  // duas vezes no cartão.
+  .refine(
+    (jogos) => new Set(jogos.map((j) => j.toLowerCase())).size === jogos.length,
+    "Jogo repetido",
+  );
+
+/**
+ * Os campos da aba Perfil do servidor que entram no `PATCH /guilds/:id` (ver
+ * `GuildUpdate`). Todos opcionais: o que não vem não muda.
+ */
+export const guildProfileUpdateSchema = z.object({
+  traits: guildTraitsSchema.optional(),
+  games: guildGamesSchema.optional(),
+  privateProfile: z.boolean().optional(),
+});
+export type GuildProfileUpdateInput = z.infer<typeof guildProfileUpdateSchema>;
+
+/**
+ * Lê a coluna `Guild.traits` (JSON) de volta para o contrato.
+ *
+ * A coluna é `Json` e não tabela porque são no máximo cinco etiquetas sem
+ * identidade própria, sempre lidas e gravadas juntas. O preço é que o banco não
+ * garante a forma: esta leitura descarta o que não for um `GuildTrait` válido
+ * em vez de deixar um valor torto chegar à tela — a escrita já passou pelo
+ * `guildTraitsSchema`, então isto só morde em linha mexida à mão.
+ */
+export function lerGuildTraits(valor: unknown): GuildTrait[] {
+  if (!Array.isArray(valor)) return [];
+  const traits: GuildTrait[] = [];
+  for (const item of valor) {
+    const lido = guildTraitSchema.safeParse(item);
+    if (lido.success) traits.push(lido.data);
+    if (traits.length === MAX_GUILD_TRAITS) break;
+  }
+  return traits;
 }
 
 export interface Channel {
