@@ -24,6 +24,7 @@ function montar() {
     {} as never,
     {} as never,
     contas as never,
+    {} as never,
   );
   const markOnline = vi.fn().mockResolvedValue(undefined);
   (gw as unknown as { markOnline: typeof markOnline }).markOnline = markOnline;

@@ -24,6 +24,7 @@ import { FECHAMENTO, OPCODE } from "../tipos";
 import type { PonteDeEventos } from "./dispatch";
 import { GatewayCompatService } from "./servidor";
 import { RegistroDeSessoes, SessaoWs } from "./sessao";
+import type { PresenceService } from "../../realtime/presence.service";
 import type { VozDoGateway } from "./voz";
 
 const TOKEN = "MjIy.aBcDeF.um-token-de-teste-que-nao-vale-nada";
@@ -61,7 +62,12 @@ function fakes() {
     tratarAtualizacaoDeVoz: vi.fn(async () => undefined),
   } as unknown as VozDoGateway;
 
-  return { aplicativos, dados, ponte, voz };
+  const presenca = {
+    markOnline: vi.fn(async () => undefined),
+    markOffline: vi.fn(async () => undefined),
+  } as unknown as PresenceService;
+
+  return { aplicativos, dados, ponte, voz, presenca };
 }
 
 /** Um quadro recebido, com o registro de ter chegado como texto ou binário. */
@@ -130,14 +136,16 @@ describe("GatewayCompatService — o aperto de mão do §7", () => {
   let http: ServidorHttp;
   let servico: GatewayCompatService;
   let registro: RegistroDeSessoes;
+  let presenca: PresenceService;
   let porta: number;
   let clientes: Cliente[];
 
   beforeEach(async () => {
     clientes = [];
     registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte, voz } = fakes();
-    servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
+    const f = fakes();
+    presenca = f.presenca;
+    servico = new GatewayCompatService(registro, f.aplicativos, f.dados, f.ponte, f.voz, presenca);
 
     http = createServer((_req, res) => res.end("ok"));
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
@@ -218,6 +226,32 @@ describe("GatewayCompatService — o aperto de mão do §7", () => {
     expect(sessao).not.toBeNull();
     expect(sessao?.botUserId).toBe("bot-cuid");
     expect(sessao?.intents).toBe(33_281);
+  });
+
+  it("IDENTIFY válido marca o bot online; fechar a conexão marca offline, uma vez só", async () => {
+    const bot = abrir();
+    await bot.esperarOp(OPCODE.HELLO);
+    expect(presenca.markOnline).not.toHaveBeenCalled();
+
+    bot.mandar(OPCODE.IDENTIFY, { token: TOKEN, intents: 1 });
+    await bot.esperarOp(OPCODE.DISPATCH, "READY");
+    expect(presenca.markOnline).toHaveBeenCalledTimes(1);
+    expect(presenca.markOnline).toHaveBeenCalledWith("bot-cuid");
+    expect(presenca.markOffline).not.toHaveBeenCalled();
+
+    bot.soquete.close();
+    await esperar(() => vi.mocked(presenca.markOffline).mock.calls.length > 0, "markOffline");
+    expect(presenca.markOffline).toHaveBeenCalledTimes(1);
+    expect(presenca.markOffline).toHaveBeenCalledWith("bot-cuid");
+  });
+
+  it("token inválido não marca presença", async () => {
+    const ruim = abrir();
+    await ruim.esperarOp(OPCODE.HELLO);
+    ruim.mandar(OPCODE.IDENTIFY, { token: "nao-existe", intents: 1 });
+    await ruim.esperarFechamento();
+    expect(presenca.markOnline).not.toHaveBeenCalled();
+    expect(presenca.markOffline).not.toHaveBeenCalled();
   });
 
   it("token inválido leva 4004, e o IDENTIFY repetido leva 4005", async () => {
@@ -304,8 +338,8 @@ describe("GatewayCompatService — RESUME", () => {
   beforeEach(async () => {
     clientes = [];
     registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte, voz } = fakes();
-    servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
+    const f = fakes();
+    servico = new GatewayCompatService(registro, f.aplicativos, f.dados, f.ponte, f.voz, f.presenca);
     http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
     porta = (http.address() as AddressInfo).port;
@@ -389,8 +423,8 @@ describe("GatewayCompatService — RESUME", () => {
 describe("GatewayCompatService.ligar", () => {
   it("é idempotente: chamar duas vezes não registra um segundo listener", async () => {
     const registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte, voz } = fakes();
-    const servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
+    const f = fakes();
+    const servico = new GatewayCompatService(registro, f.aplicativos, f.dados, f.ponte, f.voz, f.presenca);
     const http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
 

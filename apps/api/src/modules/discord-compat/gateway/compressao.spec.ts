@@ -11,6 +11,7 @@ import { FIM_DE_MENSAGEM, FluxoZlib, lerCompressao, ZLIB_STREAM } from "./compre
 import type { PonteDeEventos } from "./dispatch";
 import { GatewayCompatService } from "./servidor";
 import { RegistroDeSessoes } from "./sessao";
+import type { PresenceService } from "../../realtime/presence.service";
 import type { VozDoGateway } from "./voz";
 
 vi.mock("../traducao/usuario", () => ({
@@ -187,6 +188,7 @@ describe("o gateway com compress=zlib-stream", () => {
       dados,
       ponte,
       {} as unknown as VozDoGateway,
+      { markOnline: vi.fn(async () => undefined), markOffline: vi.fn(async () => undefined) } as unknown as PresenceService,
     );
     http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));

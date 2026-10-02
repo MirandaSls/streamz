@@ -39,7 +39,6 @@ import {
   type BucketLimit,
   type BucketState,
 } from "./rate-limit";
-import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
 import { avisoDeVersao, politicaDoAmbiente } from "./politica-versao-cliente";
 import { conexoesAExpulsar } from "./voz-em-um-lugar-so";
 import { saidaFoiIntencional } from "./saida-de-voz";
@@ -50,6 +49,7 @@ import { GuildsService } from "../guilds/guilds.service";
 import { PollsService } from "../polls/polls.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { AccountStatusService } from "../auth/account-status.service";
+import { PresenceService } from "../realtime/presence.service";
 import { redisClient, redisSubscriber } from "../realtime/redis";
 import { CORS_OPTIONS } from "../../common/cors";
 import { VoiceService } from "../voice/voice.service";
@@ -138,12 +138,6 @@ export class ChatGateway
    */
   private readonly saidasDeVozPendentes = new Map<string, ReturnType<typeof setTimeout>>();
 
-  /** Conexões por usuário: em memória ou no Redis (várias instâncias). */
-  private readonly presence: PresenceStore = (() => {
-    const redis = redisClient();
-    return redis ? new RedisPresenceStore(redis) : new MemoryPresenceStore();
-  })();
-
   constructor(
     private readonly jwt: JwtService,
     private readonly messages: MessagesService,
@@ -155,23 +149,13 @@ export class ChatGateway
     // h-moderacao: enquete é escrita de mensagem, logo passa pelo gateway
     private readonly polls: PollsService,
     private readonly contas: AccountStatusService,
+    // presença compartilhada com o gateway compat dos bots (ver PresenceService)
+    private readonly presence: PresenceService,
   ) {}
 
-  /**
-   * Presença não sobrevive a uma queda: se a API cair, quem estava ONLINE
-   * ficaria ONLINE no banco até reconectar. No boot, sem nenhuma conexão viva
-   * registrada (nenhuma outra instância), zera todo mundo para OFFLINE.
-   */
+  /** Presença não sobrevive a uma queda: ver `PresenceService.zerarNoBoot`. */
   async onModuleInit() {
-    if (await this.presence.isEmpty()) {
-      const r = await this.prisma.user.updateMany({
-        where: { status: { not: "OFFLINE" } },
-        data: { status: "OFFLINE" },
-      });
-      if (r.count > 0) {
-        this.logger.log(`Presença zerada no boot: ${r.count} usuário(s) → OFFLINE`);
-      }
-    }
+    await this.presence.zerarNoBoot();
   }
 
   /** Registra o Server (e o adapter Redis, se houver) para os serviços HTTP emitirem. */
@@ -322,45 +306,14 @@ export class ChatGateway
     void this.agendarSaidaDaVoz(client, user);
   }
 
-  /** Primeira conexão do usuário → status escolhido (ou ONLINE) + broadcast. */
-  private async markOnline(userId: string) {
-    const total = await this.presence.connect(userId);
-    if (total === 1) {
-      const u = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { manualStatus: true, manualStatusExpiresAt: true },
-      });
-      // status manual vencido enquanto offline: ignora e limpa (o job por minuto
-      // não alcança quem estava desconectado)
-      const vencido = !!u?.manualStatusExpiresAt && u.manualStatusExpiresAt.getTime() <= Date.now();
-      if (vencido) {
-        await this.prisma.user
-          .update({ where: { id: userId }, data: { manualStatus: null, manualStatusExpiresAt: null } })
-          .catch(() => {});
-      }
-      await this.setStatus(userId, (vencido ? null : u?.manualStatus) ?? "ONLINE");
-    }
+  /** Primeira conexão do usuário → online + broadcast (ver `PresenceService`). */
+  private markOnline(userId: string) {
+    return this.presence.markOnline(userId);
   }
 
   /** Última conexão fechada → OFFLINE + broadcast. */
-  private async markOffline(userId: string) {
-    const total = await this.presence.disconnect(userId);
-    if (total === 0) {
-      // ── d-social ── carimba o "visto por último" que o perfil mostra; só na
-      // última conexão, senão fechar uma aba já reescreveria o valor
-      await this.prisma.user
-        .update({ where: { id: userId }, data: { lastSeenAt: new Date() } })
-        .catch(() => {});
-      await this.setStatus(userId, "OFFLINE");
-    }
-  }
-
-  private async setStatus(userId: string, status: UserStatus) {
-    await this.prisma.user.update({ where: { id: userId }, data: { status } }).catch(() => {});
-    // só para quem pode estar vendo este usuário (servidores, conversas,
-    // amigos): broadcast global aqui era O(online) por login/logout e O(N²)
-    // na reconexão em massa depois de um deploy
-    await this.realtime.emitToRelated(userId, WS_EVENTS.PRESENCE_UPDATE, { userId, status });
+  private markOffline(userId: string) {
+    return this.presence.markOffline(userId);
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_JOIN)

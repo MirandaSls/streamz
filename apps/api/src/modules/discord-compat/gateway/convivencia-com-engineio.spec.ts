@@ -12,6 +12,7 @@ import type { ApplicationsService } from "../../applications/applications.servic
 import type { DadosDeCompatService } from "../dados.service";
 import { OPCODE } from "../tipos";
 import type { PonteDeEventos } from "./dispatch";
+import type { PresenceService } from "../../realtime/presence.service";
 import type { VozDoGateway } from "./voz";
 import { GatewayCompatService } from "./servidor";
 import { RegistroDeSessoes } from "./sessao";
@@ -55,6 +56,7 @@ describe("convivência com o engine.io do Socket.IO", () => {
       {} as unknown as DadosDeCompatService,
       {} as unknown as PonteDeEventos,
       {} as unknown as VozDoGateway,
+      { markOnline: vi.fn(async () => undefined), markOffline: vi.fn(async () => undefined) } as unknown as PresenceService,
     );
     servico.ligar(http);
   });
