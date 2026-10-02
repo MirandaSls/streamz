@@ -14,6 +14,7 @@ import {
 } from "../tipos";
 import { usuarioParaDiscord } from "../traducao/usuario";
 import { PonteDeEventos } from "./dispatch";
+import { PresenceService } from "../../realtime/presence.service";
 import { lerIdentify, lerResume, montarReady } from "./identify";
 import { FluxoZlib, lerCompressao, ZLIB_STREAM } from "./compressao";
 import { RegistroDeSessoes, SessaoWs, type SoqueteDeSaida } from "./sessao";
@@ -96,6 +97,12 @@ interface Conexao {
    * binário desde o primeiro quadro.
    */
   compressor: FluxoZlib | null;
+  /**
+   * Usuário-bot marcado online por **esta conexão**, ou `null`. Guardar o id
+   * garante um `markOffline` para cada `markOnline` (a contagem da presença é
+   * por conexão), seja o fim um close, um erro ou o relógio de heartbeat.
+   */
+  presencaDe: string | null;
 }
 
 @Injectable()
@@ -115,6 +122,9 @@ export class GatewayCompatService implements OnApplicationShutdown {
     private readonly ponte: PonteDeEventos,
     // F2: quem trata o op 4 (`gateway/voz.ts`).
     private readonly voz: VozDoGateway,
+    // Sem isto o bot nunca contava como conectado e aparecia OFFLINE para sempre:
+    // a presença só era acionada pelo socket do app (ver PresenceService).
+    private readonly presenca: PresenceService,
   ) {}
 
   /**
@@ -198,6 +208,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
       morta: false,
       relogioZumbi: null,
       compressor: null,
+      presencaDe: null,
     };
     this.conexoes.add(conexao);
 
@@ -364,6 +375,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
       sessao.atender(this.soqueteDaSessao(conexao));
       conexao.sessao = sessao;
       this.registro.registrar(sessao);
+      await this.marcarOnline(conexao, autenticado.botUserId);
 
       sessao.despachar("READY", pronto.ready);
 
@@ -466,6 +478,8 @@ export class GatewayCompatService implements OnApplicationShutdown {
 
       sessao.atender(this.soqueteDaSessao(conexao));
       conexao.sessao = sessao;
+      // a conexão anterior já desmarcou no close; esta marca de novo
+      await this.marcarOnline(conexao, autenticado.botUserId);
       const repostos = sessao.reproduzir(lido.corpo.seq);
       sessao.despachar("RESUMED", {});
       this.logger.log(
@@ -558,6 +572,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
     conexao.morta = true;
     this.limparRelogio(conexao);
     conexao.compressor?.fechar();
+    this.marcarOffline(conexao);
     if (conexao.sessao) {
       conexao.sessao.fechar(codigo, razao);
     } else {
@@ -579,7 +594,33 @@ export class GatewayCompatService implements OnApplicationShutdown {
     this.limparRelogio(conexao);
     conexao.compressor?.fechar();
     this.conexoes.delete(conexao);
+    this.marcarOffline(conexao);
     conexao.sessao?.desatar();
+  }
+
+  /**
+   * Marca o bot online (uma vez por conexão). Falha de presença não derruba o
+   * handshake: o bot funciona, só apareceria offline na lista.
+   */
+  private async marcarOnline(conexao: Conexao, botUserId: string): Promise<void> {
+    if (conexao.presencaDe) return;
+    // gravado antes do await: se o socket cair no meio, o close já desmarca
+    conexao.presencaDe = botUserId;
+    try {
+      await this.presenca.markOnline(botUserId);
+    } catch (erro) {
+      this.logger.error(`presença: markOnline do bot ${botUserId} falhou: ${(erro as Error).message}`);
+    }
+  }
+
+  /** Desfaz o `marcarOnline` desta conexão, no máximo uma vez. */
+  private marcarOffline(conexao: Conexao): void {
+    const bot = conexao.presencaDe;
+    if (!bot) return;
+    conexao.presencaDe = null;
+    this.presenca.markOffline(bot).catch((erro: Error) => {
+      this.logger.error(`presença: markOffline do bot ${bot} falhou: ${erro.message}`);
+    });
   }
 
   private rearmarRelogioZumbi(conexao: Conexao): void {

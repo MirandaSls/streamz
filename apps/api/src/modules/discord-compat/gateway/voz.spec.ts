@@ -6,6 +6,7 @@ import WebSocket from "ws";
 
 import type { ApplicationsService } from "../../applications/applications.service";
 import type { GuildsService } from "../../guilds/guilds.service";
+import type { PresenceService } from "../../realtime/presence.service";
 import type { VoiceService } from "../../voice/voice.service";
 import type { DadosDeCompatService } from "../dados.service";
 import type { IdsService } from "../ids.service";
@@ -426,7 +427,10 @@ describe("op 4 no fio: do quadro do bot aos dois dispatches", () => {
       montarGuildCreate: vi.fn(async () => ({ id: SF_SERVIDOR, unavailable: false })),
     } as unknown as PonteDeEventos;
 
-    servico = new GatewayCompatService(new RegistroDeSessoes(), aplicativos, dados, ponte, voz);
+    servico = new GatewayCompatService(new RegistroDeSessoes(), aplicativos, dados, ponte, voz, {
+      markOnline: vi.fn(async () => undefined),
+      markOffline: vi.fn(async () => undefined),
+    } as unknown as PresenceService);
     http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
     porta = (http.address() as AddressInfo).port;
