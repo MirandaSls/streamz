@@ -4,11 +4,21 @@ import { useRef, useState } from "react";
 import {
   GUILD_BANNER_COLORS,
   MAX_GUILD_DESCRIPTION,
+  MAX_GUILD_GAMES,
+  MAX_GUILD_GAME_NAME,
+  MAX_GUILD_TRAITS,
+  MAX_TRAIT_TEXT,
+  ehEmojiDeTrait,
   guildBannerBackground,
+  type GuildTrait,
 } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
-import { Button, TextArea, TextInput } from "@/components/ui/primitivos";
+import Emoji from "@/components/ui/Emoji";
+import EmojiPicker from "@/components/ui/EmojiPicker";
+import { HelpCircle, Smile, X } from "@/components/ui/icones";
+import { Button, Switch, TextArea, TextInput } from "@/components/ui/primitivos";
+import { sugerirJogos } from "@/components/settings/server/jogos-populares";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -29,6 +39,20 @@ function acronym(name: string): string {
     .toUpperCase();
 }
 
+/** As 5 caixas de característica: as salvas, completadas com caixas vazias. */
+function caixasDeTraits(traits: GuildTrait[] | undefined): GuildTrait[] {
+  const caixas = (traits ?? []).slice(0, MAX_GUILD_TRAITS).map((t) => ({ ...t }));
+  while (caixas.length < MAX_GUILD_TRAITS) caixas.push({ emoji: "", texto: "" });
+  return caixas;
+}
+
+/** Só as caixas com texto vão para o servidor (o contrato exige texto). */
+function traitsParaSalvar(caixas: GuildTrait[]): GuildTrait[] {
+  return caixas
+    .map((c) => ({ emoji: c.emoji, texto: c.texto.trim() }))
+    .filter((c) => c.texto !== "");
+}
+
 /** "Desde jun. de 2025" — o rodapé do cartão de prévia. */
 function desde(iso: string): string {
   const d = new Date(iso);
@@ -37,50 +61,23 @@ function desde(iso: string): string {
 }
 
 /**
- * "Perfil do servidor": nome, ícone, faixa de cor e descrição, com o cartão de
- * prévia à direita.
+ * "Perfil do servidor": nome, ícone, faixa, características, descrição, jogos e
+ * perfil privado, com o cartão de prévia à direita (medidas do print
+ * `docs/Reference/Captura de tela 2026-09-04 100541.png`, janela 1919×1079).
  *
- * É a antiga "Visão geral" reorganizada na ordem do print
- * `docs/Reference/Captura de tela 2026-09-04 100541.png` (janela 1919×1079,
- * a mesma largura da nossa bancada de captura — medido com `medir.py`):
- *
- * | item | medida |
- * |---|---|
- * | coluna do formulário | 560 (x 732→1291) |
- * | campo "Nome" | 560×40 (borda em y=228 e y=267) |
- * | botões do ícone | 32 de altura; "Altere…" 198, "Remover…" 117, 8 entre eles. "Altere…" é preenchido (`#5865f2` medido → `primario`); "Remover…" é fundo quase invisível + texto `#f87e7a` (linha y=415: bg `#2e2e33`, exatamente `control-critical-secondary-background-default` 12% sobre a página) → `critico-secundario`, não `critico` (que pintaria fundo `#d22d39` sólido) |
- * | amostra da faixa | 106×64, 5 por linha, 8 de espaço, duas linhas (linha y=571: 732–837, 846–950, 959–1064, 1073–1177, 1186–1291) |
- * | anel da amostra escolhida | 2px do acento, 3px afastado |
- * | cartão de prévia | 300×238 (borda em x=1332/1631 e y=92/329), faixa de 120 no topo (91→210) |
- * | corpo do cartão | `#2c2d32` = `--background-surface-highest`, com borda 1px `#393a3f` ≈ `--border-normal` (`#9696a033`) sobre o fundo da página — mesmo par que `BalaoDeStatus.tsx` usa para a bolha de status |
- * | anel do ícone sobre a faixa | `#2c2d32`, igual ao corpo do cartão, não ao `background-base-lowest` da página (coluna x=1480 do print: o furo ao redor da foto é `#2c2d32`) |
- *
- * O outro print da mesma tela, `Captura de tela 2026-09-01 113634.png`
- * (1284×714, janela mais estreita), mostra a mesma "Faixa" com só 3 colunas —
- * é o grid reagindo à largura menor da janela naquele dia, não uma medida
- * diferente: as duas telas têm janela em zoom 100% (regra 1 da ADR-0009), e a
- * nossa bancada de captura usa 1920×1080, a largura do outro print. Por isso
- * o grid de 5 colunas abaixo já está certo — a divergência "3 colunas de
- * 133×64" do `divergencias.py` é a mesma peça medida na janela estreita.
- *
- * A **faixa** é dado do servidor, não token de tema: o par de cores de cada
- * amostra está em `GUILD_BANNER_COLORS`, e o que fica gravado em
- * `Guild.bannerColor` é o topo do degradê.
- *
- * A contagem "N online" ao lado de "M membros" na prévia usa o mesmo status
- * ao vivo do `MemberList.tsx` (`resolveStatus` sobre `usePresence`), não o
- * `user.status` estático da lista — é dado que o produto já tem, só não
- * aparecia aqui.
- *
- * O que o print tem e nós não criamos, porque não existe no produto:
- * "Características" (cinco caixas de emoji), a tag do servidor e o distintivo
- * (parceiro/comunidade) ao lado do nome na prévia — não é "N online"/"M
- * membros", é um selo de programa que o Streamz não tem.
+ * - Coluna do formulário de 560; cartão de prévia 300×238 com faixa de 120,
+ *   corpo `background-surface-highest` e borda `border-normal`.
+ * - Botões do ícone com 32 de altura: "Altere…" é `primario`, "Remover…" é
+ *   `critico-secundario` (fundo quase invisível, não o vermelho sólido).
+ * - Faixa: 5 amostras de 64 de altura por linha, 8 de espaço. É dado do
+ *   servidor, não token de tema: o que fica em `Guild.bannerColor` é o topo do
+ *   degradê de `GUILD_BANNER_COLORS`.
+ * - "N online" usa o status ao vivo do `MemberList` (`resolveStatus`), não o
+ *   `user.status` estático.
  *
  * Salvar é da barra de alterações não salvas do shell. O ícone é a exceção:
- * upload não tem "desfazer" local, então ele vale no instante em que o arquivo
- * é escolhido, como no Discord. Remover também vale na hora, mas passa por uma
- * confirmação: não há como voltar atrás depois que o arquivo sai do storage.
+ * upload não tem "desfazer" local, então vale na hora, como no Discord.
+ * Remover também vale na hora, mas passa por confirmação.
  */
 export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
@@ -93,6 +90,10 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
   const [name, setName] = useState(guild?.name ?? "");
   const [description, setDescription] = useState(guild?.description ?? "");
   const [bannerColor, setBannerColor] = useState(guild?.bannerColor ?? "");
+  const [traits, setTraits] = useState<GuildTrait[]>(() => caixasDeTraits(guild?.traits));
+  const [emojiAberto, setEmojiAberto] = useState<number | null>(null);
+  const [games, setGames] = useState<string[]>(guild?.games ?? []);
+  const [privateProfile, setPrivateProfile] = useState(guild?.privateProfile ?? false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -100,7 +101,10 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
     !!guild &&
     (name.trim() !== guild.name ||
       description.trim() !== (guild.description ?? "") ||
-      bannerColor !== (guild.bannerColor ?? ""));
+      bannerColor !== (guild.bannerColor ?? "") ||
+      JSON.stringify(traitsParaSalvar(traits)) !== JSON.stringify(guild.traits ?? []) ||
+      JSON.stringify(games) !== JSON.stringify(guild.games ?? []) ||
+      privateProfile !== (guild.privateProfile ?? false));
 
   useAlteracoesNaoSalvas({
     dirty,
@@ -116,6 +120,9 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
             description: description.trim() || null,
             // string vazia é como o contrato diz "sem faixa"
             bannerColor,
+            traits: traitsParaSalvar(traits),
+            games,
+            privateProfile,
           }),
         );
         ui.toast("Servidor salvo.");
@@ -127,6 +134,9 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
       setName(guild?.name ?? "");
       setDescription(guild?.description ?? "");
       setBannerColor(guild?.bannerColor ?? "");
+      setTraits(caixasDeTraits(guild?.traits));
+      setGames(guild?.games ?? []);
+      setPrivateProfile(guild?.privateProfile ?? false);
     },
   });
 
@@ -168,7 +178,7 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
     <>
       <TituloDaPagina
         titulo="Perfil do servidor"
-        subtitulo="Personalize como seu servidor aparece nos links de convite e no cartão que os membros veem."
+        subtitulo="Personalize como seu servidor aparece em links de convite e, se habilitado, em Descoberta de Servidores e mensagens do canal de anúncios"
       />
 
       <div className="flex items-start gap-10">
@@ -271,23 +281,112 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
 
           <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
+          <h2 className="mt-10 text-base font-semibold text-text-strong">Características</h2>
+          <p className="mt-1.5 text-sm text-text-muted">
+            Adicione até {MAX_GUILD_TRAITS} características para mostrar os interesses e a
+            personalidade do seu servidor.
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {traits.map((t, i) => (
+              <div key={i} className="relative min-w-0">
+                <TextInput
+                  aria-label={`Característica ${i + 1}`}
+                  value={t.texto}
+                  maxLength={MAX_TRAIT_TEXT}
+                  placeholder="Escreva algo"
+                  onChange={(e) => {
+                    const texto = e.target.value;
+                    setTraits((atual) => atual.map((c, j) => (j === i ? { ...c, texto } : c)));
+                  }}
+                  prefixo={
+                    <button
+                      type="button"
+                      aria-label={`Escolher emoji da característica ${i + 1}`}
+                      aria-expanded={emojiAberto === i}
+                      onClick={() => setEmojiAberto(emojiAberto === i ? null : i)}
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded text-text-muted hover:text-text-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+                    >
+                      {t.emoji ? <Emoji emoji={t.emoji} tamanho={20} /> : <Smile size={20} />}
+                    </button>
+                  }
+                />
+                {emojiAberto === i && (
+                  <EmojiPicker
+                    className="absolute left-0 top-[46px] z-10"
+                    guildId={guildId}
+                    onClose={() => setEmojiAberto(null)}
+                    onPick={(texto) => {
+                      if (!ehEmojiDeTrait(texto)) {
+                        ui.toast("Use um emoji padrão; os personalizados não cabem aqui.", "error");
+                        return;
+                      }
+                      setTraits((atual) =>
+                        atual.map((c, j) => (j === i ? { ...c, emoji: texto } : c)),
+                      );
+                      setEmojiAberto(null);
+                    }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
+
           <label htmlFor="guildDescription" className={`${ROTULO_DE_BLOCO} mt-10`}>
             Descrição
           </label>
-          <p className="mb-2 mt-1.5 text-sm text-text-muted">
-            Como seu servidor começou? Por que as pessoas devem participar?
-          </p>
           <TextArea
             id="guildDescription"
             value={description}
             maxLength={MAX_GUILD_DESCRIPTION}
-            rows={3}
+            className="min-h-[90px]"
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Do que é este servidor?"
+            placeholder="Conte ao mundo mais sobre esse servidor."
           />
           <p className="mt-1 text-xs text-text-muted">
             {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.
           </p>
+
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
+
+          <h2 className="mt-10 text-base font-semibold text-text-strong">Jogos Jogados</h2>
+          <p className="mt-1.5 text-sm text-text-muted">
+            Quais jogos os seus membros do servidor estão jogando?
+          </p>
+          <SeletorDeJogos jogos={games} aoMudar={setGames} />
+
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
+
+          <div className="mt-10 flex items-start gap-6">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 id="perfilPrivadoTitulo" className="text-base font-semibold text-text-strong">
+                    Perfil privado
+                  </h2>
+                  <p className="mt-1.5 text-sm text-text-muted">
+                    Quando ativado, apenas membros do servidor podem ver o conteúdo do perfil.
+                    Não-membros não poderão ver esse conteúdo a menos que tenham um convite.
+                  </p>
+                </div>
+                <Switch
+                  marcado={privateProfile}
+                  aoMudar={setPrivateProfile}
+                  rotulo="Perfil privado"
+                />
+              </div>
+            </div>
+            <div className="hidden w-[200px] shrink-0 flex-col items-center rounded-lg border border-border-normal bg-background-surface-highest px-4 py-5 text-center sm:flex">
+              <span className="grid h-12 w-12 place-items-center rounded-full bg-input-background-default text-text-muted">
+                <HelpCircle size={24} />
+              </span>
+              <p className="mt-3 text-base font-bold text-text-strong">Servidor privado</p>
+              <p className="mt-1 text-sm text-text-muted">
+                O servidor limitou quem pode ver este Perfil.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/*
@@ -333,9 +432,139 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
               </span>
             </p>
             <p className="mt-0.5 text-sm text-text-muted">{desde(guild.createdAt)}</p>
+            {traitsParaSalvar(traits).length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-1.5">
+                {traitsParaSalvar(traits).map((t, i) => (
+                  <li
+                    key={i}
+                    className="flex max-w-full items-center gap-1 rounded-full bg-input-background-default px-2 py-0.5 text-xs text-text-default"
+                  >
+                    {t.emoji && <Emoji emoji={t.emoji} tamanho={14} />}
+                    <span className="truncate">{t.texto}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * "Jogos Jogados": combobox com sugestões estáticas e texto livre (o Streamz
+ * não tem catálogo de jogos). Os escolhidos viram chips removíveis.
+ */
+function SeletorDeJogos({
+  jogos,
+  aoMudar,
+}: {
+  jogos: string[];
+  aoMudar: (jogos: string[]) => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [aberto, setAberto] = useState(false);
+  const cheio = jogos.length >= MAX_GUILD_GAMES;
+  const sugestoes = sugerirJogos(busca, jogos);
+
+  function adicionar(nome: string) {
+    const limpo = nome.trim().slice(0, MAX_GUILD_GAME_NAME);
+    if (!limpo || cheio) return;
+    if (jogos.some((j) => j.toLowerCase() === limpo.toLowerCase())) {
+      setBusca("");
+      return;
+    }
+    aoMudar([...jogos, limpo]);
+    setBusca("");
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="relative">
+        <TextInput
+          role="combobox"
+          aria-label="Procurar um jogo"
+          aria-expanded={aberto && !cheio && sugestoes.length > 0}
+          aria-controls="jogosSugeridos"
+          value={busca}
+          disabled={cheio}
+          maxLength={MAX_GUILD_GAME_NAME}
+          placeholder={cheio ? `Máximo de ${MAX_GUILD_GAMES} jogos` : "Procurar um jogo…"}
+          onChange={(e) => {
+            setBusca(e.target.value);
+            setAberto(true);
+          }}
+          onFocus={() => setAberto(true)}
+          onBlur={() => setAberto(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              adicionar(busca);
+            } else if (e.key === "Escape") {
+              setAberto(false);
+            }
+          }}
+        />
+        {aberto && !cheio && (sugestoes.length > 0 || busca.trim()) && (
+          <ul
+            id="jogosSugeridos"
+            role="listbox"
+            className="absolute inset-x-0 top-[44px] z-10 max-h-[240px] overflow-y-auto rounded-lg border border-border-normal bg-background-surface-highest py-1"
+          >
+            {busca.trim() &&
+              !sugestoes.some((j) => j.toLowerCase() === busca.trim().toLowerCase()) && (
+                <li role="option" aria-selected="false">
+                  {/* onMouseDown: o blur do campo fecharia a lista antes do clique */}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      adicionar(busca);
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-sm text-text-default hover:bg-background-mod-hover"
+                  >
+                    Adicionar &ldquo;{busca.trim()}&rdquo;
+                  </button>
+                </li>
+              )}
+            {sugestoes.map((j) => (
+              <li key={j} role="option" aria-selected="false">
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    adicionar(j);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-sm text-text-default hover:bg-background-mod-hover"
+                >
+                  {j}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {jogos.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {jogos.map((j) => (
+            <li
+              key={j}
+              className="flex items-center gap-1 rounded-full bg-input-background-default py-1 pl-3 pr-1 text-sm text-text-default"
+            >
+              {j}
+              <button
+                type="button"
+                aria-label={`Remover ${j}`}
+                onClick={() => aoMudar(jogos.filter((x) => x !== j))}
+                className="grid h-5 w-5 place-items-center rounded-full text-text-muted hover:text-text-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+              >
+                <X size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

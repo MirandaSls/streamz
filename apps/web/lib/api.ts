@@ -56,6 +56,7 @@ import type {
   FriendLists,
   FriendRequest,
   Guild,
+  GuildUpdate,
   GuildChannelType,
   GuildMembership,
   GuildMemberView,
@@ -324,7 +325,7 @@ export const api = {
   // ── configurações do servidor (c-cargos) ──
   updateGuild: (
     guildId: string,
-    body: { name?: string; description?: string | null; bannerColor?: string | null },
+    body: GuildUpdate & { bannerColor?: string | null },
   ) =>
     request<Guild>(`/guilds/${guildId}`, patch(body)),
   updateGuildIcon: (guildId: string, file: File) => {
