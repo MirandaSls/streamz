@@ -9,6 +9,7 @@ import type {
   Role,
   UserStatus,
 } from "@streamz/shared";
+import { lerGuildTraits } from "@streamz/shared";
 
 /**
  * Conversores de linha do Prisma para os DTOs de `@streamz/shared`.
@@ -80,6 +81,10 @@ export function toGuildDTO(
     ownerId: string;
     description: string | null;
     bannerColor: string | null;
+    // Perfil do servidor: `traits` é JSON no banco e volta ao contrato por `lerGuildTraits`
+    traits: unknown;
+    games: string[];
+    privateProfile: boolean;
     createdAt: Date;
   },
   view: { unread: boolean; mentionCount: number } = { unread: false, mentionCount: 0 },
@@ -91,6 +96,9 @@ export function toGuildDTO(
     ownerId: g.ownerId,
     description: g.description,
     bannerColor: g.bannerColor,
+    traits: lerGuildTraits(g.traits),
+    games: g.games,
+    privateProfile: g.privateProfile,
     createdAt: g.createdAt.toISOString(),
     unread: view.unread,
     mentionCount: view.mentionCount,

@@ -98,6 +98,9 @@ export class DiscoveryService {
         description: true,
         // o `Guild` do contrato carrega os dois desde o "perfil do servidor"
         bannerColor: true,
+        traits: true,
+        games: true,
+        privateProfile: true,
         createdAt: true,
       },
     });

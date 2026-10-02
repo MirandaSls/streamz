@@ -92,6 +92,9 @@ function servicoCom() {
         iconUrl: null,
         description: null,
         bannerColor: null,
+        traits: [],
+        games: [],
+        privateProfile: false,
         systemChannelId: null,
         createdAt: new Date(2026, 0, 1),
       };
