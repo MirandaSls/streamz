@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthCard, { linkClass } from "@/components/auth/AuthCard";
-import { Button, Campo, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, CampoDeSenha } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -136,10 +136,9 @@ export default function ResetPasswordPage() {
           estiloDoErro="ajuda"
           className="mb-2"
         >
-          <TextInput
+          <CampoDeSenha
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

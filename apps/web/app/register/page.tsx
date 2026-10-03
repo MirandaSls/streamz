@@ -7,7 +7,7 @@ import { MAX_DISPLAY_NAME, USERNAME_MAX, normalizarUsername } from "@streamz/sha
 import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarRegistro } from "@/lib/auth-mensagens";
-import { Button, Campo, Checkbox, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, Checkbox, CampoDeSenha, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
 
@@ -208,10 +208,9 @@ function RegisterForm() {
           estiloDoErro="ajuda"
           className="mb-5"
         >
-          <TextInput
+          <CampoDeSenha
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

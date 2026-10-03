@@ -742,3 +742,10 @@ html.reduzir-movimento *::after {
   transition-delay: 0ms !important;
   scroll-behavior: auto !important;
 }
+
+/* O olho de mostrar senha é o `CampoDeSenha`. O nativo do Edge/WebView2
+   (`::-ms-reveal`, só com foco + texto) apareceria duplicado ao lado dele. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}

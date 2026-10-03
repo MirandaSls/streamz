@@ -7,7 +7,7 @@ import { exigeMfa } from "@streamz/shared";
 import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
-import { Button, Campo, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, CampoDeSenha, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 
 /**
@@ -222,10 +222,9 @@ function LoginForm() {
         </Campo>
 
         <Campo rotulo="Senha" htmlFor="password" obrigatorio className="mb-2">
-          <TextInput
+          <CampoDeSenha
             id="password"
             name="password"
-            type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
