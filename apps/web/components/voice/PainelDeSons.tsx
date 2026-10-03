@@ -417,9 +417,14 @@ export default function PainelDeSons({
                   }
                   onTocar={(s) => void tocar(s)}
                   onMenu={menuDoCard}
-                  onAdicionar={() =>
-                    secao.guildId && ui.openModal({ kind: "adicionarSom", guildId: secao.guildId })
-                  }
+                  onAdicionar={() => {
+                    if (!secao.guildId) return;
+                    // Como no Discord: o painel fecha e só o modal fica. Painel aberto
+                    // sob o modal disputava foco/outside-click com o foco preso dele
+                    // (piscava no hover). O modal vive no ModalHost, não depende do painel.
+                    onFechar();
+                    ui.openModal({ kind: "adicionarSom", guildId: secao.guildId });
+                  }}
                 />
               ))
             )}
