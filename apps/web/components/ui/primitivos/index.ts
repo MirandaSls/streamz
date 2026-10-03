@@ -52,3 +52,4 @@ export { Tabs, type TabsProps, type AbaDeTabs } from "./Tabs";
 export { Badge, type BadgeProps, type TomDoBadge } from "./Badge";
 export { Divider, type DividerProps } from "./Divider";
 export { MensagemDeAjuda } from "./MensagemDeAjuda";
+export { CampoDeSenha, type CampoDeSenhaProps } from "./CampoDeSenha";
