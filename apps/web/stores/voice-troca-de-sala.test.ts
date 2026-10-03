@@ -55,6 +55,10 @@ const { SalaFalsa } = vi.hoisted(() => {
     removeAllListeners() {
       return this;
     }
+    canPlaybackAudio = true;
+    startAudio() {
+      return Promise.resolve();
+    }
     async connect(_url: string, token: string) {
       this.token = token;
       if (SalaFalsa.segurarConexao) {

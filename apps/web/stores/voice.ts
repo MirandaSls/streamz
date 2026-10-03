@@ -789,7 +789,38 @@ function instantaneo(s: VoiceStoreState): ConexaoDeChamada {
  * de `Disconnected` da sala **velha**, que anunciava "a conexão de voz caiu" e
  * zerava `sala` por cima da sala nova, que estava perfeita.
  */
+/**
+ * Navegador/WebView2 pode bloquear a reprodução do áudio remoto (autoplay)
+ * quando a entrada não veio de um gesto, como na reentrada após reconexão:
+ * a pessoa fica sem ouvir o outro lado. O LiveKit avisa por
+ * `AudioPlaybackStatusChanged`; sem gesto não há como destravar, então
+ * pedimos um clique e tentamos `startAudio()` no primeiro gesto.
+ */
+let cancelarDesbloqueioDeAudio: (() => void) | null = null;
+
+function limparDesbloqueioDeAudio() {
+  cancelarDesbloqueioDeAudio?.();
+  cancelarDesbloqueioDeAudio = null;
+}
+
+function aguardarGestoParaOuvir(room: Room) {
+  if (cancelarDesbloqueioDeAudio || typeof window === "undefined") return;
+  console.info("[voz] reprodução bloqueada");
+  const aoGesto = () => {
+    limparDesbloqueioDeAudio();
+    void room.startAudio().catch(() => {});
+  };
+  window.addEventListener("pointerdown", aoGesto, { once: true });
+  window.addEventListener("keydown", aoGesto, { once: true });
+  cancelarDesbloqueioDeAudio = () => {
+    window.removeEventListener("pointerdown", aoGesto);
+    window.removeEventListener("keydown", aoGesto);
+  };
+  ui.toast("Clique em qualquer lugar para ouvir a chamada");
+}
+
 function desmontarSala() {
+  limparDesbloqueioDeAudio();
   // a transmissão nativa é uma segunda conexão: sair da sala tem que
   // derrubá-la também, senão o `#tela` fica na sala sem dono
   geracaoDaTransmissao += 1;
@@ -2486,6 +2517,11 @@ async function entrarNaSala(
       else falandoPorAviso.delete(dono);
       recomporFalantes();
     })
+    .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (sala !== room) return;
+      if (room.canPlaybackAudio) limparDesbloqueioDeAudio();
+      else aguardarGestoParaOuvir(room);
+    })
     .on(RoomEvent.Disconnected, (motivo?: DisconnectReason) => {
       // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
       // quem chegou depois manda, e uma sala aposentada não tem o direito de
@@ -2549,6 +2585,9 @@ async function entrarNaSala(
     return false;
   }
   crono.etapa("room.connect (ICE + sinalização)");
+  // sem await: sem gesto o resume do AudioContext pode ficar pendente e
+  // atrasaria a publicação do mic; o evento AudioPlaybackStatusChanged pede o clique
+  void room.startAudio().catch(() => {});
   // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
   iniciarMedicaoDePing(room);
   // **A sala está de pé: a entrada acabou aqui.** O que vem depois — a saída de

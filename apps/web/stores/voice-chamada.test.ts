@@ -70,6 +70,10 @@ const { SalaFalsa } = vi.hoisted(() => {
       this.ouvintes.clear();
       return this;
     }
+    canPlaybackAudio = true;
+    startAudio() {
+      return Promise.resolve();
+    }
     async connect() {
       this.state = "connected";
     }

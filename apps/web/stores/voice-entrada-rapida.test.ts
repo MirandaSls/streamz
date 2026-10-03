@@ -51,6 +51,10 @@ const { SalaFalsa } = vi.hoisted(() => {
     removeAllListeners() {
       return this;
     }
+    canPlaybackAudio = true;
+    startAudio() {
+      return Promise.resolve();
+    }
     async connect() {
       this.state = "connected";
     }
