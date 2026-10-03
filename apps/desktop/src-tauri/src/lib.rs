@@ -67,6 +67,12 @@ mod permissoes_linux;
 #[cfg(target_os = "macos")]
 mod touch_bar;
 
+// Tamanho inicial da janela principal pelo monitor em que ela abre (o JSON
+// fixa 1440x900, que estoura notebook e fica pequeno em 4K). Só o desktop cria
+// a `main` por código; ver `criar_janela_principal`.
+#[cfg(desktop)]
+mod tamanho_janela;
+
 // Só o handshake de saída usa isto, e ele é desktop apenas (ver
 // `RunEvent::ExitRequested` em `run`).
 #[cfg(desktop)]
@@ -615,8 +621,10 @@ static CONTADOR_JANELAS_SOLTAS: std::sync::atomic::AtomicU32 = std::sync::atomic
 /// `webview2/mod.rs`) e a página recebe `null`. O tratador só pode ser dado no
 /// builder (`WebviewWindowBuilder::on_new_window`); para uma janela criada pela
 /// configuração não existe gancho depois de pronta. O `from_config` mantém tudo
-/// o que o JSON diz (tamanho, sem decoração, invisível até a splash mostrar) —
-/// inclusive o que o `tauri.macos.conf.json` troca.
+/// o que o JSON diz (sem decoração, invisível até a splash mostrar) —
+/// inclusive o que o `tauri.macos.conf.json` troca —, exceto tamanho, mínimo e
+/// posição, que passam a sair do monitor (`geometria_pelo_monitor`); o
+/// 1440x900 do JSON só vale quando o monitor não pode ser lido.
 ///
 /// **Por que `Create` com uma `WebviewWindow` nossa, e não `Allow`:** com
 /// `Allow` o WebView2 abre o popup padrão do Edge, que mostra a barra de
@@ -654,7 +662,20 @@ fn criar_janela_principal<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Resu
         return Ok(());
     };
     let app_handle = app.handle().clone();
-    tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+    let mut construtor = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    if let Some((w, h, min_w, min_h, cx, cy)) = geometria_pelo_monitor(app) {
+        // O `.position` aponta para o centro da área útil do monitor escolhido
+        // só para o `.center()` saber **qual** monitor usar: sem posição, o
+        // tauri-runtime-wry centraliza sempre no monitor primário, e com ela
+        // procura o monitor que contém o ponto. A posição final é a do
+        // `.center()`, que sobrescreve esta.
+        construtor = construtor
+            .inner_size(w, h)
+            .min_inner_size(min_w, min_h)
+            .position(cx, cy)
+            .center();
+    }
+    construtor
         .on_new_window(move |url, features| {
             if url.as_str() != "about:blank" {
                 return tauri::webview::NewWindowResponse::Deny;
@@ -679,6 +700,40 @@ fn criar_janela_principal<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Resu
         })
         .build()?;
     Ok(())
+}
+
+/// Tamanho, mínimo e um ponto dentro do monitor em que a janela principal vai
+/// abrir, tudo em pixels lógicos: `(w, h, min_w, min_h, cx, cy)`.
+///
+/// O monitor é o do cursor — quem clica no atalho noutro monitor espera a
+/// janela ali — e, sem cursor (Wayland não expõe a posição global), o primário.
+/// `None` em qualquer falha ou medida absurda: aí vale o que o `tauri.conf.json`
+/// diz, como antes. Nada aqui pode derrubar o `setup`, porque sem janela
+/// principal o app abre só a splash e fica preso nela.
+#[cfg(desktop)]
+fn geometria_pelo_monitor<R: tauri::Runtime>(
+    app: &tauri::App<R>,
+) -> Option<(f64, f64, f64, f64, f64, f64)> {
+    // `cursor_position` e `monitor_from_point` falam em pixels físicos do
+    // desktop inteiro, então o par é coerente sem conversão.
+    let pelo_cursor = app
+        .cursor_position()
+        .ok()
+        .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten());
+    let monitor = pelo_cursor.or_else(|| app.primary_monitor().ok().flatten())?;
+    let area = monitor.work_area();
+    let escala = monitor.scale_factor();
+    let area_w = f64::from(area.size.width);
+    let area_h = f64::from(area.size.height);
+    if !(escala.is_finite() && escala > 0.0 && area_w > 0.0 && area_h > 0.0) {
+        return None;
+    }
+    let (w, h, min_w, min_h) = tamanho_janela::tamanho_janela(area_w, area_h, escala);
+    // Centro da área útil, convertido com a escala do próprio monitor: é a
+    // mesma conversão que o runtime desfaz ao procurar o monitor do ponto.
+    let cx = (f64::from(area.position.x) + area_w / 2.0) / escala;
+    let cy = (f64::from(area.position.y) + area_h / 2.0) / escala;
+    Some((w, h, min_w, min_h, cx, cy))
 }
 
 /// Mostra e foca a janela principal (usada pelo menu e pelo clique no ícone).
