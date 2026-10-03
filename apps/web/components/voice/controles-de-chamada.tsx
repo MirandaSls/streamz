@@ -48,22 +48,22 @@ const TOM: Record<Tom, string> = {
   desligar: "bg-status-danger text-control-critical-primary-text-default hover:bg-control-critical-primary-background-hover",
 };
 
-// o raio grande é sempre a metade da altura do botão (44/2): é o que mantém a
+// o raio grande é sempre a metade da altura do botão (48/2): é o que mantém a
 // ponta em pílula depois do aumento. O 4 do lado colado não acompanha — ele é o
 // respiro entre botão e vizinho, e a 4,4px não haveria pixel para mostrar.
 const BORDA: Record<Borda, string> = {
-  sozinho: "rounded-[22px]",
-  esquerda: "rounded-l-[22px] rounded-r-[4px]",
-  direita: "rounded-r-[22px] rounded-l-[4px]",
+  sozinho: "rounded-[24px]",
+  esquerda: "rounded-l-[24px] rounded-r-[4px]",
+  direita: "rounded-r-[24px] rounded-l-[4px]",
 };
 
 /** Fundo escuro que agrupa um punhado de controles. */
 export function Capsula({ children }: { children: React.ReactNode }) {
-  // 52 de altura: 4 de padding + 44 do botão. Foram 48 (4 + 40), que é
-  // exatamente a medida do Discord (medido no print 2026-08-31 101857: cápsula
-  // de 48, botão de 40, ícone de 18 de tinta). O usuário pediu maior mesmo
-  // assim, então a fileira toda subiu ~10% a partir daquela paridade — não é
-  // correção de desvio, é escolha, e por isso está escrita aqui.
+  // 56 de altura: 4 de padding + 48 do botão (56 de largura). A medida do
+  // Discord (print 2026-08-31 101857) é cápsula de 48, botão de 40, ícone de 18
+  // de tinta; já tínhamos subido para 52/44, e em 2026-10-02 o dono pediu
+  // maior de novo ("ícones da call estão muito pequenos comparado com o
+  // Discord"). Não é correção de desvio, é escolha, e por isso está escrita aqui.
   //
   // Fundo: medido no mesmo print, `#131416` (linha y=866, trechos 1035–1052 e
   // 1101–1244) — quase idêntico a `--background-base-lowest` (`#121214`), não
@@ -78,7 +78,7 @@ export function Capsula({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Botão de 44px da barra. Largura maior quando está sozinho na cápsula. */
+/** Botão de 48×56 da barra. Largura maior quando está sozinho na cápsula. */
 export function BotaoDeChamada({
   label,
   onClick,
@@ -106,7 +106,7 @@ export function BotaoDeChamada({
         aria-label={label}
         aria-pressed={pressionado}
         aria-expanded={expandido}
-        className={`grid h-11 w-[52px] place-items-center transition ${TOM[tom]} ${BORDA[borda]}`}
+        className={`grid h-12 w-14 place-items-center transition ${TOM[tom]} ${BORDA[borda]}`}
       >
         {children}
       </button>
@@ -120,8 +120,9 @@ export function BotaoDeChamada({
  * Mais alto e mais largo que os outros de propósito: é o único botão
  * irreversível da fileira, e o tamanho faz parte de não errar o clique.
  *
- * 66×50 e `#d22d39`, medidos no print 2026-08-31 101857 (linha y=866
- * x=1258–1323; coluna x=1290 y=841–890) — eram 70×56 com `bg-status-danger`
+ * 72×56, por pedido do dono (2026-10-02): maior que o print 2026-08-31 101857
+ * (66×50, linha y=866 x=1258–1323; coluna x=1290 y=841–890). O `#d22d39` do
+ * mesmo print segue valendo — eram 70×56 com `bg-status-danger`
  * (`#da3e44`, o vermelho de *badge* e de notificação). `#d22d39` é
  * `--control-critical-primary-background-default` (`tokens.css`), o mesmo tom
  * do nosso botão "Apagar" (`modal-confirmacao.png` coluna x=1820 y=618–655) —
@@ -142,7 +143,7 @@ export function BotaoDeDesligar({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-[50px] w-[66px] place-items-center rounded-full bg-control-critical-primary-background-default text-control-critical-primary-text-default shadow-popout transition hover:bg-control-critical-primary-background-hover"
+        className="grid h-14 w-[72px] place-items-center rounded-full bg-control-critical-primary-background-default text-control-critical-primary-text-default shadow-popout transition hover:bg-control-critical-primary-background-hover"
       >
         {children}
       </button>
@@ -194,11 +195,11 @@ export function SplitDeDispositivo({
         // mesmos dois tons do `TOM` acima — referenciar em vez de duplicar o
         // literal, senão um ajuste de cor (como o da migração 0.8) precisa
         // lembrar de mexer aqui também
-        className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
+        className={`grid h-12 w-7 place-items-center rounded-l-[4px] rounded-r-[24px] transition ${
           tom === "mudo" ? TOM.mudo : TOM.neutro
         }`}
       >
-        <ChevronDown size={18} />
+        <ChevronDown size={20} />
       </button>
 
       <PopoverFlutuante

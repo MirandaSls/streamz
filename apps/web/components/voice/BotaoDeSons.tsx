@@ -76,7 +76,7 @@ export default function BotaoDeSons({
             tom={aberto ? "ativo" : "neutro"}
             expandido={aberto}
           >
-            <Soundboard size={22} />
+            <Soundboard size={24} />
           </BotaoDeChamada>
         </div>
       )}

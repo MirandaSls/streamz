@@ -127,7 +127,7 @@ export default function VoiceControls({
             aria-label="Silenciado pelo servidor"
             className="grid h-11 w-[52px] cursor-not-allowed place-items-center rounded-[22px] bg-status-danger/15 text-status-danger transition"
           >
-            <MicOff size={22} />
+            <MicOff size={24} />
           </button>
         </Tooltip>
       ) : nivel >= 1 ? (
@@ -140,7 +140,7 @@ export default function VoiceControls({
           pressionado={muted}
           onClick={toggleMute}
         >
-          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+          {muted || abrindoMicrofone ? <MicOff size={24} /> : <Mic size={24} />}
         </BotaoDeChamada>
       ) : (
         <SplitDeDispositivo
@@ -151,7 +151,7 @@ export default function VoiceControls({
           onClick={toggleMute}
           menu={() => <MenuDeEntrada />}
         >
-          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+          {muted || abrindoMicrofone ? <MicOff size={24} /> : <Mic size={24} />}
         </SplitDeDispositivo>
       )}
     </>
@@ -165,7 +165,7 @@ export default function VoiceControls({
           pressionado={camOn}
           onClick={() => void toggleCam()}
         >
-          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+          {camOn ? <Video size={24} /> : <VideoOff size={24} />}
         </BotaoDeChamada>
       ) : (
         <SplitDeDispositivo
@@ -176,7 +176,7 @@ export default function VoiceControls({
           onClick={() => void toggleCam()}
           menu={() => <ListaDeCameras camLigada={camOn} />}
         >
-          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+          {camOn ? <Video size={24} /> : <VideoOff size={24} />}
         </SplitDeDispositivo>
       )}
     </>
@@ -188,7 +188,7 @@ export default function VoiceControls({
         expandido={mais !== null}
         onClick={() => setMais((v) => (v ? null : "menu"))}
       >
-        <MoreHorizontal size={22} />
+        <MoreHorizontal size={24} />
       </BotaoDeChamada>
 
       {/* `bottom-[52px]` é a altura do botão (44) mais os 8 de folga que a
@@ -260,7 +260,7 @@ export default function VoiceControls({
       )}
 
       <BotaoDeDesligar label={leaveLabel} onClick={onLeave}>
-        <PhoneOff size={24} />
+        <PhoneOff size={28} />
       </BotaoDeDesligar>
     </div>
   );

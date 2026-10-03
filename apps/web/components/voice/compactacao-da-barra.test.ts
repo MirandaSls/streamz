@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 import { larguraDoCentro, nivelDaBarra } from "./compactacao-da-barra";
 
 describe("nivelDaBarra", () => {
-  it("nível 0 no limite exato (432 + 8 de folga)", () => {
-    expect(nivelDaBarra(440)).toBe(0);
+  it("nível 0 no limite exato (462 + 8 de folga)", () => {
+    expect(nivelDaBarra(470)).toBe(0);
   });
 
   it("um pixel abaixo do limite cai para o nível 1", () => {
-    expect(nivelDaBarra(439)).toBe(1);
+    expect(nivelDaBarra(469)).toBe(1);
   });
 
-  it("nível 1 no limite exato (378 + 8 de folga)", () => {
-    expect(nivelDaBarra(386)).toBe(1);
+  it("nível 1 no limite exato (404 + 8 de folga)", () => {
+    expect(nivelDaBarra(412)).toBe(1);
   });
 
   it("um pixel abaixo do limite cai para o nível 2", () => {
-    expect(nivelDaBarra(385)).toBe(2);
+    expect(nivelDaBarra(411)).toBe(2);
   });
 
   it("largura zero é nível 2", () => {
