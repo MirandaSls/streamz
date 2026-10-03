@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import { faixaDeMonitoracao } from "@/lib/microfone";
 import { liberarContextoDeCaptura, usarContextoDeCaptura } from "@/lib/supressor-ruido";
-import { rmsDeAmostras } from "@/stores/voice-falantes";
 import { devolverAtenuacao, suspenderAtenuacaoDaCaptura, useVoiceDevicesStore } from "@/stores/voiceDevices";
 
 const INTERVALO_MS = 50;
+
+/** RMS de amostras float (-1..1). Mesma escala do `rmsDeAmostras`, sem a quantização de 8 bits. */
+function rmsFloat(amostras: Float32Array): number {
+  if (amostras.length === 0) return 0;
+  let soma = 0;
+  for (let i = 0; i < amostras.length; i += 1) soma += amostras[i] * amostras[i];
+  return Math.sqrt(soma / amostras.length);
+}
 
 /**
  * Nível do microfone (0–1) **só para olhar**, enquanto `ativo`.
@@ -63,8 +70,16 @@ export function useNivelDoMicrofone(ativo: boolean): number {
           stream = await navigator.mediaDevices.getUserMedia({
             audio: { deviceId: inputId ? { exact: inputId } : undefined },
           });
-        } catch {
-          return;
+        } catch (e) {
+          // aparelho salvo sumiu (desplugado): cai no padrão do sistema em vez
+          // de deixar o medidor zerado
+          const sumiu = e instanceof DOMException && (e.name === "OverconstrainedError" || e.name === "NotFoundError");
+          if (!inputId || !sumiu) return;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch {
+            return;
+          }
         }
         if (cancelado) {
           stream.getTracks().forEach((t) => t.stop());
@@ -74,16 +89,16 @@ export function useNivelDoMicrofone(ativo: boolean): number {
       }
       if (cancelado || !faixa) return;
       ligarEm(faixa);
-      const amostras = new Uint8Array(an.fftSize);
+      const amostras = new Float32Array(an.fftSize);
       timer = setInterval(() => {
         if (!stream) {
           // a call pode trocar a faixa debaixo de nós (mudar a supressão)
           const atual = faixaDeMonitoracao();
           if (atual && atual !== ligada) ligarEm(atual);
         }
-        an.getByteTimeDomainData(amostras);
+        an.getFloatTimeDomainData(amostras);
         // ×3: fala normal tem RMS baixo; mesmo ganho visual do teste
-        setNivel(Math.min(1, rmsDeAmostras(amostras) * 3));
+        setNivel(Math.min(1, rmsFloat(amostras) * 3));
       }, INTERVALO_MS);
     })();
 
@@ -94,7 +109,8 @@ export function useNivelDoMicrofone(ativo: boolean): number {
       analisador?.disconnect();
       stream?.getTracks().forEach((t) => t.stop());
       if (atenuacaoSuspensa) devolverAtenuacao();
-      liberarContextoDeCaptura();
+      // o contexto que ESTE hook tomou, não o que o módulo achar que é
+      liberarContextoDeCaptura(contexto);
       setNivel(0);
     };
   }, [ativo, inputId]);

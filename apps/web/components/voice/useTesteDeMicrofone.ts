@@ -9,7 +9,6 @@ import {
   usarContextoDeCaptura,
   type CadeiaDoMicrofone,
 } from "@/lib/supressor-ruido";
-import { rmsDeAmostras } from "@/stores/voice-falantes";
 import { useVoice } from "@/stores/voice";
 import {
   aplicarSaida,
@@ -171,19 +170,33 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
         atenuacaoSuspensa = true;
         await suspenderAtenuacaoDaCaptura();
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              deviceId: inputId ? { exact: inputId } : undefined,
-              // o mesmo processamento que a call publicaria: um teste com outra
-              // cadeia responderia sobre um microfone que não é o seu. O que
-              // estes três decidem é só o tratamento da própria faixa —
-              // desligar o eco não tira o stream do modo de comunicação do
-              // sistema, e é por isso que a suspensão acima existe.
-              echoCancellation: eco,
-              noiseSuppression: ruido === "padrao",
-              autoGainControl: ganho,
-            },
-          });
+          // o mesmo processamento que a call publicaria: um teste com outra
+          // cadeia responderia sobre um microfone que não é o seu. O que
+          // estes três decidem é só o tratamento da própria faixa —
+          // desligar o eco não tira o stream do modo de comunicação do
+          // sistema, e é por isso que a suspensão acima existe.
+          const processamento = {
+            echoCancellation: eco,
+            noiseSuppression: ruido === "padrao",
+            autoGainControl: ganho,
+          };
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                ...processamento,
+                ...(inputId ? { deviceId: { exact: inputId } } : {}),
+              },
+            });
+          } catch (e) {
+            // aparelho salvo que sumiu (fone desplugado): `exact` recusa. Sem
+            // fallback o teste morreria num microfone que o sistema ainda tem
+            const nome = (e as { name?: string } | null)?.name;
+            if (inputId && (nome === "OverconstrainedError" || nome === "NotFoundError")) {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: processamento });
+            } else {
+              throw e;
+            }
+          }
         } catch {
           setErro(explicarMidia(motivoDaFalha()) ?? "Não foi possível abrir o microfone.");
           useVoice.getState().pararTesteDeMicrofone();
@@ -230,7 +243,7 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
       await aplicarSaida(elemento, outputId);
       void elemento.play().catch(() => {});
 
-      const amostras = new Uint8Array(analisador.fftSize);
+      const amostras = new Float32Array(analisador.fftSize);
       timer = setInterval(() => {
         // o dono da faixa pode trocá-la debaixo do teste (mudar a supressão
         // remonta a cadeia): sem religar, o medidor congelaria no silêncio
@@ -238,11 +251,15 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
           const atual = faixaDeMonitoracao();
           if (atual && atual !== ligada) ligarEm(atual);
         }
-        analisador.getByteTimeDomainData(amostras);
+        analisador.getFloatTimeDomainData(amostras);
         // ×3 porque fala normal fica em RMS baixo: sem o ganho visual a barra
         // mal sairia do lugar e o teste não provaria nada. O volume de entrada
         // já está no sinal — é a mesma cadeia que a sala ouviria
-        setNivel(Math.min(1, rmsDeAmostras(amostras) * 3));
+        // RMS direto do float (-1..1): `rmsDeAmostras` assume bytes centrados em
+        // 128, escala que o `getFloatTimeDomainData` não tem
+        let soma = 0;
+        for (let i = 0; i < amostras.length; i += 1) soma += amostras[i] * amostras[i];
+        setNivel(Math.min(1, Math.sqrt(soma / amostras.length) * 3));
       }, INTERVALO_MS);
     })();
 
@@ -264,7 +281,7 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
       // sobra captura nossa aberta
       if (atenuacaoSuspensa) devolverAtenuacao();
       // o contexto é um por aba: devolve, não fecha
-      liberarContextoDeCaptura();
+      liberarContextoDeCaptura(ctx);
       if (dono === token.current) dono = null;
       setNivel(0);
     };

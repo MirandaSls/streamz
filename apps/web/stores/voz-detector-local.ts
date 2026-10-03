@@ -5,9 +5,19 @@ import { liberarContextoDeCaptura, usarContextoDeCaptura } from "@/lib/supressor
 import {
   FALA_INICIAL,
   passoDeFala,
-  rmsDeAmostras,
   type EstadoDeFala,
 } from "@/stores/voice-falantes";
+
+/**
+ * Mesmo RMS de `rmsDeAmostras` (voice-falantes), mas para amostras já em −1..1
+ * (silêncio = 0), sem o desvio de 128 dos bytes.
+ */
+function rmsDeFloats(amostras: Float32Array): number {
+  if (amostras.length === 0) return 0;
+  let soma = 0;
+  for (let i = 0; i < amostras.length; i += 1) soma += amostras[i] * amostras[i];
+  return Math.sqrt(soma / amostras.length);
+}
 
 /**
  * "Estou falando?" medido aqui, no meu próprio microfone.
@@ -105,11 +115,15 @@ export function armarDetectorLocal(room: Room, aoMudar: (falando: boolean) => vo
     fonte.connect(analisador);
     // sem `connect(ctx.destination)`: o analisador não precisa de saída, e
     // ligá-lo à saída devolveria o meu microfone para os meus próprios ouvidos
-    const amostras = new Uint8Array(analisador.fftSize);
+    // Float32 e não bytes: `getByteTimeDomainData` quantiza em 8 bits (1 LSB ≈ 0,0078),
+    // quase o `LIMIAR_DE_FALA` (0,008), e um microfone de nível baixo nunca o
+    // cruzava. O float guarda a mesma escala −1..1, então o limiar não muda de
+    // significado. Alocado uma vez, fora do timer.
+    const amostras = new Float32Array(analisador.fftSize);
     const timer = setInterval(() => {
-      analisador.getByteTimeDomainData(amostras);
+      analisador.getFloatTimeDomainData(amostras);
       const antes = estado.falando;
-      estado = passoDeFala(estado, rmsDeAmostras(amostras), Date.now());
+      estado = passoDeFala(estado, rmsDeFloats(amostras), Date.now());
       if (estado.falando !== antes) aoMudar(estado.falando);
     }, INTERVALO_MS);
     detector = { faixa, ctx, fonte, timer };
