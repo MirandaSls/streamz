@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { FriendRequest, PublicUser } from "@streamz/shared";
-import { useFriends } from "./friends";
+import { relationshipFrom, useFriends } from "./friends";
 
 /**
  * Os tratadores de evento de `stores/friends` — a parte que o gateway aciona.
@@ -152,5 +152,17 @@ describe("handleRemoved", () => {
     expect(s.friends.map((f) => f.id)).toEqual(["caio"]);
     expect(s.incoming).toEqual([]);
     expect(s.outgoing).toEqual([]);
+  });
+});
+
+describe("relationshipFrom ao vivo", () => {
+  it("aceitar vira friend, remover volta a none, pedido enviado vira outgoing", () => {
+    const listas = () => useFriends.getState();
+    useFriends.getState().handleAccepted(pessoa("bia"));
+    expect(relationshipFrom(listas(), "bia", "eu")).toBe("friend");
+    useFriends.getState().handleRemoved("bia");
+    expect(relationshipFrom(listas(), "bia", "eu")).toBe("none");
+    useFriends.getState().handleRequest(pedido("f2", "caio"), "outgoing");
+    expect(relationshipFrom(listas(), "caio", "eu")).toBe("outgoing");
   });
 });

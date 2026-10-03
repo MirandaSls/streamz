@@ -25,7 +25,7 @@ import UsernameCopiavel from "@/components/ui/UsernameCopiavel";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
-import { useFriends } from "@/stores/friends";
+import { relationshipFrom, useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useNotas } from "@/stores/notas";
 import { usePermissions } from "@/stores/permissions";
@@ -97,6 +97,8 @@ export default function UserProfileModal({
   const accept = useFriends((s) => s.accept);
   const dismiss = useFriends((s) => s.dismiss);
   const nota = useNotas((s) => s.nota(userId));
+  const carregado = useFriends((s) => s.loaded);
+  const relStore = useFriends((s) => relationshipFrom(s, userId, me?.id));
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -123,8 +125,12 @@ export default function UserProfileModal({
   const status = resolveStatus(statuses, user);
   const nome = displayNameOf(user);
   const personalizado = customStatusOf(user);
-  const euMesmo = profile.relationship === "self" || user.id === me?.id;
-  const bloqueado = profile.relationship === "blocked";
+  // A relação vem da store (atualizada ao vivo por `friend.*`); o
+  // `profile.relationship` é só um snapshot da abertura e fica velho após
+  // aceitar/remover. Usa o snapshot apenas enquanto a store não carregou.
+  const relacao = profile.relationship === "self" ? "self" : carregado ? relStore : profile.relationship;
+  const euMesmo = relacao === "self" || user.id === me?.id;
+  const bloqueado = relacao === "blocked";
   // Cargos como o popout monta (`ProfilePopover.tsx`, `meusCargos`/`chips`):
   // só quando este é o servidor cujos membros a store tem (ver o comentário
   // acima de `activeGuildId`). Fora disso (outro servidor, ou os membros ainda
@@ -138,26 +144,26 @@ export default function UserProfileModal({
   // o pedido pendente, achado pelo id do outro lado — `undefined` enquanto as
   // listas de amigos ainda não chegaram (a store carrega em paralelo).
   const meuPedido =
-    profile.relationship === "incoming"
+    relacao === "incoming"
       ? incoming.find((r) => r.user.id === user.id)
-      : profile.relationship === "outgoing"
+      : relacao === "outgoing"
         ? outgoing.find((r) => r.user.id === user.id)
         : undefined;
 
   function abrirMenu(alvo: HTMLElement) {
     if (!profile) return;
     const itens: MenuItem[] = [];
-    if (profile.relationship === "friend") {
+    if (relacao === "friend") {
       itens.push({ label: "Remover amigo", danger: true, onSelect: () => void remove(user) });
     }
-    if (profile.relationship === "incoming" && meuPedido) {
+    if (relacao === "incoming" && meuPedido) {
       itens.push({
         label: "Recusar pedido",
         danger: true,
         onSelect: () => void dismiss(meuPedido.id),
       });
     }
-    if (profile.relationship === "outgoing" && meuPedido) {
+    if (relacao === "outgoing" && meuPedido) {
       itens.push({
         label: "Cancelar pedido",
         danger: true,
@@ -240,7 +246,7 @@ export default function UserProfileModal({
                 >
                   Enviar mensagem
                 </Button>
-                {profile.relationship === "none" && (
+                {relacao === "none" && (
                   <Button
                     variante="secundario"
                     tamanho="sm"
@@ -253,7 +259,7 @@ export default function UserProfileModal({
                 )}
                 {/* pedido meu, ainda sem resposta: mostra o estado, não some —
                     cancelar é uma ação destrutiva, então mora no "…", não aqui */}
-                {profile.relationship === "outgoing" && (
+                {relacao === "outgoing" && (
                   <Button
                     variante="secundario"
                     tamanho="sm"
@@ -266,7 +272,7 @@ export default function UserProfileModal({
                 )}
                 {/* pedido da outra pessoa: aceitar fica à mão; recusar é
                     destrutivo e mora no "…", como cancelar */}
-                {profile.relationship === "incoming" && meuPedido && (
+                {relacao === "incoming" && meuPedido && (
                   <Button
                     variante="positivo"
                     tamanho="sm"
