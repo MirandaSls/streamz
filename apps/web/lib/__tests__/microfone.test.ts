@@ -170,9 +170,26 @@ class FaixaFalsa {
    * que só aceita o processamento no `getUserMedia`).
    */
   recusarAplicacao = false;
+  /**
+   * O que a captura **do aparelho** diz ser (eco/ruído/AGC). `null` imita um
+   * navegador que não publica as chaves — é o padrão, e não gera divergência.
+   */
+  origem: Record<string, unknown> | null = null;
+  /**
+   * Trava opcional do `setProcessor`, antes da `init()`: é o `resume()` que
+   * nunca resolve, ou o wasm que não chega, segurando o `trackChangeLock`.
+   */
+  travaDeMontagem: Promise<void> | null = null;
+  /** chamado depois de a `init()` terminar — para suspender o contexto no meio. */
+  depoisDeMontar: ((ctx: AudioContext | undefined) => void) | null = null;
   private ctx: AudioContext | undefined;
 
   constructor(public midia: FaixaFalsaDeMidia) {}
+
+  /** como o `LocalTrack`: o `getSettings()` da faixa do aparelho, sem a cadeia. */
+  getSourceTrackSettings(): Record<string, unknown> {
+    return { ...this.midia.getSettings(), ...(this.origem ?? {}) };
+  }
 
   /** como o `LocalTrack`: a faixa processada quando há processador. */
   get mediaStreamTrack(): FaixaFalsaDeMidia {
@@ -185,14 +202,20 @@ class FaixaFalsa {
   async setProcessor(p: ProcessadorFalso) {
     if (!this.ctx) throw new Error("Audio context needs to be set on LocalAudioTrack");
     if (this.processor) await this.processor.destroy();
+    if (this.travaDeMontagem) await this.travaDeMontagem;
     await p.init({ track: this.midia, audioContext: this.ctx, kind: "audio" });
     this.processor = p;
+    this.depoisDeMontar?.(this.ctx);
   }
   async stopProcessor() {
     await this.processor?.destroy();
     this.processor = null;
   }
-  /** como o `LocalAudioTrack`: aplica na faixa de ENTRADA, sem `getUserMedia`. */
+  /**
+   * como o `LocalAudioTrack`: aplica na faixa de ENTRADA, sem `getUserMedia`.
+   * E como o Chromium: resolve **sem mudar** `origem` — eco/ruído/AGC ficam
+   * como o `getUserMedia` os abriu.
+   */
   async applyConstraints(p: ProcessamentoFalso) {
     if (this.recusarAplicacao) {
       const e = new Error("Cannot satisfy constraints");
@@ -204,6 +227,16 @@ class FaixaFalsa {
   async restartTrack(restricoes?: RestricoesFalsas) {
     if (restricoes) this.recebidas.push(comoOSdkMuta(restricoes));
     this.reinicios += 1;
+    if (this.origem) {
+      // o `getUserMedia` novo abre com o que foi pedido; o que não foi pedido
+      // vem no padrão do Chromium, que é tudo ligado
+      const r = restricoes ?? {};
+      this.origem = {
+        echoCancellation: r.echoCancellation ?? true,
+        noiseSuppression: r.noiseSuppression ?? true,
+        autoGainControl: r.autoGainControl ?? true,
+      };
+    }
     const nova = new FaixaFalsaDeMidia();
     this.midia.stop();
     this.midia = nova;
@@ -260,7 +293,7 @@ class FaixaFalsa {
 
 const publicadas = new Set<FaixaFalsa>();
 
-function salaFalsa() {
+function salaFalsa(ajustar?: (faixa: FaixaFalsa) => void) {
   return {
     criarFaixa: async (restricoes: RestricoesFalsas) => {
       // `createLocalTracks` passa pelo mesmo `constraintsForOptions`
@@ -268,7 +301,9 @@ function salaFalsa() {
       const stream = (await navigator.mediaDevices.getUserMedia({
         audio: true,
       })) as unknown as StreamFalso;
-      return new FaixaFalsa(stream.getAudioTracks()[0]) as unknown as FaixaFalsa;
+      const faixa = new FaixaFalsa(stream.getAudioTracks()[0]);
+      ajustar?.(faixa);
+      return faixa as unknown as FaixaFalsa;
     },
     publicar: async (f: FaixaFalsa) => void publicadas.add(f),
     despublicar: async (f: FaixaFalsa) => void publicadas.delete(f),
@@ -284,6 +319,8 @@ function prefs(
     deviceId: string;
     echoCancellation: boolean;
     noiseSuppression: boolean;
+    autoGainControl: boolean;
+    voiceIsolation: boolean;
   }> = {},
 ) {
   return {
@@ -291,8 +328,8 @@ function prefs(
       ...(patch.deviceId ? { deviceId: patch.deviceId } : {}),
       echoCancellation: patch.echoCancellation ?? true,
       noiseSuppression: patch.noiseSuppression ?? false,
-      autoGainControl: true,
-      voiceIsolation: false,
+      autoGainControl: patch.autoGainControl ?? true,
+      voiceIsolation: patch.voiceIsolation ?? false,
     },
     supressao: patch.supressao ?? false,
     ganho: patch.ganho ?? 1,
@@ -505,18 +542,14 @@ describe("rajada de mudo/desmudo não acumula atraso", () => {
 /**
  * Quando mudar de preferência reabre o dispositivo — e quando não reabre.
  *
- * O que esta suíte guarda: até aqui, **qualquer** mudança de eco, ruído nativo
- * ou ganho automático caía num `restartTrack`, que é `stop()` + `getUserMedia`
- * novo. Cada reabertura é uma renegociação com o áudio do sistema (num fone
- * Bluetooth, de perfil e codec inteiros), e nada disso é preciso para trocar
- * restrições da mesma captura: `applyConstraints` as troca com o dispositivo
- * aberto. Element Call e LiveKit Meet, que usam este mesmo SDK no navegador,
- * só usam `restartTrack` para trocar de **aparelho** — que é o único caso que
- * continua reabrindo aqui.
- *
- * A recusa importa tanto quanto o caminho feliz: `applyConstraints` rejeita
- * (`OverconstrainedError`) onde o driver não aceita a troca ao vivo, e aí a
- * preferência **tem** de valer de qualquer jeito, pelo caminho caro.
+ * A história tem duas voltas. Primeiro tudo reabria (`restartTrack` =
+ * `stop()` + `getUserMedia`), e isso foi trocado por `applyConstraints`, que
+ * não fecha o dispositivo. Só que o Chromium/WebView2 resolve o
+ * `applyConstraints` de eco/ruído/AGC **sem erro e sem efeito** numa captura
+ * aberta: o perfil de entrada (Isolamento/Estúdio/Personalizado) deixou de
+ * valer ao trocar na call, e o recuo por recusa nunca rodava. Agora essas três
+ * reabrem; `applyConstraints` ficou para o `voiceIsolation` sozinho — e a
+ * recusa dele continua tendo de valer pelo caminho caro.
  */
 describe("trocar preferência de áudio sem reabrir o microfone", () => {
   beforeEach(() => {
@@ -540,11 +573,63 @@ describe("trocar preferência de áudio sem reabrir o microfone", () => {
     return { ...mod, faixa: mod.faixaDoMicrofone() as unknown as FaixaFalsa };
   }
 
-  it("mesmo aparelho e só o processamento mudou: reconfigura a captura aberta", async () => {
+  it("eco/ruído/AGC mudou: reabre a captura, porque o Chromium aceita o applyConstraints sem aplicar", async () => {
+    const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
+
+    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
+
+    // o caminho ao vivo não é nem tentado: ele resolveria sem efeito
+    expect(faixa.aplicadas).toEqual([]);
+    expect(faixa.reinicios).toBe(1);
+    expect(faixa.recebidas.at(-1)).toMatchObject({
+      echoCancellation: false,
+      noiseSuppression: true,
+      autoGainControl: true,
+    });
+
+    // e preferência que não mudou nada não fala com o navegador
+    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
+    expect(faixa.reinicios).toBe(1);
+
+    await fecharMicrofone();
+  });
+
+  it("applyConstraints que resolve sem mudar a captura não engana mais: o perfil vale", async () => {
+    const mod = await import("@/lib/microfone");
+    // a captura publica as chaves, e o `applyConstraints` do dublê resolve sem
+    // mexer nelas — exatamente o vício do Chromium/WebView2
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.origem = { echoCancellation: true, noiseSuppression: false, autoGainControl: true };
+      }) as never,
+      prefs(),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // "Estúdio": tudo desligado
+    await mod.atualizarMicrofone(
+      prefs({ echoCancellation: false, noiseSuppression: false, autoGainControl: false }),
+    );
+
+    expect(faixa.reinicios).toBe(1);
+    expect(faixa.getSourceTrackSettings()).toMatchObject({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    });
+    // conferido pela origem depois da reabertura: nada divergiu, nada a avisar
+    expect(aviso).not.toHaveBeenCalled();
+
+    aviso.mockRestore();
+    await mod.fecharMicrofone();
+  });
+
+  it("só o voiceIsolation mudou: reconfigura a captura aberta", async () => {
     const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir();
     const midia = faixa.midia;
 
-    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
+    await atualizarMicrofone(prefs({ voiceIsolation: true }));
 
     expect(faixa.reinicios).toBe(0);
     // a faixa do dispositivo é a mesma: nada foi fechado e reaberto
@@ -552,17 +637,12 @@ describe("trocar preferência de áudio sem reabrir o microfone", () => {
     expect(faixa.midia.readyState).toBe("live");
     expect(faixa.aplicadas).toEqual([
       {
-        echoCancellation: false,
-        noiseSuppression: true,
+        echoCancellation: true,
+        noiseSuppression: false,
         autoGainControl: true,
-        voiceIsolation: false,
+        voiceIsolation: true,
       },
     ]);
-
-    // e preferência que não mudou nada não fala com o navegador
-    await atualizarMicrofone(prefs({ echoCancellation: false, noiseSuppression: true }));
-    expect(faixa.aplicadas).toHaveLength(1);
-    expect(faixa.reinicios).toBe(0);
 
     await fecharMicrofone();
   });
@@ -585,7 +665,7 @@ describe("trocar preferência de áudio sem reabrir o microfone", () => {
     faixa.recusarAplicacao = true;
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await atualizarMicrofone(prefs({ noiseSuppression: true }));
+    await atualizarMicrofone(prefs({ voiceIsolation: true }));
 
     // a preferência não pode ficar sem efeito em silêncio
     expect(faixa.reinicios).toBe(1);
@@ -602,17 +682,17 @@ describe("trocar preferência de áudio sem reabrir o microfone", () => {
     const { cadeiasMontadas } = await import("@/lib/supressor-ruido");
     expect(cadeiasMontadas()).toBe(0);
 
-    // "Padrão" → "Avançada": a nativa sai pelas restrições, o RNNoise entra
-    // pelo nosso grafo. `applyConstraints` resolve só a primeira metade
+    // "Padrão" → "Avançada": a nativa sai pela reabertura, o RNNoise entra
+    // pelo nosso grafo
     await atualizarMicrofone(prefs({ supressao: true, noiseSuppression: false }));
-    expect(faixa.reinicios).toBe(0);
-    expect(faixa.aplicadas.at(-1)?.noiseSuppression).toBe(false);
+    expect(faixa.reinicios).toBe(1);
+    expect(faixa.recebidas.at(-1)?.noiseSuppression).toBe(false);
     expect(cadeiasMontadas()).toBe(1);
 
-    // e voltar desmonta a cadeia, ainda sem reabrir o dispositivo
+    // e voltar desmonta a cadeia
     await atualizarMicrofone(prefs({ supressao: false, noiseSuppression: true }));
-    expect(faixa.reinicios).toBe(0);
-    expect(faixa.aplicadas.at(-1)?.noiseSuppression).toBe(true);
+    expect(faixa.reinicios).toBe(2);
+    expect(faixa.recebidas.at(-1)?.noiseSuppression).toBe(true);
     expect(cadeiasMontadas()).toBe(0);
 
     await fecharMicrofone();
@@ -735,12 +815,243 @@ describe("o SDK reabre a captura por conta própria", () => {
     };
     const { atualizarMicrofone, fecharMicrofone, faixa } = await abrir(embrulhado);
 
-    await atualizarMicrofone(prefs({ deviceId: "mic-1", echoCancellation: false }));
+    // só o `voiceIsolation`: o único que ainda troca ao vivo, e portanto o
+    // único que deixa ver se o aparelho foi tomado por outro
+    await atualizarMicrofone(prefs({ deviceId: "mic-1", voiceIsolation: true }));
 
     expect(faixa.reinicios).toBe(0);
-    expect(faixa.aplicadas.at(-1)?.echoCancellation).toBe(false);
+    expect(faixa.aplicadas.at(-1)?.voiceIsolation).toBe(true);
 
     await fecharMicrofone();
+  });
+
+  it("a reaquisição do SDK voltou com o eco ligado: reabre com o pedido, porque applyConstraints não pegaria", async () => {
+    const mod = await import("@/lib/microfone");
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.origem = { echoCancellation: false, noiseSuppression: true, autoGainControl: true };
+      }) as never,
+      prefs({ echoCancellation: false, noiseSuppression: true }),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // o `getUserMedia` do SDK vai sem processamento: tudo volta ligado
+    await faixa.reaquisicaoDoSdk();
+    await escoar();
+
+    // a do SDK e a nossa
+    expect(faixa.reinicios).toBe(2);
+    expect(faixa.aplicadas).toEqual([]);
+    expect(faixa.recebidas.at(-1)).toMatchObject({
+      echoCancellation: false,
+      noiseSuppression: true,
+    });
+    expect(faixa.getSourceTrackSettings().echoCancellation).toBe(false);
+    expect(aviso).toHaveBeenCalled();
+
+    aviso.mockRestore();
+    await mod.fecharMicrofone();
+  });
+
+  it("com cadeia montada, a conferência lê a captura do aparelho, não a processada", async () => {
+    const mod = await import("@/lib/microfone");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // pedimos sem eco e a origem veio com eco. A faixa processada (a de
+    // `mediaStreamTrack`, com a cadeia) não diz nada de eco: conferir por ela
+    // era deixar a VoiceProcessingIO ligada sem saber
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.origem = { echoCancellation: true, noiseSuppression: false, autoGainControl: true };
+      }) as never,
+      prefs({ supressao: true, echoCancellation: false }),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+
+    expect(faixa.processor).not.toBeNull();
+    expect(faixa.reinicios).toBe(1);
+    expect(faixa.getSourceTrackSettings().echoCancellation).toBe(false);
+
+    aviso.mockRestore();
+    await mod.fecharMicrofone();
+  });
+});
+
+/**
+ * A cadeia num `AudioContext` que não roda.
+ *
+ * O relato: entrar na call e ninguém ouvir, sem erro nenhum. Uma cadeia
+ * montada num contexto suspenso publica a saída de um
+ * `MediaStreamAudioDestinationNode` parado — silêncio —, e o `resume()` sem
+ * ativação do usuário não rejeita: fica pendente para sempre, com a `init()` da
+ * cadeia (e o `trackChangeLock` do SDK) presa nele, e a fila do dono da faixa
+ * presa atrás. A regra que esta suíte guarda é a de sempre — a cadeia é luxo,
+ * o microfone não —, agora também para o contexto e para o tempo.
+ *
+ * `vi.resetModules()` porque o contexto de captura é estado de módulo: sem
+ * isso, o contexto de 48 kHz de uma suíte anterior voltaria aqui no lugar do
+ * dublê parado.
+ */
+describe("a cadeia sem contexto rodando não segura o microfone", () => {
+  /** um contexto que o navegador não deixa acordar: `resume()` nunca resolve. */
+  class ContextoParado extends ContextoFalso {
+    constructor(opts?: { sampleRate?: number }) {
+      super(opts);
+      this.state = "suspended";
+    }
+    override resume() {
+      return new Promise<void>(() => {});
+    }
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    faixas.length = 0;
+    contextos.length = 0;
+    publicadas.clear();
+    vi.stubGlobal("AudioContext", ContextoFalso);
+    vi.stubGlobal("MediaStream", class {
+      constructor(public faixas: unknown[]) {}
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: async () => new StreamFalso([new FaixaFalsaDeMidia()]),
+      },
+    });
+  });
+
+  async function carregar(tetos: Partial<Record<"contexto" | "cadeia", number>> = {}) {
+    const mod = await import("@/lib/microfone");
+    // tetos curtos só onde o teste quer estourá-los: o teste não espera
+    // segundos de verdade, e uma montagem normal não pode cair no teto por acaso
+    Object.assign(mod.tetosDoMicrofone, tetos);
+    return mod;
+  }
+
+  it("contexto suspenso que não acorda: publica a faixa crua, sem processador", async () => {
+    vi.stubGlobal("AudioContext", ContextoParado);
+    const mod = await carregar({ contexto: 10 });
+    const { cadeiasMontadas } = await import("@/lib/supressor-ruido");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await mod.abrirMicrofone(salaFalsa() as never, prefs({ supressao: true }));
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+
+    expect(publicadas.has(faixa)).toBe(true);
+    expect(faixa.processor).toBeNull();
+    expect(cadeiasMontadas()).toBe(0);
+    expect(aviso).toHaveBeenCalledWith(
+      expect.stringContaining("sem a cadeia"),
+      expect.anything(),
+    );
+    // o diagnóstico da publicação conta o que ficou no ar
+    expect(info).toHaveBeenCalledWith(
+      "[voz] mic publicado",
+      expect.objectContaining({ aberto: true, cadeia: false, contexto: "suspended" }),
+    );
+
+    // e a fila não ficou presa: mexer e sair ainda funcionam
+    await mod.atualizarMicrofone(prefs({ supressao: true, ganho: 0.5 }));
+    await mod.fecharMicrofone();
+    expect(publicadas.size).toBe(0);
+    expect(faixa.parada).toBe(true);
+
+    aviso.mockRestore();
+    info.mockRestore();
+  });
+
+  it("contexto suspenso no meio da montagem: tira a cadeia e publica crua", async () => {
+    const mod = await carregar();
+    const { cadeiasMontadas } = await import("@/lib/supressor-ruido");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.depoisDeMontar = (ctx) => {
+          (ctx as unknown as ContextoFalso).state = "suspended";
+        };
+      }) as never,
+      prefs({ supressao: true }),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+
+    expect(publicadas.has(faixa)).toBe(true);
+    expect(faixa.processor).toBeNull();
+    expect(cadeiasMontadas()).toBe(0);
+
+    aviso.mockRestore();
+    await mod.fecharMicrofone();
+  });
+
+  it("montagem que estoura o teto: publica crua na hora e adota a cadeia quando ela chegar", async () => {
+    const mod = await carregar({ cadeia: 50 });
+    const { cadeiasMontadas } = await import("@/lib/supressor-ruido");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    let soltar: () => void = () => {};
+    const trava = new Promise<void>((pronto) => {
+      soltar = pronto;
+    });
+
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.travaDeMontagem = trava;
+      }) as never,
+      prefs({ supressao: true }),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+
+    // o teto devolveu a fila: a faixa está na sala, ainda crua
+    expect(publicadas.has(faixa)).toBe(true);
+    expect(faixa.processor).toBeNull();
+
+    // o `setProcessor` termina depois: a cadeia ainda serve e é adotada
+    soltar();
+    await vi.waitFor(() => {
+      expect(faixa.processor).not.toBeNull();
+      expect(cadeiasMontadas()).toBe(1);
+    });
+
+    // e, adotada, é dela o volume e o descarte
+    await mod.atualizarMicrofone(prefs({ supressao: true, ganho: 0.5 }));
+    expect(cadeiasMontadas()).toBe(1);
+    await mod.fecharMicrofone();
+    expect(cadeiasMontadas()).toBe(0);
+
+    aviso.mockRestore();
+    info.mockRestore();
+  });
+
+  it("montagem atrasada que chega depois da saída é desmontada, não ressuscitada", async () => {
+    const mod = await carregar({ cadeia: 50 });
+    const { cadeiasMontadas, usuariosDoContexto } = await import("@/lib/supressor-ruido");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let soltar: () => void = () => {};
+    const trava = new Promise<void>((pronto) => {
+      soltar = pronto;
+    });
+
+    await mod.abrirMicrofone(
+      salaFalsa((f) => {
+        f.travaDeMontagem = trava;
+      }) as never,
+      prefs({ supressao: true }),
+    );
+    const faixa = mod.faixaDoMicrofone() as unknown as FaixaFalsa;
+    // sair com a montagem ainda presa: a fila não pode esperar por ela
+    await mod.fecharMicrofone();
+    expect(publicadas.size).toBe(0);
+
+    soltar();
+    // a `init()` atrasada monta (1) e a adoção a desmonta (0): espera a volta
+    await vi.waitFor(() => expect(faixa.processor).not.toBeNull());
+    await vi.waitFor(() => {
+      expect(cadeiasMontadas()).toBe(0);
+      expect(usuariosDoContexto()).toBe(0);
+    });
+
+    aviso.mockRestore();
   });
 });
 

@@ -70,6 +70,12 @@ import type { AudioProcessorOptions, Track, TrackProcessor } from "livekit-clien
 /** Servidos de `public/supressor/` pelo `predev`/`prebuild`. */
 const BASE = "/supressor";
 const TAXA_EXIGIDA = 48_000;
+/**
+ * Quanto a montagem espera pelo modelo e pelo worklet. Generoso para uma rede
+ * lenta baixar dois `.wasm` pequenos; curto o bastante para a pessoa não ficar
+ * muda na call esperando algo que não vem.
+ */
+const PRAZO_DOWNLOAD_MS = 8000;
 
 /* ---------------------------------------------------------------- */
 /* A supressão avançada está disponível nesta janela?                */
@@ -288,12 +294,107 @@ export function usarContextoDeCaptura(exigeTaxaDoModelo = false): AudioContext {
  * nunca a um contexto zerado: um decremento errado suspenderia o contexto de
  * quem ainda está usando.
  */
-export function liberarContextoDeCaptura(contexto?: AudioContext) {
+export function liberarContextoDeCaptura(contexto?: AudioContext): void {
   const c = contexto ?? (usuariosDe(ctxNativo) > 0 ? ctxNativo : ctxDoModelo);
   if (!c) return;
   const restantes = Math.max(0, usuariosDe(c) - 1);
   usuarios.set(c, restantes);
-  if (restantes === 0) void c.suspend().catch(() => {});
+  if (restantes === 0) {
+    // sem dono, ninguém deve acordá-lo no próximo clique: o ouvinte de gesto
+    // retomaria um contexto ocioso e ele passaria a gastar CPU à toa
+    pararDeEsperarGesto(c);
+    void c.suspend().catch(() => {});
+  }
+}
+
+/**
+ * O contexto está de fato processando áudio?
+ *
+ * Exportado para `lib/microfone` decidir se publica a cadeia ou cai na faixa
+ * crua: um `MediaStreamAudioDestinationNode` num contexto suspenso entrega uma
+ * faixa "viva" que só carrega silêncio — o "mic não reconhecido" e o "só um
+ * fala" dos relatos. Faixa crua sem ganho é melhor do que voz nenhuma.
+ */
+export function contextoEstaRodando(c: AudioContext | null | undefined): boolean {
+  return !!c && c.state === "running";
+}
+
+/**
+ * Corre uma promessa contra um prazo. O temporizador é sempre limpo, e a
+ * promessa original continua tendo quem a escute (o `race`), então uma
+ * rejeição tardia dela não vira "unhandled rejection".
+ */
+function comPrazo<T>(p: Promise<T>, ms: number, erro: () => Error): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const prazo = new Promise<never>((_, rejeitar) => {
+    t = setTimeout(() => rejeitar(erro()), ms);
+  });
+  return Promise.race([p, prazo]).finally(() => clearTimeout(t));
+}
+
+/**
+ * Tenta tirar o contexto do `suspended` e diz se conseguiu.
+ *
+ * Existe porque `resume()` sem ativação do usuário não rejeita: no Chromium e
+ * no WebView2 a promessa pode ficar **pendente** até o próximo gesto. Um
+ * `await` cru nela, dentro da `init()` do processador, prendia a fila da
+ * cadeia (e, atrás dela, a fila de `lib/microfone`) por tempo indeterminado.
+ * Aqui o prazo vence, a resposta é o estado real, e quem chama decide o que
+ * fazer com um contexto parado. Nunca rejeita, nunca fica pendurada.
+ */
+export async function retomarContexto(c: AudioContext, ms = 1000): Promise<boolean> {
+  if (c.state === "running") return true;
+  if (c.state === "closed") return false;
+  try {
+    await comPrazo(c.resume(), ms, () => new Error("resume() não respondeu no prazo"));
+  } catch {
+    // recusado ou sem resposta: o estado abaixo é a única verdade que importa
+  }
+  return contextoEstaRodando(c);
+}
+
+/** Quem está esperando um gesto para acordar cada contexto, e como desistir. */
+const esperandoGesto = new Map<AudioContext, () => void>();
+
+function pararDeEsperarGesto(c: AudioContext) {
+  esperandoGesto.get(c)?.();
+}
+
+/**
+ * Acorda o contexto no próximo clique ou tecla — mesma ideia de `montarGrafo`
+ * em `components/voice/AudioRemotoHost.tsx`.
+ *
+ * Quem cria o contexto de 48 kHz é o pré-aquecimento, sem gesto nenhum, e a
+ * política de autoplay o deixa suspenso; o `resume()` da montagem pode chegar
+ * tarde demais para contar como gesto (a `init()` roda depois do `await` do
+ * modelo). O próximo `pointerdown`/`keydown` em qualquer lugar da janela é
+ * ativação suficiente. Uma instalação por contexto: montar a cadeia várias
+ * vezes não empilha ouvintes. Os ouvintes saem sozinhos quando o contexto
+ * roda, fecha ou fica sem dono.
+ */
+function acordarNoProximoGesto(c: AudioContext) {
+  if (esperandoGesto.has(c) || typeof window === "undefined") return;
+  const opcoes = { capture: true, passive: true } as const;
+  const soltar = () => {
+    esperandoGesto.delete(c);
+    window.removeEventListener("pointerdown", retomar, opcoes);
+    window.removeEventListener("keydown", retomar, opcoes);
+    // os contextos falsos dos testes não têm eventos
+    c.removeEventListener?.("statechange", aoMudarEstado);
+  };
+  const aoMudarEstado = () => {
+    if (c.state === "running" || c.state === "closed") soltar();
+  };
+  const retomar = () => {
+    if (usuariosDe(c) === 0) return soltar();
+    if (c.state !== "suspended") return aoMudarEstado();
+    // o `then` cobre WebView sem `statechange`: confere o estado ao resolver
+    void c.resume().then(aoMudarEstado, () => {});
+  };
+  esperandoGesto.set(c, soltar);
+  window.addEventListener("pointerdown", retomar, opcoes);
+  window.addEventListener("keydown", retomar, opcoes);
+  c.addEventListener?.("statechange", aoMudarEstado);
 }
 
 /** Só para os testes: quantos donos os contextos têm agora. */
@@ -429,13 +530,29 @@ export function cadeiaDoMicrofone(inicial: {
    */
   async function criarNoDoModelo(c: AudioContext) {
     await garantirWebAssembly();
+    // Prazo nos dois downloads: um `fetch` do `.wasm` ou um `addModule` que
+    // nunca respondem (rede presa, proxy, WebView travado) seguravam a `init()`
+    // e, com ela, a fila do microfone — a pessoa entrava muda e sem erro. A
+    // cadeia é luxo: passado o prazo, ela sobe sem o RNNoise e o toast explica.
+    // O `modelo` memoizado é esquecido no estouro (o próximo `import()` começa
+    // do zero, o que é seguro); o `worklet` não, porque registrar o mesmo
+    // processador duas vezes no mesmo contexto é erro se o primeiro acabar
+    // chegando.
+    const modeloAgora = carregarModelo();
     const [{ RnnoiseWorkletNode, wasmBinary }] = await Promise.all([
-      carregarModelo().catch((cause: unknown) => {
+      comPrazo(modeloAgora, PRAZO_DOWNLOAD_MS, () => {
+        if (modelo === modeloAgora) modelo = null;
+        return new Error(`sem resposta em ${PRAZO_DOWNLOAD_MS / 1000} s`);
+      }).catch((cause: unknown) => {
         throw new SupressaoIndisponivel(`o modelo não carregou (${BASE}/rnnoise*.wasm)`, {
           cause,
         });
       }),
-      garantirWorklet(c).catch((cause: unknown) => {
+      comPrazo(
+        garantirWorklet(c),
+        PRAZO_DOWNLOAD_MS,
+        () => new Error(`sem resposta em ${PRAZO_DOWNLOAD_MS / 1000} s`),
+      ).catch((cause: unknown) => {
         throw new SupressaoIndisponivel(
           `o worklet não carregou (${BASE}/rnnoise-worklet.js)`,
           { cause },
@@ -484,8 +601,17 @@ export function cadeiaDoMicrofone(inicial: {
         avisar(motivoDe(e));
       }
     }
-    // suspenso pela cadeia anterior: sem isto o grafo nasce parado e não sai som
-    if (c.state === "suspended") await c.resume().catch(() => {});
+    // suspenso pela cadeia anterior (ou nascido suspenso no pré-aquecimento,
+    // sem gesto): sem isto o grafo nasce parado e o destino publica silêncio.
+    // Com prazo, porque o `resume()` sem ativação pode nunca responder e esta
+    // `init()` seguraria a fila da cadeia junto.
+    if (!(await retomarContexto(c))) {
+      console.warn("[voz] contexto de captura suspenso", { state: c.state });
+      // o grafo é montado mesmo assim: no primeiro gesto o contexto acorda e o
+      // áudio passa a fluir sem republicar nada. Enquanto isso, quem publica
+      // pode conferir `contextoEstaRodando` e preferir a faixa crua.
+      acordarNoProximoGesto(c);
+    }
 
     // diagnóstico sem UI: headset Bluetooth em modo chamada (HFP) abre a captura
     // a 8/16 kHz e a voz sai abafada, sem erro nenhum para acusar

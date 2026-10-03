@@ -44,10 +44,10 @@ import { cadeiaDoMicrofone, contextoDeCaptura, type CadeiaDoMicrofone } from "@/
  * está aberta**: tudo menos o aparelho.
  *
  * A separação existe por causa de `atualizarMicrofone`. Trocar de aparelho é
- * outro `getUserMedia` e não há como não reabrir; trocar eco/ruído/AGC é um
- * `applyConstraints` na mesma `MediaStreamTrack`, que **não fecha o
- * dispositivo** — e reabrir o dispositivo à toa é caro em qualquer sistema
- * (num fone Bluetooth é uma renegociação de perfil inteira).
+ * outro `getUserMedia` e não há como não reabrir. Em tese eco/ruído/AGC seriam
+ * um `applyConstraints` na mesma `MediaStreamTrack`, sem fechar o dispositivo —
+ * mas o Chromium os aceita sem aplicar, e por isso eles também reabrem (ver
+ * `trocarRestricoes`); `applyConstraints` sobrou para o `voiceIsolation`.
  */
 export interface ProcessamentoDeCaptura {
   echoCancellation: boolean;
@@ -95,6 +95,16 @@ export interface FaixaDeMicrofone {
    */
   applyConstraints(processamento: ProcessamentoDeCaptura): Promise<void>;
   restartTrack(restricoes: RestricoesDeMicrofone): Promise<void>;
+  /**
+   * O `getSettings()` da faixa **do aparelho**, ignorando a cadeia.
+   *
+   * Existe porque `mediaStreamTrack` devolve a faixa processada quando há
+   * cadeia, e o `getSettings()` dela é o de um `MediaStreamAudioDestinationNode`
+   * — sem eco, sem ruído, sem AGC, sem o `deviceId`. Conferir a captura por lá
+   * era conferir nada. Opcional porque o SDK o marca `@internal`: se um dia
+   * sumir, `configuracaoDaOrigem` recua para `mediaStreamTrack`.
+   */
+  getSourceTrackSettings?(): MediaTrackSettings;
   mute(): Promise<unknown>;
   unmute(): Promise<unknown>;
   stop(): void;
@@ -143,6 +153,119 @@ interface Vivo {
   testando: boolean;
   /** o que já foi aplicado na faixa, para não mutar/desmutar à toa. */
   mudo: boolean;
+  /** o contexto em que a cadeia foi (ou seria) montada; só para checar e logar. */
+  contexto: AudioContext | null;
+  /**
+   * Um `setProcessor` estourou o teto e ainda não terminou. Enquanto isso o
+   * `trackChangeLock` do SDK está preso dentro dele: `stopProcessor`,
+   * `restartTrack` e `applyConstraints` esperariam junto. Ver
+   * `adotarMontagemAtrasada`.
+   */
+  montagemPendente: boolean;
+  /** rótulo do aparelho lido antes da cadeia (depois dela, a faixa é a processada). */
+  rotuloDaOrigem: string | undefined;
+}
+
+/**
+ * Tetos de espera das operações que dependem de rede, do `AudioContext` ou do
+ * dispositivo.
+ *
+ * Por que existem: tudo aqui roda dentro de `emFila`, e uma promessa que nunca
+ * resolve trava a fila **para sempre** — mudo, troca de preferência e até o
+ * `fecharMicrofone` ficam atrás dela, e a luz do microfone fica acesa até o F5.
+ * O caso real é o `AudioContext.resume()` sem ativação do usuário, que no
+ * Chromium não rejeita: fica pendente. Dentro do `setProcessor` isso também
+ * prende o `trackChangeLock` do SDK.
+ *
+ * A abertura (`criarFaixa`) fica de fora de propósito: ela pode estar
+ * esperando a pessoa responder ao pedido de permissão, e desistir dela no meio
+ * seria pior do que esperar.
+ *
+ * Mutável só para os testes não precisarem esperar segundos de verdade.
+ */
+export const tetosDoMicrofone = {
+  /** acordar o `AudioContext` da cadeia. */
+  contexto: 1_500,
+  /** `setProcessor`: inclui baixar o wasm na primeira vez sem pré-aquecimento. */
+  cadeia: 8_000,
+  /** `restartTrack`/`applyConstraints`/mudo: outro `getUserMedia` no pior caso. */
+  captura: 10_000,
+  /** publicar/despublicar na sala: ida e volta ao servidor. */
+  publicar: 20_000,
+  /** desmontar a cadeia. */
+  desmontar: 3_000,
+};
+
+class TetoEstourado extends Error {
+  constructor(oQue: string, ms: number) {
+    super(`${oQue} passou de ${ms} ms sem terminar`);
+    this.name = "TetoEstourado";
+  }
+}
+
+/** O contexto não está rodando: uma cadeia montada nele publicaria silêncio. */
+class CadeiaSemContexto extends Error {
+  constructor(estado: AudioContextState) {
+    super(`o AudioContext da cadeia está "${estado}", não "running"`);
+    this.name = "CadeiaSemContexto";
+  }
+}
+
+/**
+ * Espera `p` no máximo `ms`. A operação **continua** rodando depois do teto (não
+ * há como cancelar um `getUserMedia` ou um `setProcessor`); o teto só devolve a
+ * fila a quem vem atrás.
+ */
+function comTeto<T>(p: Promise<T>, ms: number, oQue: string): Promise<T> {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<never>((_, rejeitar) => {
+    relogio = setTimeout(() => rejeitar(new TetoEstourado(oQue, ms)), ms);
+  });
+  return Promise.race([p, limite]).finally(() => clearTimeout(relogio));
+}
+
+/**
+ * Lido por função, e não direto: depois de um `await` o TypeScript ainda acha
+ * que o `state` é o da última checagem, mas outro dono do contexto pode tê-lo
+ * suspendido no meio.
+ */
+function estadoDoContexto(c: AudioContext): AudioContextState {
+  return c.state;
+}
+
+/** O que a captura **do aparelho** é agora — ver `getSourceTrackSettings`. */
+function configuracaoDaOrigem(faixa: FaixaDeMicrofone): MediaTrackSettings | undefined {
+  try {
+    return faixa.getSourceTrackSettings?.() ?? faixa.mediaStreamTrack.getSettings?.();
+  } catch {
+    // faixa já parada: não há o que ler
+    return undefined;
+  }
+}
+
+/** O processamento que só um `getUserMedia` novo troca de verdade. */
+const PROCESSAMENTO_NATIVO = ["echoCancellation", "noiseSuppression", "autoGainControl"] as const;
+
+/** Onde a captura real diverge do pedido. `undefined` = o navegador não publica a chave. */
+function divergenciasDaCaptura(
+  real: MediaTrackSettings | undefined,
+  pedido: ProcessamentoDeCaptura,
+): string[] {
+  if (!real) return [];
+  return PROCESSAMENTO_NATIVO.filter(
+    (chave) => real[chave] !== undefined && real[chave] !== pedido[chave],
+  ).map((chave) => `${chave}: pedimos ${pedido[chave]}, veio ${real[chave]}`);
+}
+
+/** Depois de uma troca, deixa no log o que não pegou — o relato sozinho não diz. */
+function registrarDivergencias(estado: Vivo, pedido: ProcessamentoDeCaptura, quando: string) {
+  const real = configuracaoDaOrigem(estado.faixa);
+  const divergencias = divergenciasDaCaptura(real, pedido);
+  if (divergencias.length === 0) return;
+  console.warn(`[voz] a captura não confere com o pedido ${quando}`, {
+    divergencias,
+    aparelho: real?.deviceId,
+  });
 }
 
 /**
@@ -164,7 +287,21 @@ async function aplicarMudo(estado: Vivo) {
   const mudo = !abertoDeFato(estado);
   if (mudo === estado.mudo) return;
   estado.mudo = mudo;
-  await (mudo ? estado.faixa.mute() : estado.faixa.unmute());
+  try {
+    // o `unmute()` do SDK pode reabrir a captura (`getUserMedia`) e espera o
+    // `muteLock`: sem teto, um aparelho travado prenderia a fila inteira
+    await comTeto(
+      mudo ? estado.faixa.mute() : estado.faixa.unmute(),
+      tetosDoMicrofone.captura,
+      mudo ? "mutar o microfone" : "desmutar o microfone",
+    );
+  } catch (e) {
+    // estourar o teto não desfaz o pedido: ele segue rodando no SDK e assenta
+    // sozinho. Derrubar a operação por isso (e, na entrada, a call inteira)
+    // seria pior do que seguir
+    if (!(e instanceof TetoEstourado)) throw e;
+    console.warn("[voz] o mudo/desmudo do microfone está demorando", e.message);
+  }
 }
 
 let vivo: Vivo | null = null;
@@ -259,12 +396,20 @@ function idDeAparelho(valor: RestricoesDeMicrofone["deviceId"]): string | undefi
  * se fosse do SDK — avisando no log uma reaquisição que não houve.
  */
 async function reabrirCaptura(estado: Vivo, restricoes: RestricoesDeMicrofone) {
-  estado.reabrindo = true;
-  try {
-    await estado.faixa.restartTrack({ ...restricoes });
-  } finally {
-    estado.reabrindo = false;
+  if (estado.montagemPendente) {
+    // o `trackChangeLock` do SDK está preso no `setProcessor` atrasado: o
+    // `restartTrack` só esperaria junto (ver `adotarMontagemAtrasada`)
+    throw new Error("a cadeia ainda está montando; a captura não pode ser reaberta agora");
   }
+  estado.reabrindo = true;
+  const reabertura = estado.faixa.restartTrack({ ...restricoes });
+  // a marca só cai quando a reabertura **de fato** termina, não no teto: o
+  // `restarted` que ela emitir depois ainda é nosso, não uma reaquisição do SDK
+  void reabertura.then(
+    () => (estado.reabrindo = false),
+    () => (estado.reabrindo = false),
+  );
+  await comTeto(reabertura, tetosDoMicrofone.captura, "reabrir a captura do microfone");
 }
 
 /**
@@ -300,13 +445,33 @@ function reaplicarProcessamento(estado: Vivo) {
   void emFila(async () => {
     if (vivo !== estado) return;
     const processamento = processamentoDe(estado.prefs.restricoes);
+    // a origem, não `mediaStreamTrack`: com cadeia, esta é a faixa processada,
+    // cujo `getSettings()` não tem eco/ruído/AGC nem o aparelho
+    const real = configuracaoDaOrigem(estado.faixa);
+    const divergencias = divergenciasDaCaptura(real, processamento);
     console.warn(
       "[voz] o LiveKit reabriu a captura do microfone por conta própria " +
         "(a faixa do aparelho terminou); reaplicando o processamento escolhido",
-      { processamento, aparelho: estado.faixa.mediaStreamTrack.getSettings?.()?.deviceId },
+      { processamento, aparelho: real?.deviceId, divergencias },
     );
     try {
-      await estado.faixa.applyConstraints(processamento);
+      if (divergencias.length > 0) {
+        // eco/ruído/AGC não trocam numa captura aberta no Chromium/WebView2: o
+        // `applyConstraints` resolve sem erro e sem efeito (ver
+        // `trocarRestricoes`). Sem `deviceId` de propósito — o aparelho
+        // escolhido acabou de terminar, e o SDK já foi para o padrão
+        await reabrirCaptura(estado, processamento);
+        registrarDivergencias(estado, processamento, "depois de repor o processamento");
+      } else {
+        // nada nativo a corrigir (ou o navegador não publica as chaves): o
+        // `applyConstraints` barato basta para gravar o pedido nas
+        // `_constraints` do SDK e levar o `voiceIsolation`
+        await comTeto(
+          estado.faixa.applyConstraints(processamento),
+          tetosDoMicrofone.captura,
+          "repor o processamento do microfone",
+        );
+      }
     } catch (e) {
       console.warn(
         "[voz] o navegador recusou repor o processamento depois da reabertura; " +
@@ -328,9 +493,11 @@ function reaplicarProcessamento(estado: Vivo) {
  * Mesmas restrições, resultados diferentes — então o que estava no ar não era
  * o que tínhamos pedido, e nada no app olhava para isso.
  *
- * `getSettings()` é a única fonte do que a captura realmente é. Comparar com o
- * pedido transforma um relato ("ficou abafado") no fato que falta ("pedimos
- * `echoCancellation: false` e viemos com `true`").
+ * `getSettings()` **da faixa do aparelho** é a única fonte do que a captura
+ * realmente é — a de `mediaStreamTrack` é a processada quando há cadeia, e não
+ * diz nada (ver `configuracaoDaOrigem`). Comparar com o pedido transforma um
+ * relato ("ficou abafado") no fato que falta ("pedimos `echoCancellation:
+ * false` e viemos com `true`").
  *
  * **O reparo é só para o cancelamento de eco, e só quando ele veio ligado sem
  * termos pedido.** É o único dos quatro cuja ponta errada sai do app: no macOS
@@ -341,13 +508,10 @@ function reaplicarProcessamento(estado: Vivo) {
  * viraria laço, e o aviso no log já conta o que houve.
  */
 async function conferirCaptura(estado: Vivo) {
-  const real = estado.faixa.mediaStreamTrack.getSettings?.();
+  const real = configuracaoDaOrigem(estado.faixa);
   if (!real) return;
   const pedido = processamentoDe(estado.prefs.restricoes);
-  // `undefined` = o navegador não publica esta restrição; não é divergência
-  const divergencias = (["echoCancellation", "noiseSuppression", "autoGainControl"] as const)
-    .filter((chave) => real[chave] !== undefined && real[chave] !== pedido[chave])
-    .map((chave) => `${chave}: pedimos ${pedido[chave]}, veio ${real[chave]}`);
+  const divergencias = divergenciasDaCaptura(real, pedido);
   if (divergencias.length === 0) return;
 
   console.warn(
@@ -363,7 +527,7 @@ async function conferirCaptura(estado: Vivo) {
   );
   try {
     await reabrirCaptura(estado, estado.prefs.restricoes);
-    const depois = estado.faixa.mediaStreamTrack.getSettings?.()?.echoCancellation;
+    const depois = configuracaoDaOrigem(estado.faixa)?.echoCancellation;
     if (depois === true) {
       console.warn(
         "[voz] a reabertura também veio com cancelamento de eco: este navegador " +
@@ -391,16 +555,39 @@ async function conferirCaptura(estado: Vivo) {
  *
  * Trocar de aparelho continua sendo `restartTrack`: é outro dispositivo, outro
  * `getUserMedia`.
+ *
+ * **Eco, ruído nativo e AGC também reabrem** — e isto corrige o parágrafo de
+ * cima. O perfil de entrada (Isolamento/Estúdio/Personalizado) não valia ao
+ * trocar no meio da call: o Chromium (e o WebView2 do app) resolve o
+ * `applyConstraints` destas três **sem erro e sem efeito** numa captura aberta —
+ * o processamento de áudio do WebRTC é fixado no `getUserMedia` e as restrições
+ * vão como `ideal`, então "não consegui" vira "fiz o possível". Como nada
+ * rejeitava, o recuo para `restartTrack` abaixo nunca rodava. Reabrir é caro,
+ * mas é a única troca que pega; quem troca de perfil espera ouvir a diferença.
+ *
+ * `applyConstraints` fica só para o que muda sem elas (hoje, `voiceIsolation`
+ * sozinho), com o recuo de sempre se o navegador recusar.
  */
 async function trocarRestricoes(estado: Vivo, novas: RestricoesDeMicrofone) {
   const atuais = estado.prefs.restricoes;
+  const pedido = processamentoDe(novas);
   if (idDeAparelho(atuais.deviceId) !== idDeAparelho(novas.deviceId)) {
     await reabrirCaptura(estado, novas);
+    registrarDivergencias(estado, pedido, "depois de trocar de aparelho");
     return;
   }
   if (mesmoProcessamento(atuais, novas)) return;
+  if (PROCESSAMENTO_NATIVO.some((chave) => atuais[chave] !== novas[chave])) {
+    await reabrirCaptura(estado, novas);
+    registrarDivergencias(estado, pedido, "depois de trocar o processamento");
+    return;
+  }
   try {
-    await estado.faixa.applyConstraints(processamentoDe(novas));
+    await comTeto(
+      estado.faixa.applyConstraints(pedido),
+      tetosDoMicrofone.captura,
+      "trocar o processamento do microfone",
+    );
   } catch (e) {
     // `OverconstrainedError`: este navegador/driver não troca estas restrições
     // com o dispositivo aberto. Recuar para `restartTrack` custa a reabertura
@@ -416,22 +603,101 @@ async function trocarRestricoes(estado: Vivo, novas: RestricoesDeMicrofone) {
 }
 
 /**
+ * Tira a cadeia da faixa e volta a mandar a captura crua.
+ *
+ * Com teto, porque `stopProcessor` espera o `trackChangeLock` e a `destroy()`
+ * da cadeia. Se ele estourar, a `destroy()` é chamada direto — ao menos o
+ * contexto é devolvido —, e a faixa fica como o SDK conseguir deixá-la.
+ */
+async function largarCadeia(estado: Vivo) {
+  const tinha = estado.cadeia;
+  estado.cadeia = null;
+  // lock preso no `setProcessor` atrasado: quem decide é `adotarMontagemAtrasada`
+  if (!tinha || estado.montagemPendente) return;
+  try {
+    await comTeto(estado.faixa.stopProcessor(), tetosDoMicrofone.desmontar, "desmontar a cadeia");
+  } catch (e) {
+    console.warn("[voz] não deu para tirar a cadeia do microfone", e);
+    void tinha.destroy().catch(() => {});
+  }
+}
+
+/**
+ * Um `setProcessor` que estourou o teto e terminou depois.
+ *
+ * Não dá para cancelá-lo, e derrubá-lo pela `destroy()` da cadeia enquanto ele
+ * corre é uma corrida perdida: o SDK, ao terminar a `init()`, ainda faria
+ * `replaceTrack` com a faixa processada — que a `destroy()` acabou de parar, e
+ * a sala ouviria silêncio. Então esperamos ele terminar (fora da fila, que já
+ * seguiu em frente) e decidimos dentro dela: se a cadeia ainda serve e o
+ * contexto está rodando, ela é adotada; senão sai pelo caminho normal.
+ */
+function adotarMontagemAtrasada(
+  estado: Vivo,
+  cadeia: CadeiaDoMicrofone,
+  montagem: Promise<void>,
+  contexto: AudioContext,
+  supressao: boolean,
+) {
+  estado.montagemPendente = true;
+  void montagem.then(
+    () =>
+      emFila(async () => {
+        estado.montagemPendente = false;
+        const serve =
+          vivo === estado &&
+          !estado.cadeia &&
+          precisaDeCadeia(estado.prefs) &&
+          estado.prefs.supressao === supressao &&
+          estadoDoContexto(contexto) === "running";
+        if (serve) {
+          cadeia.setGanho(estado.prefs.ganho);
+          estado.cadeia = cadeia;
+          console.info("[voz] a cadeia do microfone terminou de montar depois do teto; adotada");
+          return;
+        }
+        if (vivo === estado && !estado.cadeia) {
+          // a faixa segue no ar: o SDK tem de largar o processador, senão o
+          // `sender` fica com a faixa processada (silenciosa, sem contexto)
+          estado.cadeia = cadeia;
+          await largarCadeia(estado);
+        } else {
+          // faixa já descartada: o `stop()` dela não achou processador para
+          // destruir, então a cadeia ainda segura o contexto
+          await comTeto(cadeia.destroy(), tetosDoMicrofone.desmontar, "desmontar a cadeia").catch(
+            () => {},
+          );
+        }
+      }).catch((e: unknown) => console.warn("[voz] não deu para resolver a cadeia atrasada", e)),
+    () => {
+      // o SDK rejeitou: não há processador montado, só a marca a tirar
+      estado.montagemPendente = false;
+    },
+  );
+}
+
+/**
  * Monta (ou desmonta) a cadeia na faixa conforme as preferências.
  *
  * `setProcessor` troca o que sai pelo `sender` sem renegociar nada — é por isso
  * que ligar a supressão no meio da conversa não corta mais o áudio. O contexto
  * é reposto antes de cada chamada porque o `publishTrack` do LiveKit sobrescreve
  * o da faixa com o da `Room`, que a `Room` fecha ao desconectar.
+ *
+ * **O contexto tem de estar rodando**, antes e depois. Uma cadeia num
+ * `AudioContext` suspenso não processa nada: a faixa que vai para a sala é a
+ * saída do `MediaStreamAudioDestinationNode`, e ela fica muda — o microfone
+ * "está ligado" e ninguém ouve. Pior, a `init()` da cadeia espera o `resume()`,
+ * que sem ativação do usuário não resolve nunca, e prende o `trackChangeLock`
+ * do SDK junto. Daí: acordar com teto antes de montar, conferir depois de
+ * montar, e lançar `CadeiaSemContexto` para quem chamou publicar cru.
  */
 async function aplicarCadeia(estado: Vivo, prefs: PreferenciasDoMicrofone) {
   const quer = precisaDeCadeia(prefs);
   const trocouOFormato = !!estado.cadeia && estado.prefs.supressao !== prefs.supressao;
 
   if (!quer) {
-    if (estado.cadeia) {
-      await estado.faixa.stopProcessor();
-      estado.cadeia = null;
-    }
+    if (estado.cadeia) await largarCadeia(estado);
     return;
   }
 
@@ -441,11 +707,70 @@ async function aplicarCadeia(estado: Vivo, prefs: PreferenciasDoMicrofone) {
     return;
   }
 
+  if (estado.montagemPendente) {
+    throw new Error("a montagem anterior da cadeia ainda não terminou");
+  }
+
+  const contexto = contextoDaCadeia(prefs);
+  estado.contexto = contexto;
+  if (estadoDoContexto(contexto) !== "running") {
+    await comTeto(contexto.resume(), tetosDoMicrofone.contexto, "acordar o AudioContext").catch(
+      () => {},
+    );
+  }
+  if (estadoDoContexto(contexto) !== "running") {
+    // a cadeia anterior (troca de formato) roda no mesmo contexto parado
+    await largarCadeia(estado);
+    throw new CadeiaSemContexto(estadoDoContexto(contexto));
+  }
+
   const cadeia = cadeiaDoMicrofone({ supressao: prefs.supressao, ganho: prefs.ganho });
-  estado.faixa.setAudioContext(contextoDaCadeia(prefs));
+  estado.faixa.setAudioContext(contexto);
   // `setProcessor` já derruba o processador anterior (e espera pela `destroy()`)
-  await estado.faixa.setProcessor(cadeia);
+  const montagem = estado.faixa.setProcessor(cadeia);
+  try {
+    await comTeto(montagem, tetosDoMicrofone.cadeia, "montar a cadeia do microfone");
+  } catch (e) {
+    // o processador anterior, se havia, o SDK já derrubou antes da `init()`
+    estado.cadeia = null;
+    if (e instanceof TetoEstourado) {
+      adotarMontagemAtrasada(estado, cadeia, montagem, contexto, prefs.supressao);
+    }
+    throw e;
+  }
   estado.cadeia = cadeia;
+
+  // alguém suspendeu o contexto no meio da montagem
+  const depois = estadoDoContexto(contexto);
+  if (depois !== "running") {
+    await largarCadeia(estado);
+    throw new CadeiaSemContexto(depois);
+  }
+}
+
+/**
+ * O que ficou no ar, numa linha só. Os relatos de "entrei e ninguém me ouve"
+ * chegam sem nada além do console da pessoa; esta linha diz se a faixa foi
+ * aberta, de qual aparelho, com ou sem cadeia, em que estado estava o contexto
+ * e com qual processamento nativo **de fato** (o da origem, não o pedido).
+ */
+function registrarPublicacao(estado: Vivo) {
+  const real = configuracaoDaOrigem(estado.faixa);
+  // com cadeia, `mediaStreamTrack` é a faixa processada e o rótulo dela é o do
+  // nó de destino; o do aparelho foi guardado antes de a cadeia entrar
+  const rotulo = estado.cadeia
+    ? estado.rotuloDaOrigem
+    : estado.faixa.mediaStreamTrack.label || estado.rotuloDaOrigem;
+  console.info("[voz] mic publicado", {
+    aberto: estado.prefs.aberto,
+    deviceId: real?.deviceId,
+    label: rotulo,
+    cadeia: !!estado.cadeia,
+    contexto: estado.contexto ? estadoDoContexto(estado.contexto) : null,
+    eco: real?.echoCancellation,
+    ns: real?.noiseSuppression,
+    agc: real?.autoGainControl,
+  });
 }
 
 /**
@@ -474,20 +799,24 @@ export function abrirMicrofone(
       publicado: false,
       testando,
       mudo: false,
+      contexto: null,
+      montagemPendente: false,
+      // antes da cadeia: depois dela, `mediaStreamTrack` é a faixa processada
+      rotuloDaOrigem: faixa.mediaStreamTrack.label || undefined,
     };
     estado.ouvinteDeReaquisicao = () => reaplicarProcessamento(estado);
     faixa.on("restarted", estado.ouvinteDeReaquisicao);
     try {
-      // a cadeia é um luxo; o microfone não. Se o wasm não baixar ou a
-      // `AudioContext` não abrir, publica cru — ficar sem microfone porque a
-      // supressão falhou é trocar um defeito por um pior
+      // a cadeia é um luxo; o microfone não. Se o wasm não baixar, a
+      // `AudioContext` não acordar ou a montagem estourar o teto, publica cru —
+      // ficar sem microfone (ou publicar a saída muda de uma cadeia parada)
+      // porque a supressão falhou é trocar um defeito por um pior.
+      // `aplicarCadeia` só toma o contexto quando há cadeia a pedir, e deixa a
+      // faixa sem processador em todos os caminhos de falha
       try {
-        // o contexto só serve para montar a cadeia (`setProcessor` precisa
-        // dele); sem cadeia a pedir, tomá-lo aqui só abriria uma `AudioContext`
-        // à toa para quem nunca vai usar supressão nem ganho
-        if (precisaDeCadeia(prefs)) faixa.setAudioContext(contextoDaCadeia(prefs));
         await aplicarCadeia(estado, prefs);
-      } catch {
+      } catch (e) {
+        console.warn("[voz] publicando o microfone sem a cadeia (supressão/volume)", e);
         estado.cadeia = null;
       }
       // mudo antes de publicar: quem entra em mudo não solta meio segundo de sala
@@ -495,11 +824,12 @@ export function abrirMicrofone(
       // entrar numa sala no meio de um teste de microfone não publica nada: o
       // teste é surdo dos dois lados enquanto dura
       if (!estado.testando) {
-        await sala.publicar(faixa);
+        await comTeto(sala.publicar(faixa), tetosDoMicrofone.publicar, "publicar o microfone");
         estado.publicado = true;
         // o `publicar` repõe o contexto da `Room` na faixa; o nosso é que vale
         // — mas só há o que repor quando existe cadeia montada por cima dele
-        if (estado.cadeia) faixa.setAudioContext(contextoDaCadeia(estado.prefs));
+        if (estado.cadeia && estado.contexto) faixa.setAudioContext(estado.contexto);
+        registrarPublicacao(estado);
       }
       // depois de publicar: a conferência pode reabrir a captura, e reabrir
       // antes da publicação deixaria a sala esperando por um `getUserMedia` a
@@ -524,8 +854,9 @@ export function atualizarMicrofone(prefs: PreferenciasDoMicrofone): Promise<void
       // RNNoise (e mexer no ganho) continua sendo trabalho daqui, tenha a
       // captura sido reaberta ou só reconfigurada ao vivo
       await aplicarCadeia(estado, prefs);
-    } catch {
+    } catch (e) {
       // mesma regra do `abrirMicrofone`: a call continua, sem a cadeia
+      console.warn("[voz] seguindo com o microfone sem a cadeia (supressão/volume)", e);
       estado.cadeia = null;
     }
     estado.prefs = prefs;
@@ -602,15 +933,25 @@ export function definirMicrofoneEmTeste(testando: boolean): Promise<void> {
     if (!estado || estado.testando === testando) return;
     estado.testando = testando;
     await aplicarMudo(estado);
+    // com teto: é ida e volta ao servidor, e a fila não pode ficar presa nela
     if (testando && estado.publicado) {
-      await estado.sala.despublicar(estado.faixa).catch(() => {});
+      await comTeto(
+        estado.sala.despublicar(estado.faixa),
+        tetosDoMicrofone.publicar,
+        "despublicar o microfone",
+      ).catch(() => {});
       estado.publicado = false;
     } else if (!testando && !estado.publicado) {
-      await estado.sala.publicar(estado.faixa).catch(() => {});
+      await comTeto(
+        estado.sala.publicar(estado.faixa),
+        tetosDoMicrofone.publicar,
+        "publicar o microfone",
+      ).catch(() => {});
       estado.publicado = true;
       // como acima: só há contexto a repor quando existe cadeia montada sobre
       // ele — sem cadeia, tomá-lo aqui abriria uma `AudioContext` à toa
-      if (estado.cadeia) estado.faixa.setAudioContext(contextoDaCadeia(estado.prefs));
+      if (estado.cadeia && estado.contexto) estado.faixa.setAudioContext(estado.contexto);
+      registrarPublicacao(estado);
     }
   });
 }
@@ -647,10 +988,18 @@ async function descartar(estado: Vivo) {
   // para ela mandaria silêncio para a sala antes de o "saiu" chegar
   if (estado.publicado) {
     estado.publicado = false;
-    await estado.sala.despublicar(estado.faixa).catch(() => {});
+    await comTeto(
+      estado.sala.despublicar(estado.faixa),
+      tetosDoMicrofone.publicar,
+      "despublicar o microfone",
+    ).catch(() => {});
   }
   if (estado.cadeia) {
-    await estado.cadeia.destroy().catch(() => {});
+    // a `destroy()` espera a fila interna da cadeia, que pode estar presa num
+    // `resume()` que nunca resolve; o descarte tem de terminar mesmo assim
+    await comTeto(estado.cadeia.destroy(), tetosDoMicrofone.desmontar, "desmontar a cadeia").catch(
+      () => {},
+    );
     estado.cadeia = null;
   }
   // `stop()` do LiveKit também chama a `destroy()` do processador, mas sem
