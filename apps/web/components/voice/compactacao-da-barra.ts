@@ -13,15 +13,15 @@ import { createContext } from "react";
 /** 0 = completo, 1 = sem setas de dispositivo, 2 = só "Mais". */
 export type NivelDaBarra = 0 | 1 | 2;
 
-/** Nível 0: cápsula mic+cam com setas 170 + cápsula tela/sons/mais 172 + desligar 66 + 2×12 de gap. */
-export const LARGURA_NIVEL_0_PX = 432;
-/** Nível 1: sem as setas, mic+cam vira 116 — 116 + 172 + 66 + 24. */
-export const LARGURA_NIVEL_1_PX = 378;
+/** Nível 0: cápsula mic+cam com setas 182 + cápsula tela/sons/mais 184 + desligar 72 + 2×12 de gap. */
+export const LARGURA_NIVEL_0_PX = 462;
+/** Nível 1: sem as setas, mic+cam vira 124 — 124 + 184 + 72 + 24. */
+export const LARGURA_NIVEL_1_PX = 404;
 /**
  * Nível 2: sem setas, sem tela e sem sons, e mic + câmera + "Mais" numa cápsula
- * só (8 + 3×52 + 8 = 172) + gap-2 (8) + desligar (66).
+ * só (8 + 3×56 + 8 = 184) + gap-2 (8) + desligar (72).
  */
-export const LARGURA_NIVEL_2_PX = 246;
+export const LARGURA_NIVEL_2_PX = 264;
 /** Colchão para não trocar de nível a cada pixel de arredondamento. */
 export const FOLGA_PX = 8;
 

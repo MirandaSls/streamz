@@ -62,16 +62,16 @@ export default function IconesDoCanto({
       {podeAbrirJanelaSolta() && (
         <BotaoDeIcone
           rotulo={emJanela ? "Voltar para a chamada" : "Abrir em janela à parte"}
-          icone={<ExternalLink size={20} />}
-          tamanho="md"
+          icone={<ExternalLink size={24} />}
+          tamanho="lg"
           comFundo
           onClick={onAbrirEmJanela}
         />
       )}
       <BotaoDeIcone
         rotulo={telaCheia ? "Sair da tela cheia" : "Tela cheia"}
-        icone={telaCheia ? <Minimize size={20} /> : <Maximize size={20} />}
-        tamanho="md"
+        icone={telaCheia ? <Minimize size={24} /> : <Maximize size={24} />}
+        tamanho="lg"
         ativo={telaCheia}
         comFundo
         onClick={onTelaCheia}
