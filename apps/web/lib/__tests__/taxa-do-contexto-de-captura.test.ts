@@ -74,7 +74,7 @@ class ContextoFalso {
     return {
       ...no(),
       fftSize: 1024,
-      getByteTimeDomainData: (destino: Uint8Array) => destino.fill(128),
+      getFloatTimeDomainData: (destino: Float32Array) => destino.fill(0),
     };
   }
   createGain() {
