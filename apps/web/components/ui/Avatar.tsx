@@ -175,6 +175,17 @@ const VOZ_NO_AVATAR: Record<VozNoAvatar, { rotulo: string; Icone: typeof MicOff;
  * `animar=false`, o primeiro quadro é copiado para um canvas e é ele que se vê.
  * Se a imagem não puder ser lida (CORS, formato), cai na `<img>` normal: GIF
  * rodando é melhor que avatar quebrado.
+ *
+ * Congelar não basta: esconder a `<img>` não pára o GIF, ele segue rodando no
+ * timeline e, ao voltar a falar, continuaria de onde estaria (no meio). Por isso,
+ * com o canvas pronto, a `<img>` é **desmontada**; e ao voltar a animar ela é
+ * remontada com um `blob:` novo da mesma imagem — URL nova = animação nova, que
+ * recomeça do quadro 1. Enquanto o blob não chega o canvas continua à vista, para
+ * não piscar um quadro do meio da animação.
+ *
+ * Só reinicia quem já congelou (`congelada`): foto que sempre animou nunca faz
+ * fetch extra. O blob só é usado se o tipo for de imagem que pode animar
+ * (gif/webp/png); qualquer outra coisa, ou falha de rede/CORS, usa o `src` normal.
  */
 function FotoDoAvatar({
   src,
@@ -189,10 +200,29 @@ function FotoDoAvatar({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [congelada, setCongelada] = useState(false);
+  const [blobSrc, setBlobSrc] = useState<string | null>(null);
+  const [blobFalhou, setBlobFalhou] = useState(false);
+  // de qual `src` o canvas guarda o primeiro quadro: ele fica montado (escondido)
+  // entre as alternâncias, então não precisa redesenhar a cada vez que congela
+  const desenhadoPara = useRef<string | null>(null);
 
+  // foto nova: tudo que era da antiga (quadro, blob) deixa de valer
   useEffect(() => {
     setCongelada(false);
+    setBlobSrc(null);
+    setBlobFalhou(false);
+    desenhadoPara.current = null;
+  }, [src]);
+
+  useEffect(() => {
     if (animar) return;
+    // parou de falar: o blob da rodada anterior não serve, o próximo começa do zero
+    setBlobSrc(null);
+    setBlobFalhou(false);
+    if (desenhadoPara.current === src) {
+      setCongelada(true);
+      return;
+    }
     let vivo = true;
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -205,6 +235,7 @@ function FotoDoAvatar({
         c.getContext("2d")?.drawImage(img, 0, 0);
         // canvas "sujo" (sem CORS) lança aqui, não no desenho
         c.getContext("2d")?.getImageData(0, 0, 1, 1);
+        desenhadoPara.current = src;
         setCongelada(true);
       } catch {
         /* mantém a <img> */
@@ -216,11 +247,45 @@ function FotoDoAvatar({
     };
   }, [src, animar]);
 
+  // voltou a animar depois de congelar: baixa a imagem e a serve por blob: novo
+  useEffect(() => {
+    if (!animar || !congelada) return;
+    let vivo = true;
+    fetch(src)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("fetch"))))
+      .then((blob) => {
+        if (!vivo) return;
+        if (!/^image\/(gif|webp|png|apng)/.test(blob.type)) {
+          setBlobFalhou(true);
+          return;
+        }
+        setBlobSrc(URL.createObjectURL(blob));
+      })
+      .catch(() => {
+        if (vivo) setBlobFalhou(true);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [src, animar, congelada]);
+
+  // revoga o blob quando ele é trocado ou o componente sai
+  useEffect(() => {
+    if (!blobSrc) return;
+    return () => URL.revokeObjectURL(blobSrc);
+  }, [blobSrc]);
+
+  const esperandoBlob = animar && congelada && !blobSrc && !blobFalhou;
+  const canvasVisivel = congelada && (!animar || esperandoBlob);
+
   return (
     <>
-      {!animar && <canvas ref={canvas} aria-hidden="true" style={style} className={congelada ? className : "hidden"} />}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" style={style} className={animar || !congelada ? className : "hidden"} />
+      <canvas ref={canvas} aria-hidden="true" style={style} className={canvasVisivel ? className : "hidden"} />
+      {/* desmontada (não só escondida) com o canvas à vista: senão o GIF segue rodando por baixo */}
+      {!canvasVisivel && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={animar && blobSrc ? blobSrc : "original"} src={animar && blobSrc ? blobSrc : src} alt="" style={style} className={className} />
+      )}
     </>
   );
 }
@@ -255,6 +320,7 @@ export default function Avatar({
   voz,
   surface = "border-background-base-lowest",
   animar = true,
+  fotoForcada,
   className = "",
 }: {
   user: { id: string; username: string; avatarUrl?: string | null };
@@ -283,6 +349,12 @@ export default function Avatar({
    * usa isso: como no Discord, o GIF só roda enquanto a pessoa fala.
    */
   animar?: boolean;
+  /**
+   * Foto a desenhar no lugar da do perfil ao vivo — para a prévia de uma foto
+   * ainda não salva. `undefined` = comportamento normal; `string` ou `null`
+   * (prévia de "remover foto") vence `usePresence`, que ignoraria a prévia.
+   */
+  fotoForcada?: string | null;
   className?: string;
 }) {
   const s = SIZE[size];
@@ -293,7 +365,7 @@ export default function Avatar({
   // o perfil ao vivo substitui o retrato INTEIRO, não campo a campo: quem
   // removeu a foto tem `avatarUrl: null`, e um `??` aqui leria isso como
   // "não sei" e restauraria a foto que acabou de ser apagada
-  const { avatarUrl } = vivo ?? user;
+  const avatarUrl = fotoForcada !== undefined ? fotoForcada : (vivo ?? user).avatarUrl;
   // só o selo de status fura a foto; o de voz continua pintando o anel com a
   // `surface` (ver `voz`), e sem selo nenhum a foto fica inteira
   const furo = status && !voz ? mascaraDoSelo(s.lado, s.corte) : undefined;

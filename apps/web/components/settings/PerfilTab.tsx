@@ -85,9 +85,15 @@ const COR_PADRAO = "#9be31f";
  * e no desktop ela fica **ao lado** — os 740px do painel comportam as duas
  * colunas. No celular as duas empilham (`celular:flex-col`), a prévia embaixo.
  *
- * Salvar é da barra de alterações não salvas do shell; o banner e a remoção
- * dele são upload, que acontece na hora (não há o que "desfazer" localmente).
+ * Salvar é da barra de alterações não salvas do shell. Foto e banner (troca ou
+ * remoção) também ficam **pendentes**, como no Discord: o arquivo escolhido só
+ * vira prévia local (`URL.createObjectURL`) e sobe junto com o resto ao salvar;
+ * "Redefinir" descarta. Gravar na hora deixava a pessoa sem como desistir.
  */
+
+/** Alteração pendente de imagem: arquivo novo (com a URL local da prévia) ou remoção. */
+type ImagemPendente = { arquivo: File; url: string } | "remover" | null;
+
 export default function PerfilTab() {
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
@@ -102,8 +108,19 @@ export default function PerfilTab() {
   const [pronouns, setPronouns] = useState("");
   const [bannerColor, setBannerColor] = useState(COR_PADRAO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
-  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [fotoPend, setFotoPend] = useState<ImagemPendente>(null);
+  const [bannerPend, setBannerPend] = useState<ImagemPendente>(null);
+  // espelho dos pendentes para o cleanup de desmontagem revogar a URL atual
+  const pendRef = useRef({ fotoPend, bannerPend });
+  pendRef.current = { fotoPend, bannerPend };
+  useEffect(
+    () => () => {
+      for (const p of [pendRef.current.fotoPend, pendRef.current.bannerPend]) {
+        if (p && p !== "remover") URL.revokeObjectURL(p.url);
+      }
+    },
+    [],
+  );
   const [salvo, setSalvo] = useState({ aboutMe: "", pronouns: "", bannerColor: COR_PADRAO });
   const fileRef = useRef<HTMLInputElement>(null);
   // input próprio: um só, compartilhado com o banner, mandaria a foto para a
@@ -171,7 +188,23 @@ export default function PerfilTab() {
     displayName !== displayNameSalvo ||
     aboutMe !== salvo.aboutMe ||
     pronouns !== salvo.pronouns ||
-    bannerColor !== salvo.bannerColor;
+    bannerColor !== salvo.bannerColor ||
+    fotoPend !== null ||
+    bannerPend !== null;
+
+  function descartarPendente(p: ImagemPendente) {
+    if (p && p !== "remover") URL.revokeObjectURL(p.url);
+  }
+
+  function definirFotoPend(novo: ImagemPendente) {
+    descartarPendente(pendRef.current.fotoPend);
+    setFotoPend(novo);
+  }
+
+  function definirBannerPend(novo: ImagemPendente) {
+    descartarPendente(pendRef.current.bannerPend);
+    setBannerPend(novo);
+  }
 
   useAlteracoesNaoSalvas({
     dirty,
@@ -180,7 +213,31 @@ export default function PerfilTab() {
         ui.toast("Cor inválida — use #rrggbb.", "error");
         return;
       }
+      // etapa em curso, só para a mensagem de erro dizer o que falhou
+      let etapa = "o perfil";
       try {
+        // foto e banner primeiro; cada um limpa o próprio pendente ao dar certo,
+        // então uma falha adiante não reenvia o que já subiu
+        if (fotoPend) {
+          etapa = "a foto";
+          setUser(fotoPend === "remover" ? await api.removeAvatar() : await api.updateAvatar(fotoPend.arquivo));
+          definirFotoPend(null);
+        }
+        if (bannerPend) {
+          etapa = "o banner";
+          if (bannerPend === "remover") {
+            setUser(await api.removeBanner());
+            setBannerUrl(null);
+          } else {
+            setUser(await api.updateBanner(bannerPend.arquivo));
+            const p = await api.profile(meuId!);
+            setBannerUrl(p.bannerUrl);
+          }
+          definirBannerPend(null);
+        }
+        etapa = "o perfil";
+        // o PATCH vem por último: o retorno dele é o usuário já atualizado no
+        // servidor (com a foto nova), então não sobrescreve com dado velho
         setUser(
           await api.updateProfile({
             displayName: displayName.trim() || null,
@@ -193,7 +250,7 @@ export default function PerfilTab() {
         setSalvo({ aboutMe, pronouns, bannerColor });
         ui.toast("Perfil salvo.");
       } catch (e) {
-        ui.toast(errorMessage(e, "Não foi possível salvar o perfil"), "error");
+        ui.toast(errorMessage(e, `Não foi possível salvar ${etapa}`), "error");
       }
     },
     redefinir: () => {
@@ -201,72 +258,30 @@ export default function PerfilTab() {
       setAboutMe(salvo.aboutMe);
       setPronouns(salvo.pronouns);
       setBannerColor(salvo.bannerColor);
+      definirFotoPend(null);
+      definirBannerPend(null);
     },
   });
 
   if (!user) return null;
   const personalizado = customStatusOf(user);
-
-  async function enviarBanner(file: File) {
-    setEnviando(true);
-    try {
-      await api.updateBanner(file);
-      const p = await api.profile(meuId!);
-      setBannerUrl(p.bannerUrl);
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível enviar o banner"), "error");
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  async function removerBanner() {
-    try {
-      await api.removeBanner();
-      setBannerUrl(null);
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível remover o banner"), "error");
-    }
-  }
+  const fotoMostrada = fotoPend === "remover" ? null : (fotoPend?.url ?? user.avatarUrl);
+  const bannerMostrado = bannerPend === "remover" ? null : (bannerPend?.url ?? bannerUrl);
 
   /**
    * Todo arquivo escolhido passa antes pelo ajuste de enquadramento: o que sobe
-   * é o recorte, não o original. Cancelar ali não envia nada. A exceção é o
+   * (ao salvar) é o recorte, não o original. Cancelar ali não muda nada. A exceção é o
    * GIF, que sobe inteiro para não perder a animação — quem decide é o
    * `recortarImagem` da store.
    */
   async function escolherFoto(file: File) {
     const recortada = await ui.recortarImagem(file, "avatar");
-    if (recortada) await enviarFoto(recortada);
+    if (recortada) definirFotoPend({ arquivo: recortada, url: URL.createObjectURL(recortada) });
   }
 
   async function escolherBanner(file: File) {
     const recortado = await ui.recortarImagem(file, "banner");
-    if (recortado) await enviarBanner(recortado);
-  }
-
-  // a foto vive na sessão (`useAuth`), não no perfil carregado aqui: trocar já
-  // atualiza a prévia ao lado e toda tela que mostra o avatar
-  async function enviarFoto(file: File) {
-    setEnviandoFoto(true);
-    try {
-      setUser(await api.updateAvatar(file));
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível enviar a foto"), "error");
-    } finally {
-      setEnviandoFoto(false);
-    }
-  }
-
-  async function removerFoto() {
-    setEnviandoFoto(true);
-    try {
-      setUser(await api.removeAvatar());
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível remover a foto"), "error");
-    } finally {
-      setEnviandoFoto(false);
-    }
+    if (recortado) definirBannerPend({ arquivo: recortado, url: URL.createObjectURL(recortado) });
   }
 
   /**
@@ -329,7 +344,7 @@ export default function PerfilTab() {
 
         <h3 className={`${ESTILO_ROTULO} mt-5`}>Foto do perfil</h3>
         <div className="flex flex-wrap items-center gap-3">
-          <Avatar user={user} size="xl" surface="border-background-base-lowest" />
+          <Avatar user={user} size="xl" surface="border-background-base-lowest" fotoForcada={fotoMostrada} />
           <input
             ref={fotoRef}
             type="file"
@@ -345,21 +360,19 @@ export default function PerfilTab() {
             variante="primario"
             tamanho="sm"
             icone={<Camera size={16} aria-hidden="true" />}
-            disabled={enviandoFoto}
             onClick={() => fotoRef.current?.click()}
             className="celular:h-[44px]"
           >
-            {enviandoFoto ? "Enviando…" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
+            {fotoMostrada ? "Trocar foto" : "Escolher foto"}
           </Button>
-          {user.avatarUrl && (
+          {fotoMostrada && (
             <BotaoDeIcone
               rotulo="Remover foto"
               icone={<Trash2 size={16} />}
               tamanho="lg"
               comFundo
               perigo
-              disabled={enviandoFoto}
-              onClick={() => void removerFoto()}
+              onClick={() => definirFotoPend(user.avatarUrl ? "remover" : null)}
               className="celular:h-[44px] celular:w-[44px]"
             />
           )}
@@ -401,13 +414,13 @@ export default function PerfilTab() {
                 variante="primario"
                 tamanho="sm"
                 icone={<ImageIcon size={16} aria-hidden="true" />}
-                disabled={enviando || carregandoPerfil}
+                disabled={carregandoPerfil}
                 onClick={() => fileRef.current?.click()}
                 className="celular:h-[44px]"
               >
-                {enviando ? "Enviando…" : "Trocar banner"}
+                Trocar banner
               </Button>
-              {bannerUrl && (
+              {bannerMostrado && (
                 <BotaoDeIcone
                   rotulo="Remover banner"
                   icone={<Trash2 size={16} />}
@@ -415,7 +428,7 @@ export default function PerfilTab() {
                   comFundo
                   perigo
                   disabled={carregandoPerfil}
-                  onClick={() => void removerBanner()}
+                  onClick={() => definirBannerPend(bannerUrl ? "remover" : null)}
                   className="celular:h-[44px] celular:w-[44px]"
                 />
               )}
@@ -501,15 +514,21 @@ export default function PerfilTab() {
       <div className="w-[280px] shrink-0 celular:w-full">
         <h3 className={ESTILO_ROTULO}>Prévia</h3>
         <div className="overflow-hidden rounded-lg bg-background-surface-higher">
-          {bannerUrl ? (
+          {bannerMostrado ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={bannerUrl} alt="" className="h-[60px] w-full object-cover" />
+            <img src={bannerMostrado} alt="" className="h-[60px] w-full object-cover" />
           ) : (
             <div className="h-[60px] w-full" style={{ backgroundColor: bannerColor }} />
           )}
           <div className="px-4 pb-4">
             <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-background-surface-higher">
-              <Avatar user={user} size="xl" status={user.status} surface="border-background-surface-higher" />
+              <Avatar
+                user={user}
+                size="xl"
+                status={user.status}
+                surface="border-background-surface-higher"
+                fotoForcada={fotoMostrada}
+              />
             </div>
             <div className="rounded-lg bg-background-base-low p-3">
               <div className="flex items-baseline gap-2">
