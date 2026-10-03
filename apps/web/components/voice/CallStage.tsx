@@ -235,6 +235,7 @@ export default function CallStage({
   // `tick` é o pulso das faixas do SDK — é dele que vem a resolução do selo
   useVoice((s) => s.tick);
   const focado = useVoice((s) => s.focado);
+  const setFocado = useVoice((s) => s.setFocado);
   const screenQuality = useVoice((s) => s.screenQuality);
   const status = useVoice((s) => s.status);
   const erro = useVoice((s) => s.erro);
@@ -328,6 +329,19 @@ export default function CallStage({
    * tela toda e a conversa é outra tela, não uma coluna ao lado.
    */
   const expandido = palcoExpandido && podeExpandir;
+
+  // O duplo clique na DM vira a expansão pedida pelo usuário: palco sobre chat
+  // e perfil, transmissão no destaque, pessoas na tira embaixo. A tela cheia
+  // continua no botão do canto. `setFocado` alterna, então só chama se a
+  // chave ainda não é a do foco; ao recolher, o foco fica onde estava.
+  const expandirCom = (chave: string) => {
+    if (expandido) {
+      definirExpandido(false);
+      return;
+    }
+    definirExpandido(true);
+    if (focado !== chave) setFocado(chave);
+  };
 
   // O palco saiu da tela (troquei de conversa, entrei num canal de voz, o
   // `DMView` o trocou de lugar na árvore): quem ligou o modo é quem o apaga.
@@ -580,6 +594,7 @@ export default function CallStage({
             // distingue (a mesma altura é faixa numa janela e palco cheio
             // noutra).
             faixa={faixa && !expandido}
+            onExpandir={podeExpandir ? expandirCom : undefined}
             // só grupo aceita mais gente: numa conversa de duas pessoas o "+"
             // teria de criar um grupo novo, que é outra decisão e outra tela
             onAdicionar={
