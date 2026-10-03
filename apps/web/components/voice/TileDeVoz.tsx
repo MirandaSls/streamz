@@ -380,7 +380,7 @@ export function VoiceTile({
   /** ver o comentário do componente: a cor dominante só pinta o tile quando
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
-  const usaFundoDaFoto = Boolean(video);
+  const usaFundoDaFoto = Boolean(video) && !tela;
   const podeParar = podePararDeAssistir({ tela, assistindo, sou, minhaTelaNativa: tile.minhaTelaNativa });
   /**
    * **Este** tile está em tela cheia — e não "alguma coisa está".
@@ -417,6 +417,13 @@ export function VoiceTile({
       setEmTelaCheia(false);
     };
   }, [semAcoes, tela]);
+  // Minha tela nativa em tela cheia: a prévia ocuparia o monitor inteiro que
+  // está sendo capturado (ganho 1 no laço captura→prévia), e aí qualquer imagem
+  // é ponto fixo — congela e a cor deriva para verde a cada volta de codificação.
+  // Um respiro faz a prévia ficar menor que a captura (ganho < 1) e o laço vira
+  // o túnel do "espelho infinito". Só a minha tela: a dos outros e a câmera não
+  // entram nesse laço.
+  const respiroDoTunel = Boolean(tile.minhaTelaNativa) && emTelaCheia;
   /**
    * Zoom na transmissão (roda amplia no cursor, arrastar move), como no
    * Discord — só onde a tela é **o assunto**: no destaque do palco (`grande`,
@@ -544,7 +551,7 @@ export function VoiceTile({
       }}
       className={`group relative h-full w-full overflow-hidden transition ${
         raio === undefined ? "rounded-lg" : ""
-      } ${usaFundoDaFoto ? "" : "bg-chat-background-default"}`}
+      } ${usaFundoDaFoto ? "" : tela ? "bg-black" : "bg-chat-background-default"}`}
     >
       {emJanela ? (
         <PlaceholderJanelaAberta chave={chaveJanela} nome={nome} compacto={compacto} />
@@ -558,7 +565,10 @@ export function VoiceTile({
         // WebView2 o `<video>` dessa camada pintava por cima do rótulo de
         // nome (irmão posterior, sem z-index) até o ponteiro entrar e forçar
         // um repaint. O rótulo sobe para `z-[1]` abaixo.
-        <div className="relative z-0 h-full w-full" style={zoomAtivo ? zoom.estilo : undefined}>
+        <div
+          className={`relative z-0 h-full w-full ${respiroDoTunel ? "p-[4%]" : ""}`}
+          style={zoomAtivo ? zoom.estilo : undefined}
+        >
           <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
         </div>
       ) : tela ? (
