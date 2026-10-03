@@ -62,9 +62,10 @@ export default function AudioRemotoHost() {
 /**
  * Áudio de um participante remoto: **todas** as faixas de áudio dele — o
  * microfone e, quando transmite, o áudio da tela (que no desktop chega pelo
- * participante `#tela`). Um `<audio>` por faixa, todos com o mesmo volume
- * individual; o "silenciar" da pessoa vale para as duas, mas a faixa de tela
- * também obedece ao silenciar-só-a-tela (`telaSilenciada`).
+ * participante `#tela`). Um `<audio>` por faixa. Voz e transmissão são
+ * independentes (como no Discord): volume e "silenciar" da pessoa valem só
+ * para o microfone; a faixa de tela obedece apenas ao silenciar-só-a-tela
+ * (`telaSilenciada`), com volume 100%. Volume geral e ensurdecer valem nas duas.
  */
 export function AudioDoParticipante({ userId }: { userId: string }) {
   useVoice((s) => s.tick);
@@ -249,8 +250,9 @@ function conectarFonte(grafo: GrafoDeGanho, trilha: MediaStreamTrack | undefined
  * também limitado a 100%: suspenso nunca vira silêncio.
  *
  * `deTela` distingue a faixa da tela das da voz: quem assiste pode silenciar
- * só a transmissão de alguém sem silenciar a voz dela, então `telaSilenciada`
- * só entra na conta quando a faixa é de tela.
+ * só a transmissão de alguém sem silenciar a voz dela, e vice-versa. Por isso
+ * `telaSilenciada` só entra na conta da faixa de tela, e o volume/silêncio da
+ * pessoa só entram na conta da faixa de microfone.
  */
 function AudioDaFaixa({
   userId,
@@ -269,7 +271,8 @@ function AudioDaFaixa({
   const porPessoa = useVoice((s) => (userId in s.volumes ? s.volumes[userId] : 1));
   // o volume geral da aba "Voz e vídeo" multiplica o de cada pessoa
   const geral = useVoice((s) => s.audio.saida);
-  const volume = porPessoa * geral;
+  // o volume por pessoa é da voz: a transmissão toca sempre a 100% (× geral)
+  const volume = (deTela ? 1 : porPessoa) * geral;
   const silenciado = useVoice((s) => !!s.silenciados[userId]);
   const telaSilenciada = useVoice((s) => !!s.telaSilenciada[userId]);
   const deafened = useVoicePrefs((s) => s.deafened);
@@ -280,12 +283,12 @@ function AudioDaFaixa({
   // o servidor também corta isso no LiveKit (canSubscribe=false), mas
   // silenciar localmente fecha a janela até a concessão valer
   const { serverDeaf } = useSilencioDoServidor();
-  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa —
-  // e, na faixa de tela, também pelo silenciar só-da-tela
+  // surdo cala **todos** os `<audio>` de uma vez; fora isso, a faixa de tela
+  // só cala pelo silenciar-só-da-tela e a de microfone só pelo silenciar da pessoa
   const calado = saidaCalada(
     deafened || serverDeaf,
     testandoMicrofone,
-    silenciado || (deTela && telaSilenciada),
+    deTela ? telaSilenciada : silenciado,
   );
   const trilha = faixa?.mediaStreamTrack;
 
