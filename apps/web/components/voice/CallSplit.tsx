@@ -403,6 +403,10 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         aria-valuemin={ALTURA_MIN}
         aria-valuemax={Math.round(tetoDoPalco(disponivel || ALTURA_ANTES_DE_MEDIR))}
         tabIndex={0}
+        // O anel global de :focus-visible (globals.css) vence o `outline-none` do
+        // Tailwind e desenhava uma faixa preta de 2px sob o vídeo; o foco por
+        // teclado continua visível pelo `focus-visible:bg-brand-500`.
+        data-sem-anel=""
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}
         // A linha desenhada continua com 1px; o que muda no telefone é a **área
@@ -516,6 +520,10 @@ function DivisaoHorizontal({
         aria-valuemin={LARGURA_MIN}
         aria-valuemax={Math.round(tetoDoChat(disponivel || LARGURA_PADRAO * 3))}
         tabIndex={0}
+        // O anel global de :focus-visible (globals.css) vence o `outline-none` do
+        // Tailwind e desenhava uma faixa preta de 2px sob o vídeo; o foco por
+        // teclado continua visível pelo `focus-visible:bg-brand-500`.
+        data-sem-anel=""
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}
         className="w-px shrink-0 cursor-col-resize touch-none border-x-2 border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none"
