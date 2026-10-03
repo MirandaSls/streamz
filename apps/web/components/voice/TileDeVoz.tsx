@@ -15,7 +15,6 @@ import type { TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
-import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import CapsulaDeZoom from "@/components/voice/CapsulaDeZoom";
@@ -142,10 +141,10 @@ export function TileDeConvite({ guildId }: { guildId: string }) {
  * Um participante no palco de avatares: só a foto, o anel de fala e o selo de
  * mudo.
  *
- * O nome não aparece em lugar nenhum — é assim no Discord, e faz sentido: numa
- * chamada direta você sabe com quem está falando, e o rótulo só roubaria
- * espaço do rosto. Ele continua alcançável pelo tooltip e pelo `aria-label`,
- * que é o que mantém a tela utilizável para quem navega por leitor de tela.
+ * O nome não aparece em lugar nenhum, nem ao passar o mouse — no Discord o
+ * hover sobre o avatar da chamada não mostra nome: numa chamada direta você
+ * sabe com quem está falando, e o rótulo só roubaria espaço do rosto. O nome
+ * fica só no `aria-label`, para quem navega por leitor de tela.
  *
  * O menu de contexto (volume, silenciar) segue no botão direito, igual ao tile:
  * trocar de leiaute não pode custar uma capacidade.
@@ -171,47 +170,45 @@ export function AvatarDeChamada({
   const ativo = !state.muted && falando.has(state.user.id);
 
   return (
-    <Tooltip label={nome}>
-      <span
-        data-voice-avatar={state.user.id}
-        aria-label={nome}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
-        }}
-        className={`relative inline-grid rounded-full transition ${
-          state.reconnecting ? "opacity-50" : ""
-        }`}
-      >
-        <Avatar
-          user={state.user}
-          size="xl"
-          // o palco de avatares só existe no `CallStage`, que é `--black`: o
-          // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
-          surface="border-black"
-          // sem bolinha de presença: quem está na chamada já está online, o
-          // selo seria ruído (como no Discord).
-          // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
-          // um moderador mostra o selo "-servidor" mesmo que também tenha se
-          // silenciado sozinho (ver `useSilencioDoServidor.ts`)
-          voz={
-            state.serverDeaf
-              ? "surdo-servidor"
-              : state.serverMute
-                ? "mudo-servidor"
-                : state.deafened
-                  ? "surdo"
-                  : state.muted
-                    ? "mudo"
-                    : null
-          }
-          animar={ativo}
-        />
-        {/* O anel fica DENTRO do Ø80, por cima da foto. O avatar não muda de
-            tamanho ao falar (o Discord só acende o anel e anima o GIF). */}
-        {ativo && <AnelDeFala />}
-      </span>
-    </Tooltip>
+    <span
+      data-voice-avatar={state.user.id}
+      aria-label={nome}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId, noPalco: true });
+      }}
+      className={`relative inline-grid rounded-full transition ${
+        state.reconnecting ? "opacity-50" : ""
+      }`}
+    >
+      <Avatar
+        user={state.user}
+        size="xl"
+        // o palco de avatares só existe no `CallStage`, que é `--black`: o
+        // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
+        surface="border-black"
+        // sem bolinha de presença: quem está na chamada já está online, o
+        // selo seria ruído (como no Discord).
+        // o servidor manda sobre o próprio: quem foi mutado/ensurdecido por
+        // um moderador mostra o selo "-servidor" mesmo que também tenha se
+        // silenciado sozinho (ver `useSilencioDoServidor.ts`)
+        voz={
+          state.serverDeaf
+            ? "surdo-servidor"
+            : state.serverMute
+              ? "mudo-servidor"
+              : state.deafened
+                ? "surdo"
+                : state.muted
+                  ? "mudo"
+                  : null
+        }
+        animar={ativo}
+      />
+      {/* O anel fica DENTRO do Ø80, por cima da foto. O avatar não muda de
+          tamanho ao falar (o Discord só acende o anel e anima o GIF). */}
+      {ativo && <AnelDeFala />}
+    </span>
   );
 }
 
