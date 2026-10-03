@@ -148,11 +148,13 @@ export default function PainelDeSons({
   const registrarUso = useSoundboard((s) => s.registrarUso);
 
   // o servidor da **chamada**, não o que está aberto na tela: o painel é da
-  // call, e é o som daquele servidor que a API deixa tocar nela
+  // call. A API deixa tocar o som de qualquer servidor do qual se é membro,
+  // inclusive numa call de DM
   const channelId = useVoice((s) => s.channelId);
   const guildDaCall = useVoice((s) => s.guildId);
   const guildAberto = useGuilds((s) => s.activeGuildId);
   // numa chamada de conversa direta não há servidor da call: aí vale o aberto
+  // só para escolher qual aba mostrar primeiro
   const guildIdAtivo = guildDaCall ?? guildAberto;
 
   const meuId = useAuth((s) => s.user?.id ?? null);

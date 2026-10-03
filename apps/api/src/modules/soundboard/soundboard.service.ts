@@ -48,8 +48,9 @@ export interface ArquivoDeSom {
  *
  * 1. **quem aperta está na chamada** — não basta enxergar o canal. Sem isso,
  *    qualquer membro do servidor faria barulho numa sala em que não está;
- * 2. **o som é daquele servidor** (ou um dos padrão) — senão o id de um som de
- *    outro servidor viraria um jeito de tocar o que a sala não conhece;
+ * 2. **o som é de um servidor do qual quem toca é membro** — em qualquer
+ *    call, inclusive conversa direta/grupo. Senão o id de um som de servidor
+ *    alheio viraria um jeito de tocar o que a pessoa nem enxerga;
  *
  * E o destino do evento não é a sala do servidor, é **quem está no canal de
  * voz**: quem está lendo um canal de texto ao lado não ouve nada.
@@ -230,22 +231,20 @@ export class SoundboardService {
   /**
    * O som que aquele id representa para aquele usuário naquele canal.
    *
-   * Todo som é de um servidor, mas vale em qualquer canal de voz de servidor
-   * onde o usuário esteja, desde que ele seja membro do servidor dono do som —
-   * é o mesmo conjunto que `listForUser` mostra. Numa conversa direta não há
-   * servidor onde tocar, então não há o que tocar.
+   * Todo som é de um servidor (não há som global no banco), mas vale em qualquer
+   * call — canal de voz de servidor **ou conversa direta/grupo** (`guildId`
+   * nulo) —, desde que o usuário seja membro do servidor dono do som: é o mesmo
+   * conjunto que `listForUser` mostra. Só o som do próprio servidor da call
+   * dispensa a checagem, porque estar na call já o torna membro.
    */
   private async resolverSom(
     soundId: string,
     guildId: string | null,
     userId: string,
   ): Promise<SoundboardSound> {
-    if (!guildId) {
-      throw new BadRequestException("Só dá para tocar um som num canal de voz de servidor");
-    }
     const row = await this.prisma.soundboardSound.findUnique({ where: { id: soundId } });
     if (!row) throw new NotFoundException("Som não encontrado");
-    if (row.guildId !== guildId) {
+    if (guildId === null || row.guildId !== guildId) {
       const membro = await this.prisma.guildMember.findUnique({
         where: { userId_guildId: { userId, guildId: row.guildId } },
         select: { userId: true },
